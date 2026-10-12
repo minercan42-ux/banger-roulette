@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "Banger Roulette"
+  },
+  "language": {
+    "label": "Sprache",
+    "options": {
+      "de": "Deutsch",
+      "en": "English"
+    }
+  },
+  "shell": {
+    "status": "Grundgerüst",
+    "heading": "Noch kein Spiel",
+    "description": "Banger Roulette ist noch nicht spielbar. Lobby, Genre-Roulette, Song-Auswahl, Voting, Reveal und Finale entstehen in den nächsten Meilensteinen.",
+    "genresReady_one": "{{count}} Genre vorbereitet",
+    "genresReady_other": "{{count}} Genres vorbereitet",
+    "notice": "Hinweis: Später werden YouTube-Videos eingebettet. Dabei können Daten an YouTube übertragen werden.",
+    "footer": "Kein Login, keine Konten, keine gespeicherten Spielstände."
+  }
+}

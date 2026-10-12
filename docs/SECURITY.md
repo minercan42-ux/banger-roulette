@@ -1,0 +1,7 @@
+# Security boundaries
+
+The MVP is for a trusted private friend group. Broadcast sender identities are not cryptographically authenticated. Strict Zod schemas and host phase/actor/connection guards reject malformed input but cannot stop a malicious client impersonating another client. Public full-state snapshots expose owners and drafts in DevTools; anonymity is a UI filter, not confidentiality. No game persistence, analytics or secret credentials. Only VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY may be supplied.
+
+M0 loads no YouTube or Supabase services. Vercel config installs CSP, strict-origin-when-cross-origin Referer policy and nosniff. connect-src currently permits only the same origin; add the exact public Supabase HTTPS/WSS project origins before M2 Realtime deployment, never a wildcard. Inline styles are allowed for React/Motion; inline scripts are not. YouTube must remain lazy and consent-gated in M3; privacy-enhanced embeds still process third-party data. API time and safe oEmbed proxy are not implemented in M0/M1.
+
+M2 must validate envelope authority against accepted host/room/epoch/connection, rate-limit commands, atomically reassemble bounded snapshots and reject stale state. Neither server ACK nor replica ACK promises durable persistence. The last surviving complete snapshot is the recovery boundary. Phase 2 moves authority to a server and transmits only filtered views.

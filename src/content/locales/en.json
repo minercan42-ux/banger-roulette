@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "Banger Roulette"
+  },
+  "language": {
+    "label": "Language",
+    "options": {
+      "de": "Deutsch",
+      "en": "English"
+    }
+  },
+  "shell": {
+    "status": "Scaffold",
+    "heading": "No game yet",
+    "description": "Banger Roulette is not playable yet. Lobby, genre roulette, song selection, voting, reveal and the finale arrive in the upcoming milestones.",
+    "genresReady_one": "{{count}} genre ready",
+    "genresReady_other": "{{count}} genres ready",
+    "notice": "Note: YouTube videos will be embedded later. Data may be transferred to YouTube.",
+    "footer": "No login, no accounts, no stored game state."
+  }
+}
