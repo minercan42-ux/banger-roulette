@@ -6,7 +6,7 @@ updates:
       interval: weekly
     groups:
       actions:
-        patterns: ["*"]
+        patterns: ['*']
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -14,4 +14,4 @@ updates:
     open-pull-requests-limit: 5
     groups:
       minor-and-patch:
-        update-types: ["minor", "patch"]
+        update-types: ['minor', 'patch']
