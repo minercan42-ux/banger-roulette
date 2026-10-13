@@ -377,6 +377,44 @@ describe('wire contracts', () => {
       }).success,
     ).toBe(true);
   });
+  it('requires a newer, same-session host connection handoff', () => {
+    const state = fixture();
+    const newConnection = '00000000-0000-4000-8000-000000000004';
+    state.stateVersion = 1;
+    state.players[a]!.connectionId = newConnection;
+    const event = {
+      protocolVersion: 1,
+      roomCode: state.roomCode,
+      roomId,
+      senderId: a,
+      connectionId: b,
+      hostEpoch: 0,
+      sentAt: 1,
+      body: {
+        type: 'HOST_HANDOFF',
+        recipientId: a,
+        baseVersion: 0,
+        state,
+      },
+    };
+    expect(NetworkEventSchema.safeParse(event).success).toBe(true);
+    for (const body of [
+      { ...event.body, recipientId: b },
+      { ...event.body, baseVersion: 1 },
+      { ...event.body, state: { ...state, roomId: newConnection } },
+    ]) {
+      expect(NetworkEventSchema.safeParse({ ...event, body }).success).toBe(
+        false,
+      );
+    }
+    expect(
+      NetworkEventSchema.safeParse({
+        ...event,
+        connectionId: newConnection,
+      }).success,
+    ).toBe(false);
+  });
+
   it('uses locale-independent code-unit ordering for replica ties', () => {
     const state = fixture();
     const upper = '00000000-0000-4000-8000-00000000000B';

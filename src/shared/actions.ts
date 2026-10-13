@@ -65,6 +65,12 @@ export const EngineActionSchema = z.discriminatedUnion('type', [
     hostId: Id,
     hostEpoch: Int,
     hostBaseVersion: Int,
+    connectionIds: z
+      .array(Id)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        'Duplicate connections',
+      ),
   }),
 ]);
 export type EngineAction = z.infer<typeof EngineActionSchema>;

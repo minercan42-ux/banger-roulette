@@ -306,14 +306,31 @@ export function classifyCommand(
 }
 
 /**
- * Deterministic host election from presence (SPEC §3, plan rule 9). Returns
- * `null` when no candidate survives; callers must not fall back to the
- * previous host.
+ * Deterministic host election from an authoritative full presence list
+ * (SPEC §3, plan rule 9, host migration contract). The caller supplies the
+ * exact connection ids present at the moment of migration: election never
+ * trusts the stale per-player `connected` flag baked into the snapshot.
+ * Retained non-left/non-kicked identities whose stored connection id is
+ * present are eligible; players win over spectators, `joinedAt` then code-unit
+ * id break ties. Returns `null` when the list has duplicates or no candidate
+ * survives; callers must not fall back to the previous host.
  */
-export function electHost(state: GameState): string | null {
-  const active = activePlayers(state.players);
-  const players = active.filter((player) => player.status === 'player');
-  const pool = players.length > 0 ? players : active;
+export function electHost(
+  state: GameState,
+  connectionIds: readonly string[],
+): string | null {
+  if (new Set(connectionIds).size !== connectionIds.length) {
+    return null;
+  }
+  const present = new Set(connectionIds);
+  const retained = Object.values(state.players).filter(
+    (player) =>
+      player.status !== 'left' &&
+      player.status !== 'kicked' &&
+      present.has(player.connectionId),
+  );
+  const players = retained.filter((player) => player.status === 'player');
+  const pool = players.length > 0 ? players : retained;
   return sortPlayers(pool)[0]?.id ?? null;
 }
 
@@ -601,14 +618,17 @@ function reduceHostChanged(
   if (action.hostEpoch !== state.hostEpoch + 1) {
     return state;
   }
+  // The new epoch is adopted against the highest complete snapshot version,
+  // never against a speculative presence bump.
   if (action.hostBaseVersion !== state.stateVersion) {
     return state;
   }
   const candidate = state.players[action.hostId];
   if (
     !candidate ||
-    !isActivePlayer(candidate) ||
-    electHost(state) !== action.hostId
+    candidate.status === 'left' ||
+    candidate.status === 'kicked' ||
+    electHost(state, action.connectionIds) !== action.hostId
   ) {
     return state;
   }

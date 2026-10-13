@@ -29,6 +29,12 @@ export const WireBodySchema = z.discriminatedUnion('type', [
     state: GameStateSchema,
   }),
   z.strictObject({
+    type: z.literal('HOST_HANDOFF'),
+    recipientId: Id,
+    baseVersion: Int,
+    state: GameStateSchema,
+  }),
+  z.strictObject({
     type: z.literal('STATE_REQUEST'),
     knownVersion: Int.nullable(),
   }),
@@ -94,13 +100,26 @@ export const NetworkEventSchema = z
       invalid('Invalid host claim');
     if (body.type === 'SNAPSHOT_PART' && body.index >= body.total)
       invalid('Invalid part index');
-    if (body.type === 'SNAPSHOT' || body.type === 'REPLICA_SNAPSHOT') {
+    if (
+      body.type === 'SNAPSHOT' ||
+      body.type === 'REPLICA_SNAPSHOT' ||
+      body.type === 'HOST_HANDOFF'
+    ) {
       if (
         body.state.roomId !== event.roomId ||
         body.state.roomCode !== event.roomCode ||
         body.state.hostEpoch !== event.hostEpoch
       )
         invalid('Envelope/state identity mismatch');
+      if (
+        body.type === 'HOST_HANDOFF' &&
+        (body.recipientId !== event.senderId ||
+          body.state.hostId !== event.senderId ||
+          body.state.players[event.senderId]?.connectionId ===
+            event.connectionId ||
+          body.state.stateVersion !== body.baseVersion + 1)
+      )
+        invalid('Invalid host connection handoff');
       if (body.type === 'SNAPSHOT') {
         if (
           event.senderId !== body.state.hostId ||

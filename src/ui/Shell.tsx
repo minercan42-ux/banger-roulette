@@ -1,26 +1,205 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import genres from '../content/genres.json';
+import { selectRoster } from '../engine/selectors';
+import { REJECTIONS, SESSION_FAILURES, type SessionError } from '../net/errors';
+import type { GameSession, SessionSnapshot } from '../net/session';
 import './i18n';
 import './styles.css';
+import { HomeView } from './HomeView';
 import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
+import { RoomView } from './RoomView';
+import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
 
-export function Shell() {
+const ERROR_CODES = new Set<string>([...SESSION_FAILURES, ...REJECTIONS]);
+
+/** Connection/config failures the shell banner owns; form errors stay inline. */
+const TRANSPORT_ERRORS = new Set<SessionError>([
+  'CONFIGURATION',
+  'IDENTITY_STORAGE',
+  'CONNECTION_FAILED',
+  'CLOCK_SYNC_FAILED',
+  'STATE_LOST',
+  'COMMAND_TIMEOUT',
+]);
+
+function toSessionError(error: unknown): SessionError {
+  const value =
+    typeof error === 'string'
+      ? error
+      : error instanceof Error
+        ? error.message
+        : null;
+  return value !== null && ERROR_CODES.has(value)
+    ? (value as SessionError)
+    : 'CONNECTION_FAILED';
+}
+
+/** The session is really inside the room only once our JOIN is accepted. */
+function selfConnected(snapshot: SessionSnapshot): boolean {
+  if (snapshot.state === null) {
+    return false;
+  }
+  return selectRoster(snapshot.state, snapshot.clientId).some(
+    (player) => player.isSelf && player.connected,
+  );
+}
+
+export function Shell({ session }: { session: GameSession }) {
   const { t } = useTranslation();
-  const language = useLanguageStore((state) => state.language);
-  const setLanguage = useLanguageStore((state) => state.setLanguage);
+  const language = useLanguageStore((store) => store.language);
+  const setLanguage = useLanguageStore((store) => store.setLanguage);
+  const snapshot = useSessionSnapshot(session);
+  const [route, navigate] = useRoute();
+  const [noticeError, setNoticeError] = useState<SessionError | null>(null);
+  const [routeResult, setRouteResult] = useState<{
+    code: string;
+    identityAbsent: boolean;
+  } | null>(null);
+  const pendingEnterRef = useRef(false);
+  const leavingRef = useRef(false);
+  const joinInFlightRef = useRef<string | null>(null);
+
+  const state = snapshot.state;
+  const roster = state === null ? null : selectRoster(state, snapshot.clientId);
+  const inRoom =
+    snapshot.roomCode !== null &&
+    roster?.some((player) => player.isSelf) === true;
+  const routeCode = route.kind === 'room' ? route.code : null;
+  const previousRouteCode = useRef(routeCode);
+  const joining =
+    routeCode !== null && !inRoom && routeResult?.code !== routeCode;
+  const identityMissing =
+    routeCode !== null &&
+    !inRoom &&
+    routeResult?.code === routeCode &&
+    routeResult.identityAbsent;
 
   useEffect(() => {
     document.documentElement.lang = language;
     document.title = t('app.title');
   }, [language, t]);
 
+  // Deep link: discover a retained identity, otherwise ask for a nickname.
+  // No synchronous setState: the failure path runs inside the async callback.
+  useEffect(() => {
+    if (routeCode === null) {
+      joinInFlightRef.current = null;
+      return;
+    }
+    if (inRoom || routeResult?.code === routeCode) {
+      return;
+    }
+    if (joinInFlightRef.current === routeCode) {
+      return;
+    }
+    joinInFlightRef.current = routeCode;
+    void (async () => {
+      let failure: SessionError | null = null;
+      try {
+        await session.joinRoom(routeCode, '');
+      } catch (error) {
+        failure = toSessionError(error);
+      }
+      if (joinInFlightRef.current !== routeCode) {
+        return;
+      }
+      joinInFlightRef.current = null;
+      const next = session.getSnapshot();
+      if (next.roomCode !== null && selfConnected(next)) {
+        return;
+      }
+      if (next.roomCode !== null) {
+        await session.leave();
+      }
+      // An absent identity rejects the empty nickname with INVALID; that is
+      // the "enter a nickname" signal, not an error to shout about.
+      const error = failure ?? next.error;
+      const identityAbsent = error === null || error === 'INVALID';
+      if (!identityAbsent) {
+        setNoticeError(error);
+      }
+      setRouteResult({ code: routeCode, identityAbsent });
+    })();
+  }, [routeCode, inRoom, routeResult, session]);
+
+  // Only an actual room-route → home transition leaves the room. A session
+  // entering from the landing page must survive until navigation catches up.
+  useEffect(() => {
+    const wasRoomRoute = previousRouteCode.current !== null;
+    previousRouteCode.current = routeCode;
+    if (
+      routeCode !== null ||
+      !wasRoomRoute ||
+      !inRoom ||
+      pendingEnterRef.current ||
+      leavingRef.current
+    ) {
+      return;
+    }
+    leavingRef.current = true;
+    void (async () => {
+      try {
+        await session.leave();
+      } finally {
+        leavingRef.current = false;
+        setNoticeError(null);
+      }
+    })();
+  }, [routeCode, inRoom, session]);
+
+  const runEnter = useCallback(
+    async (action: () => Promise<void>): Promise<SessionError | null> => {
+      pendingEnterRef.current = true;
+      setNoticeError(null);
+      let actionError: SessionError | null = null;
+      try {
+        await action();
+      } catch (error) {
+        actionError = toSessionError(error);
+      }
+      const next = session.getSnapshot();
+      pendingEnterRef.current = false;
+      if (
+        actionError === null &&
+        next.roomCode !== null &&
+        selfConnected(next)
+      ) {
+        navigate(roomPath(next.roomCode));
+        return null;
+      }
+      if (next.roomCode !== null) {
+        await session.leave();
+      }
+      // HomeView owns these errors; the banner is for deep-link discovery.
+      return actionError ?? next.error ?? 'CONNECTION_FAILED';
+    },
+    [session, navigate],
+  );
+
+  const leaveToHome = useCallback(() => {
+    navigate('/', { replace: true });
+  }, [navigate]);
+
+  const bannerError =
+    noticeError ??
+    (snapshot.error !== null && TRANSPORT_ERRORS.has(snapshot.error)
+      ? snapshot.error
+      : null);
+  const showStatus =
+    snapshot.status !== 'idle' && snapshot.status !== 'connected';
+
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4 py-10 sm:px-6">
-      <div className="w-full max-w-xl rounded-2xl border border-gold-400/25 bg-felt-900/70 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm sm:p-8">
+    <div
+      data-testid="app-shell"
+      className="flex min-h-dvh justify-center px-4 py-10 sm:px-6"
+    >
+      <div className="w-full max-w-2xl rounded-2xl border border-gold-400/25 bg-felt-900/70 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm sm:p-8">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gold-400/20 pb-4">
-          <span className="font-display text-xs tracking-[0.35em] text-gold-300 uppercase">
+          <span
+            data-testid="app-title"
+            className="font-display text-xs tracking-[0.35em] text-gold-300 uppercase"
+          >
             {t('app.title')}
           </span>
           <div className="flex items-center gap-2">
@@ -48,25 +227,79 @@ export function Shell() {
             </select>
           </div>
         </header>
-        <main className="pt-6">
-          <p className="inline-block rounded-full border border-gold-400/30 px-3 py-1 text-xs tracking-wide text-gold-300 uppercase">
-            {t('shell.status')}
-          </p>
-          <h1 className="shell-title font-display mt-4 text-3xl leading-tight font-semibold sm:text-4xl">
-            {t('shell.heading')}
-          </h1>
-          <p className="mt-3 text-sm leading-relaxed text-cream-100/80 sm:text-base">
-            {t('shell.description')}
-          </p>
-          <p className="mt-4 text-sm text-gold-300">
-            {t('shell.genresReady', { count: genres.length })}
-          </p>
-          <p className="mt-6 rounded-lg border border-gold-400/20 bg-felt-800/60 p-3 text-xs leading-relaxed text-cream-100/70">
-            {t('shell.notice')}
-          </p>
-        </main>
-        <footer className="mt-6 border-t border-gold-400/20 pt-4 text-xs text-cream-100/60">
-          {t('shell.footer')}
+
+        <div className="space-y-4 pt-6">
+          {showStatus && (
+            <p
+              data-testid="session-status"
+              data-status={snapshot.status}
+              role="status"
+              className="rounded-lg border border-gold-400/30 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
+            >
+              {t(`status.${snapshot.status}`)}
+              {snapshot.status === 'lost' && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    data-testid="session-lost-home"
+                    onClick={leaveToHome}
+                    className="underline"
+                  >
+                    {t('lobby.backHome')}
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+
+          {bannerError === 'CONFIGURATION' ? (
+            <section
+              data-testid="config-error"
+              role="alert"
+              className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-3 text-sm text-rose-100"
+            >
+              <p className="font-semibold">{t('config.title')}</p>
+              <p className="mt-1">{t('config.body')}</p>
+            </section>
+          ) : (
+            bannerError !== null && (
+              <p
+                data-testid="session-error"
+                role="alert"
+                className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+              >
+                {t(`errors.${bannerError}`)}
+              </p>
+            )
+          )}
+
+          {inRoom && state !== null && roster !== null ? (
+            <RoomView
+              session={session}
+              snapshot={snapshot}
+              state={state}
+              roster={roster}
+              onLeave={leaveToHome}
+            />
+          ) : (
+            <HomeView
+              key={routeCode ?? 'home'}
+              prefillCode={routeCode}
+              joining={joining}
+              identityMissing={identityMissing}
+              onCreate={(nickname) =>
+                runEnter(() => session.createRoom(nickname))
+              }
+              onJoin={(code, nickname) =>
+                runEnter(() => session.joinRoom(code, nickname))
+              }
+            />
+          )}
+        </div>
+
+        <footer className="mt-6 border-t border-gold-400/20 pt-4 text-xs text-cream-100/50">
+          {t('home.storageNotice')}
         </footer>
       </div>
     </div>
