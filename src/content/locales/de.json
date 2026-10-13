@@ -16,7 +16,9 @@
     "copied": "Kopiert",
     "copyManually": "Manuell kopieren",
     "close": "Schließen",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "yes": "Ja",
+    "no": "Nein"
   },
   "status": {
     "idle": "Bereit",
@@ -71,8 +73,8 @@
     "storageNotice": "Gespeichert wird nur eine lokale Spieler-ID, damit ein Reload dich wiedererkennt. Kein Login, kein Spielstand."
   },
   "milestone": {
-    "title": "Meilenstein M3",
-    "body": "Genre-Roulette und Song-Auswahl sind aktiv. Wiedergabe, Voting und Reveal folgen in M4 und M5.",
+    "title": "Meilenstein M4",
+    "body": "Genre-Roulette, Song-Auswahl und synchrone Wiedergabe sind aktiv. Voting, Reveal und Finale sind bis M5 nicht verfügbar.",
     "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert)."
   },
   "lobby": {
@@ -219,6 +221,45 @@
     "none": "Kein Song wurde doppelt eingereicht.",
     "single": "Nur ein Song in dieser Runde: kein Voting, keine Punkte."
   },
+  "playback": {
+    "heading": "Wiedergabe",
+    "songCount": "Song {{index}} von {{count}}",
+    "spectator": "Du schaust zu; dein Tab spielt mit, kann aber nichts schreiben.",
+    "boundTab": "Ein anderer Tab hält die Schreibverbindung. Dieser Tab hört nur zu und kann keine Songs markieren.",
+    "ownersHidden": "Namen folgen beim Reveal.",
+    "consentRequired": "Die YouTube-Wiedergabe bleibt bis zur Zustimmung deaktiviert.",
+    "consentLabel": "Ich bin einverstanden, dass YouTube-Inhalte (Player und Vorschaubild) geladen werden.",
+    "progressLabel": "Wiedergabefortschritt",
+    "timeLeft": "Noch {{time}}",
+    "volumeLabel": "Lautstärke",
+    "muteLabel": "Stumm",
+    "flag": "Genre-Fail",
+    "flagged": "Markiert",
+    "recover": "Wiedergabe starten",
+    "blockedHint": "Der Browser hat die automatische Wiedergabe blockiert. Bitte selbst starten.",
+    "bufferingHint": "Puffert. Dieser Client holt zur Server-Zeitleiste auf.",
+    "skippedHint": "Dieser Song wurde lokal übersprungen. Die Runde läuft für alle anderen weiter.",
+    "errorHint": "Der Player meldet Fehler {{code}}. Dieser Client überspringt den Song; die Runde läuft weiter.",
+    "statusIdle": "Warte auf Zustimmung",
+    "statusLoading": "Player wird geladen …",
+    "statusCued": "Vorgeladen",
+    "statusScheduled": "Geplant",
+    "statusPlaying": "Läuft",
+    "statusBuffering": "Puffert",
+    "statusBlocked": "Blockiert",
+    "statusPaused": "Pausiert",
+    "statusSkipped": "Übersprungen",
+    "statusEnded": "Beendet",
+    "debugOffset": "Uhr-Offset",
+    "debugRtt": "RTT",
+    "debugSynchronized": "Synchron",
+    "debugPlannedStart": "Geplanter Start",
+    "debugPlannedDeadline": "Geplantes Ende",
+    "debugObservedStart": "Beobachteter Start",
+    "debugStartSkew": "Start-Abweichung",
+    "debugDrift": "Drift",
+    "debugStatus": "Status"
+  },
   "host": {
     "start": "Spiel starten",
     "notReadyCount": "Mindestens {{min}} aktive Spieler nötig.",
@@ -231,7 +272,6 @@
   },
   "later": {
     "playbackPreroll": "Die Song-Ausschnitte starten gleich.",
-    "PLAYBACK": "Die synchrone Wiedergabe folgt in M4. Die Ausschnitte werden hier noch nicht abgespielt.",
     "VOTING": "Das Voting folgt in M5. Hier wird noch nicht abgestimmt.",
     "REVEAL": "Reveal und Wertung folgen in M5. Dies ist noch keine Wertung.",
     "FINAL": "Das Finale folgt in M5."

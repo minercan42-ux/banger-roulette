@@ -11,7 +11,8 @@ interface SoundControlProps {
 /**
  * FR-07 local audio unlock. The consent click really resumes an AudioContext
  * and only then reports SOUND_STATUS. It proves the browser permits audio, not
- * YouTube autoplay (no player exists in M2). Any failure resets to `false`.
+ * YouTube autoplay: only an actual PLAYING event does that (M4 player). Any
+ * failure resets to `false`.
  */
 export function SoundControl({
   session,

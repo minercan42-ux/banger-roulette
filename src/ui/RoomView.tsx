@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectLobbyReadiness,
+  selectPlayback,
   selectReveal,
   selectRoom,
   selectViewerPermissions,
@@ -9,12 +10,17 @@ import {
 } from '../engine/selectors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
+import { useEmbedConsent } from './embed-consent';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
 import { MilestoneNotice } from './MilestoneNotice';
 import { PhaseSummary } from './PhaseSummary';
 import { PhaseUnavailable } from './PhaseUnavailable';
 import { PlaybackPhase } from './PlaybackPhase';
+import {
+  PlaybackControllerContext,
+  usePlaybackController,
+} from './playback-controller';
 import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
 import { SingleSongPhase } from './SingleSongPhase';
@@ -51,6 +57,21 @@ export function RoomView({
   const readiness = selectLobbyReadiness(state);
   const reveal = selectReveal(state);
   const shareUrl = `${window.location.origin}/r/${room.roomCode}`;
+
+  // M4 AK-7: one playback controller for the tab, pre-warmed during SUBMISSION
+  // and reused into PLAYBACK. It exists only while the viewer consented and the
+  // phase is SUBMISSION or PLAYBACK; any other phase (or withdrawal) destroys
+  // it. The plan is unknown during SUBMISSION, so only the player is warmed.
+  const { consented } = useEmbedConsent();
+  const playbackView = selectPlayback(state, viewerId, snapshot.connectionId);
+  const playbackHostRef = useRef<HTMLDivElement | null>(null);
+  const playback = usePlaybackController({
+    session,
+    active:
+      consented && (room.phase === 'SUBMISSION' || room.phase === 'PLAYBACK'),
+    title: playbackView?.song.title ?? t('playback.heading'),
+    hostRef: playbackHostRef,
+  });
 
   async function copyLink() {
     try {
@@ -169,41 +190,74 @@ export function RoomView({
         readiness={readiness}
       />
 
-      {room.phase !== 'LOBBY' && (
-        <PhaseSummary session={session} state={state} room={room} self={self} />
-      )}
+      <PlaybackControllerContext.Provider value={playback}>
+        {room.phase !== 'LOBBY' && (
+          <PhaseSummary
+            session={session}
+            state={state}
+            room={room}
+            self={self}
+          />
+        )}
 
-      {room.phase === 'GENRE_SPIN' && (
-        <GenreSpin session={session} state={state} />
-      )}
+        {room.phase === 'GENRE_SPIN' && (
+          <GenreSpin session={session} state={state} />
+        )}
 
-      {room.phase === 'SUBMISSION' && (
-        <SubmissionPanel
-          key={`${room.gameNumber}:${room.roundNumber}`}
-          session={session}
-          state={state}
-          viewerId={viewerId}
-          room={room}
-          roster={roster}
-          self={self}
-          permissions={permissions}
-        />
-      )}
+        {room.phase === 'SUBMISSION' && (
+          <SubmissionPanel
+            key={`${room.gameNumber}:${room.roundNumber}`}
+            session={session}
+            state={state}
+            viewerId={viewerId}
+            room={room}
+            roster={roster}
+            self={self}
+            permissions={permissions}
+          />
+        )}
 
-      {room.phase === 'PLAYBACK' && (
-        <PlaybackPhase session={session} state={state} viewerId={viewerId} />
-      )}
+        {room.phase === 'PLAYBACK' && (
+          <PlaybackPhase
+            session={session}
+            state={state}
+            viewerId={viewerId}
+            viewerConnectionId={snapshot.connectionId}
+          />
+        )}
 
-      {room.phase === 'VOTING' && <PhaseUnavailable phase="VOTING" />}
+        {room.phase === 'VOTING' && <PhaseUnavailable phase="VOTING" />}
 
-      {room.phase === 'REVEAL' &&
-        (reveal?.reason === 'singleSong' ? (
-          <SingleSongPhase state={state} viewerId={viewerId} />
-        ) : (
-          <PhaseUnavailable phase="REVEAL" />
-        ))}
+        {room.phase === 'REVEAL' &&
+          (reveal?.reason === 'singleSong' ? (
+            <SingleSongPhase state={state} viewerId={viewerId} />
+          ) : (
+            <PhaseUnavailable phase="REVEAL" />
+          ))}
 
-      {room.phase === 'FINAL' && <PhaseUnavailable phase="FINAL" />}
+        {room.phase === 'FINAL' && <PhaseUnavailable phase="FINAL" />}
+
+        {/* One stable host node across SUBMISSION and PLAYBACK, so the warm
+            player is never moved in the DOM (a move would reload the iframe).
+            During SUBMISSION it keeps a >=200x200 box (Chrome throttles hidden
+            frames) but is invisible, unfocusable and non-interactive. */}
+        {(room.phase === 'SUBMISSION' || room.phase === 'PLAYBACK') && (
+          <div
+            key="playback-host"
+            ref={playbackHostRef}
+            data-testid="playback-host"
+            data-warm={room.phase === 'SUBMISSION'}
+            aria-hidden={room.phase === 'SUBMISSION' ? true : undefined}
+            tabIndex={room.phase === 'SUBMISSION' ? -1 : undefined}
+            className={
+              room.phase === 'PLAYBACK'
+                ? 'overflow-hidden rounded-lg border border-gold-400/20 bg-black/60'
+                : 'pointer-events-none fixed top-0 left-0 h-[200px] w-[200px] overflow-hidden opacity-0'
+            }
+            style={room.phase === 'PLAYBACK' ? { minHeight: '1px' } : undefined}
+          />
+        )}
+      </PlaybackControllerContext.Provider>
 
       <SoundControl
         session={session}

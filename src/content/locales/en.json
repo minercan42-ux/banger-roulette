@@ -16,7 +16,9 @@
     "copied": "Copied",
     "copyManually": "Copy manually",
     "close": "Close",
-    "retry": "Try again"
+    "retry": "Try again",
+    "yes": "Yes",
+    "no": "No"
   },
   "status": {
     "idle": "Ready",
@@ -71,8 +73,8 @@
     "storageNotice": "Only a local player ID is stored so a reload recognizes you. No login, no saved game."
   },
   "milestone": {
-    "title": "Milestone M3",
-    "body": "Genre roulette and song submission are live. Playback, voting and reveal arrive in M4 and M5.",
+    "title": "Milestone M4",
+    "body": "Genre roulette, song submission and synchronised playback are live. Voting, reveal and finale remain unavailable until M5.",
     "startHint": "The host starts the round once 3–10 players are ready (sound enabled)."
   },
   "lobby": {
@@ -219,6 +221,45 @@
     "none": "No song was submitted twice.",
     "single": "Only one song this round: no voting, no points."
   },
+  "playback": {
+    "heading": "Playback",
+    "songCount": "Song {{index}} of {{count}}",
+    "spectator": "You are watching; your tab plays along but cannot write.",
+    "boundTab": "Another tab holds the write connection. This tab only listens and cannot flag songs.",
+    "ownersHidden": "Owner names follow at the reveal.",
+    "consentRequired": "YouTube playback stays disabled until you consent.",
+    "consentLabel": "I agree that YouTube content (player and thumbnail) is loaded.",
+    "progressLabel": "Playback progress",
+    "timeLeft": "{{time}} left",
+    "volumeLabel": "Volume",
+    "muteLabel": "Mute",
+    "flag": "Genre fail",
+    "flagged": "Flagged",
+    "recover": "Resume playback",
+    "blockedHint": "The browser blocked autoplay. Click to start playback yourself.",
+    "bufferingHint": "Buffering. This client catches up to the server timeline.",
+    "skippedHint": "This song was skipped locally. The round continues for everyone else.",
+    "errorHint": "The player reported error {{code}}. This client skips the song; the round continues.",
+    "statusIdle": "Waiting for consent",
+    "statusLoading": "Loading player …",
+    "statusCued": "Cued",
+    "statusScheduled": "Scheduled",
+    "statusPlaying": "Playing",
+    "statusBuffering": "Buffering",
+    "statusBlocked": "Blocked",
+    "statusPaused": "Paused",
+    "statusSkipped": "Skipped",
+    "statusEnded": "Ended",
+    "debugOffset": "Clock offset",
+    "debugRtt": "RTT",
+    "debugSynchronized": "Synced",
+    "debugPlannedStart": "Planned start",
+    "debugPlannedDeadline": "Planned deadline",
+    "debugObservedStart": "Observed start",
+    "debugStartSkew": "Start skew",
+    "debugDrift": "Drift",
+    "debugStatus": "Status"
+  },
   "host": {
     "start": "Start game",
     "notReadyCount": "At least {{min}} active players are required.",
@@ -231,7 +272,6 @@
   },
   "later": {
     "playbackPreroll": "The song clips start shortly.",
-    "PLAYBACK": "Synchronised playback arrives in M4. The clips are not played here yet.",
     "VOTING": "Voting arrives in M5. Nothing is ranked here yet.",
     "REVEAL": "Reveal and scoring arrive in M5. This is not a result yet.",
     "FINAL": "The finale arrives in M5."
