@@ -191,7 +191,12 @@ export function RoomView({
       )}
 
       {room.phase === 'PLAYBACK' && (
-        <PlaybackPhase session={session} state={state} viewerId={viewerId} />
+        <PlaybackPhase
+          session={session}
+          state={state}
+          viewerId={viewerId}
+          viewerConnectionId={snapshot.connectionId}
+        />
       )}
 
       {room.phase === 'VOTING' && <PhaseUnavailable phase="VOTING" />}

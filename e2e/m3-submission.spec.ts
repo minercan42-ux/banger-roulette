@@ -283,7 +283,7 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
     [BLOCKED_100]: { error: 100 },
     [BLOCKED_101]: { error: 101 },
     [BLOCKED_150]: { error: 150 },
-    [VALID_D]: { currentSeconds: 15 },
+    [VALID_D]: { duration: 200, currentSeconds: 200 },
   };
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice', videos }),
@@ -344,12 +344,13 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
     ).toBe(true);
 
     await dario.page.getByTestId('set-start').click();
-    await expect(dario.page.getByTestId('start-seconds')).toHaveValue('15');
+    // Selecting the advancing playhead at the end stays inside the video.
+    await expect(dario.page.getByTestId('start-seconds')).toHaveValue('199');
     await dario.page.getByTestId('save-submission').click();
     const darioId = (await snapshot(dario.page)).clientId;
     await waitForSubmissionMedia(host.page, darioId, VALID_D);
     const saved = await stateOf(host.page);
-    expect(saved?.round?.submissions?.[darioId]?.media.startSeconds).toBe(15);
+    expect(saved?.round?.submissions?.[darioId]?.media.startSeconds).toBe(199);
     expect(saved?.round?.submissions?.[darioId]?.media.title).toBe(
       fixtureTitle(VALID_D),
     );
@@ -362,11 +363,10 @@ test('a retained draft survives reload and finishing is irreversible', async ({
   browser,
 }) => {
   test.setTimeout(90_000);
-  const videos = { [VALID_A]: { currentSeconds: 15 } };
   const stages = await Promise.all([
-    newStage(browser, { nickname: 'Alice', videos }),
-    newStage(browser, { nickname: 'Bruno', videos }),
-    newStage(browser, { nickname: 'Cleo', videos }),
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
   ]);
   try {
     const [host, ...rest] = stages;
@@ -375,10 +375,16 @@ test('a retained draft survives reload and finishing is irreversible', async ({
     const alice = stages[0];
     const aliceId = (await snapshot(alice.page)).clientId;
 
-    await submitSongViaUi(alice.page, watchUrl(VALID_A), { setStart: true });
+    // A chosen link start plus fine adjustment must survive save and reload.
+    await submitSongViaUi(alice.page, `${watchUrl(VALID_A)}&t=10`, {
+      plus5: 1,
+    });
+    const chosenStart = 15;
     await waitForSubmissionMedia(host.page, aliceId, VALID_A);
     const drafted = await stateOf(host.page);
-    expect(drafted?.round?.submissions?.[aliceId]?.media.startSeconds).toBe(15);
+    expect(drafted?.round?.submissions?.[aliceId]?.media.startSeconds).toBe(
+      chosenStart,
+    );
     await expect(alice.page.getByTestId('submission-progress')).toHaveAttribute(
       'data-count',
       '0',
@@ -411,7 +417,9 @@ test('a retained draft survives reload and finishing is irreversible', async ({
     await expect(alice.page.getByTestId('song-link')).toHaveValue(
       new RegExp(VALID_A),
     );
-    await expect(alice.page.getByTestId('start-seconds')).toHaveValue('15');
+    await expect(alice.page.getByTestId('start-seconds')).toHaveValue(
+      String(chosenStart),
+    );
     await expect(alice.page.getByTestId('submission-progress')).toHaveAttribute(
       'data-count',
       '0',

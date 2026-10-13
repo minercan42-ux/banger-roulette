@@ -101,6 +101,18 @@ export interface RoundView {
   currentVideoId: string | null;
 }
 
+export interface PlaybackView {
+  song: SongView;
+  index: number;
+  songCount: number;
+  /** Absolute server-normalized timestamps, shifted together on resume. */
+  startAt: number;
+  deadlineAt: number;
+  pausedAt: number | null;
+  flaggedByViewer: boolean;
+  canFlag: boolean;
+}
+
 export interface ViewerChoices {
   isParticipant: boolean;
   submitted: boolean;
@@ -355,6 +367,35 @@ export function selectCurrentSong(
     (candidate) => candidate.media.videoId === currentVideoId,
   );
   return song ? toSongView(state, song, viewerId) : null;
+}
+
+/** Playback timing and privacy-safe controls for this exact viewer tab. */
+export function selectPlayback(
+  state: GameState,
+  viewerId: string,
+  viewerConnectionId: string | null,
+): PlaybackView | null {
+  const song = selectCurrentSong(state, viewerId);
+  if (state.phase.type !== 'PLAYBACK' || !state.round || !song) {
+    return null;
+  }
+  return {
+    song,
+    index: state.phase.index,
+    songCount: state.round.playbackOrder.length,
+    startAt: state.phase.startAt,
+    deadlineAt: state.phase.deadlineAt,
+    pausedAt: state.pause?.at ?? null,
+    flaggedByViewer: (state.round.genreFailFlags[viewerId] ?? []).includes(
+      song.videoId,
+    ),
+    canFlag: permittedTargets(
+      state,
+      viewerId,
+      viewerConnectionId,
+      'flag',
+    ).includes(song.videoId),
+  };
 }
 
 /**

@@ -14,3 +14,12 @@ export type {
   PreviewPlayer,
   PreviewStatus,
 } from './preview';
+export { createPlayback } from './playback';
+export type {
+  PlaybackController,
+  PlaybackDiagnostics,
+  PlaybackOptions,
+  PlaybackPlan,
+  PlaybackScheduler,
+  PlaybackStatus,
+} from './playback';

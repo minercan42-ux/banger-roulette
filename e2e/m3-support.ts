@@ -30,6 +30,12 @@ export interface StageOptions {
   locale?: string;
   reducedMotion?: 'reduce' | 'no-preference';
   viewport?: { width: number; height: number };
+  /**
+   * Simulated client wall-clock skew in milliseconds. The page's `Date.now`
+   * is shifted by this amount while `/api/time` still reports real server
+   * time, so the session must compensate through its clock sync (FR-31).
+   */
+  wallClockOffsetMs?: number;
 }
 
 export async function newStage(
@@ -42,6 +48,13 @@ export async function newStage(
     viewport: options.viewport,
   });
   await installYouTubeFixture(context, options.videos ?? {});
+  const skew = options.wallClockOffsetMs ?? 0;
+  if (skew !== 0) {
+    await context.addInitScript((offset) => {
+      const realNow = Date.now.bind(Date);
+      Date.now = () => realNow() + offset;
+    }, skew);
+  }
   const page = await context.newPage();
   const youtubeRequests = watchYouTubeRequests(page);
   await page.goto('/');

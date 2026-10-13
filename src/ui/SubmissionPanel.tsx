@@ -23,6 +23,7 @@ import {
   type PreviewStatus,
 } from '../player/preview';
 import type { GameState } from '../shared/game';
+import { useEmbedConsent } from './embed-consent';
 import { formatDuration, genreName } from './format';
 
 /** Current preview lifecycle, extended with "nothing loaded yet" and "loading". */
@@ -110,7 +111,7 @@ export function SubmissionPanel({
 
   const [linkText, setLinkText] = useState(initial.link);
   const [startSeconds, setStartSeconds] = useState(initial.startSeconds);
-  const [consent, setConsent] = useState(false);
+  const { consented: consent, setConsent } = useEmbedConsent();
   const [status, setStatus] = useState<PanelStatus>({ type: 'idle' });
   const [metadata, setMetadata] = useState<OEmbedMetadata | null>(null);
   const [busy, setBusy] = useState(false);

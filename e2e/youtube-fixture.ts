@@ -2,29 +2,62 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 /**
  * Deterministic stand-in for the *external* YouTube boundary. The real
- * `src/player/preview.ts` lifecycle is exercised unchanged: it lazy-loads
- * `https://www.youtube.com/iframe_api`, builds a `youtube-nocookie.com` iframe
- * and drives the official `YT.Player` surface. Only the bytes crossing the
- * network edge are replaced, so no production seam is introduced.
+ * `src/player/preview.ts` / `src/player/playback.ts` lifecycle is exercised
+ * unchanged: it lazy-loads `https://www.youtube.com/iframe_api`, builds a
+ * `youtube-nocookie.com` iframe and drives the official `YT.Player` surface.
+ * Only the bytes crossing the network edge are replaced, so no production seam
+ * is introduced.
  *
  * The same-origin `/api/oembed` proxy is intercepted too, because it is the one
  * place the app reads YouTube metadata (FR-21). Nothing here ships in the build.
+ *
+ * M4 additions: the player now models a *real* playback clock (cue, buffering,
+ * an independently advancing position, `getVideoUrl` identity, volume/mute and
+ * the `onAutoplayBlocked` gate). The advancing clock is driven by
+ * `performance.now()`, so it keeps running even when a test shifts the page's
+ * wall clock (`Date.now`) to simulate per-client clock skew (FR-31).
  */
 export interface YouTubeVideoFixture {
-  /** Positive playback duration reported once PLAYING; default 200. */
+  /** Positive playback duration reported once metadata is ready; default 200. */
   duration?: number;
   /** Error code surfaced through `onError` (2/100/101/150/5); default none. */
   error?: number;
   /** Milliseconds before `onReady` fires; default 0. */
   readyDelayMs?: number;
-  /** Milliseconds after ready before `onError` fires; default 50. */
+  /** Milliseconds after ready (or cue) before `onError` fires; default 50. */
   errorDelayMs?: number;
-  /** Playback position reported by `getCurrentTime` before any seek; default 0. */
+  /**
+   * Position (seconds) the video starts at; the reported clock then advances
+   * from here while playing. Read once before any seek; default 0.
+   */
   currentSeconds?: number;
   /** Normalized title served by `/api/oembed`; default `Fixture <videoId>`. */
   title?: string;
   /** Normalized channel served by `/api/oembed`; default `Fixture Channel`. */
   channel?: string;
+  /**
+   * Milliseconds between `cueVideoById` and the CUED state change; a value
+   * larger than the preroll simulates a late cue that must be caught up.
+   * Default 0.
+   */
+  cueDelayMs?: number;
+  /**
+   * Milliseconds of BUFFERING before the first PLAYING state change; the
+   * position freezes meanwhile, so a large value simulates buffering recovery.
+   * Default 0.
+   */
+  bufferingMs?: number;
+  /**
+   * Signed milliseconds the reported position is offset from the timeline when
+   * playback begins (positive = ahead, e.g. an ad overshoot). A magnitude over
+   * 750 must trigger a drift `seekTo`; below must not. Default 0.
+   */
+  startOffsetMs?: number;
+  /**
+   * When true the first scripted `playVideo` fires `onAutoplayBlocked` and the
+   * next one (a user gesture via `recover()`) plays. Default false.
+   */
+  autoplayBlocked?: boolean;
 }
 
 export type YouTubeFixtureMap = Record<string, YouTubeVideoFixture>;
@@ -57,22 +90,70 @@ export function fixtureThumbnail(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
 
+/** One recorded low-level player call, in the order the page made it. */
+export interface YouTubeCall {
+  type:
+    | 'ready'
+    | 'state'
+    | 'cue'
+    | 'play'
+    | 'pause'
+    | 'seek'
+    | 'buffering'
+    | 'blocked'
+    | 'error'
+    | 'volume'
+    | 'mute'
+    | 'unmute'
+    | 'destroy';
+  /** `performance.now()` at the call; monotonic, unaffected by wall clocks. */
+  at: number;
+  videoId?: string;
+  state?: number;
+  seconds?: number;
+  startSeconds?: number;
+  endSeconds?: number | null;
+  code?: number;
+  value?: number;
+  muted?: boolean;
+}
+
 declare global {
   interface Window {
     __bangerYtFixture?: YouTubeFixtureMap;
+    __bangerYtCalls?: YouTubeCall[];
   }
 }
 
 /**
  * Served in place of the official IFrame API script. It mirrors the documented
- * surface `preview.ts` binds to: `window.YT.Player` constructed with the embed
- * iframe and an `events` bag, `onReady`/`onStateChange` (PLAYING = 1)/`onError`
- * (codes), `getDuration`/`getCurrentTime`/`seekTo`/`playVideo`/`destroy`.
+ * surface `preview.ts` and `playback.ts` bind to: `window.YT.Player`
+ * constructed with the embed iframe and an `events` bag, `onReady`,
+ * `onStateChange` (PLAYING = 1), `onError` (codes), `onAutoplayBlocked`,
+ * `cueVideoById`/`playVideo`/`pauseVideo`/`seekTo`/`getCurrentTime`/
+ * `getDuration`/`getVideoUrl`/`getPlayerState`/`getVideoData`/volume/mute.
  */
 const IFRAME_API_FIXTURE = `
 (function () {
-  var FIX = window.__bangerYtFixture || {};
   var STATES = { UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 };
+  function perfNow() {
+    return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  }
+  function fixMap() { return window.__bangerYtFixture || {}; }
+  var callLog = (window.__bangerYtCalls = window.__bangerYtCalls || []);
+  function record(type, extra) {
+    var entry = { type: type, at: perfNow() };
+    if (extra) {
+      for (var key in extra) {
+        if (Object.prototype.hasOwnProperty.call(extra, key)) entry[key] = extra[key];
+      }
+    }
+    callLog.push(entry);
+    return entry;
+  }
+  function num(value, fallback) {
+    return typeof value === 'number' && isFinite(value) ? value : fallback;
+  }
   function elementSrc(element) {
     if (typeof element === 'string') {
       var byId = document.getElementById(element);
@@ -89,13 +170,17 @@ const IFRAME_API_FIXTURE = `
     return match ? Number(match[1]) : 0;
   }
   function cfgFor(videoId) {
-    var entry = FIX[videoId] || {};
+    var entry = fixMap()[videoId] || {};
     return {
-      error: typeof entry.error === 'number' ? entry.error : 0,
-      duration: typeof entry.duration === 'number' ? entry.duration : 200,
-      readyDelayMs: typeof entry.readyDelayMs === 'number' ? entry.readyDelayMs : 0,
-      errorDelayMs: typeof entry.errorDelayMs === 'number' ? entry.errorDelayMs : 50,
-      currentSeconds: typeof entry.currentSeconds === 'number' ? entry.currentSeconds : 0
+      error: num(entry.error, 0),
+      duration: num(entry.duration, 200),
+      readyDelayMs: num(entry.readyDelayMs, 0),
+      errorDelayMs: num(entry.errorDelayMs, 50),
+      cueDelayMs: num(entry.cueDelayMs, 0),
+      bufferingMs: num(entry.bufferingMs, 0),
+      startOffsetMs: num(entry.startOffsetMs, 0),
+      autoplayBlocked: entry.autoplayBlocked === true,
+      currentSeconds: num(entry.currentSeconds, 0)
     };
   }
   function Player(element, options) {
@@ -105,66 +190,183 @@ const IFRAME_API_FIXTURE = `
     this.videoId = videoIdFromElement(element);
     this.cfg = cfgFor(this.videoId);
     this.destroyed = false;
-    this.firedReady = false;
+    this.readyFired = false;
     this.firedError = false;
-    this.firedPlaying = false;
+    this.metadataReady = false;
     this.state = STATES.UNSTARTED;
-    this.current = startFromElement(element) || this.cfg.currentSeconds;
-    this.readyTimer = null;
-    this.errorTimer = null;
+    this.playing = false;
+    this.pendingPlay = false;
+    this.buffered = false;
+    this.blocked = false;
+    this.unblocked = false;
+    this.endSeconds = null;
+    this.cueStart = startFromElement(element) || this.cfg.currentSeconds;
+    this.baseSeconds = this.cueStart;
+    this.baseAt = perfNow();
+    this.pausedSeconds = this.cueStart;
+    this.volume = 100;
+    this.muted = false;
+    this.timers = [];
     var ready = function () {
-      if (self.destroyed || self.firedReady) return;
-      self.firedReady = true;
-      self.state = STATES.CUED;
+      if (self.destroyed || self.readyFired) return;
+      self.readyFired = true;
+      self.metadataReady = true;
+      record('ready', { videoId: self.videoId });
       if (typeof events.onReady === 'function') events.onReady({ target: self });
-      if (self.cfg.error) {
-        self.errorTimer = setTimeout(function () { self.emitError(self.cfg.error); }, self.cfg.errorDelayMs);
-      }
+      self.emitState(STATES.CUED);
+      if (self.cfg.error) self.scheduleError();
     };
-    this.readyTimer = setTimeout(ready, this.cfg.readyDelayMs);
+    this.later(ready, this.cfg.readyDelayMs);
   }
+  Player.prototype.later = function (handler, ms) {
+    var self = this;
+    var id = setTimeout(function () {
+      self.timers = self.timers.filter(function (candidate) { return candidate !== id; });
+      handler();
+    }, Math.max(0, ms));
+    this.timers.push(id);
+    return id;
+  };
+  Player.prototype.emitState = function (state) {
+    if (this.destroyed) return;
+    this.state = state;
+    record('state', { videoId: this.videoId, state: state });
+    if (typeof this.events.onStateChange === 'function') {
+      this.events.onStateChange({ target: this, data: state });
+    }
+  };
+  Player.prototype.scheduleError = function () {
+    var self = this;
+    if (this.firedError || this.errorTimer) return;
+    this.errorTimer = this.later(function () { self.emitError(self.cfg.error); }, this.cfg.errorDelayMs);
+  };
   Player.prototype.emitError = function (code) {
     if (this.destroyed || this.firedError) return;
     this.firedError = true;
+    this.playing = false;
+    record('error', { videoId: this.videoId, code: code });
     if (typeof this.events.onError === 'function') this.events.onError({ target: this, data: code });
   };
-  Player.prototype.playVideo = function () {
+  Player.prototype.cueVideoById = function (input) {
     var self = this;
-    if (this.destroyed || this.firedPlaying) return;
-    if (this.cfg.error) {
-      this.errorTimer = setTimeout(function () { self.emitError(self.cfg.error); }, this.cfg.errorDelayMs);
+    if (this.destroyed) return;
+    var videoId = typeof input === 'string' ? input : (input && input.videoId) || '';
+    var start = (input && typeof input === 'object') ? num(input.startSeconds, 0) : 0;
+    var end = (input && typeof input === 'object' && typeof input.endSeconds === 'number') ? input.endSeconds : null;
+    this.videoId = videoId;
+    this.cfg = cfgFor(videoId);
+    this.endSeconds = end;
+    this.metadataReady = false;
+    this.playing = false;
+    this.pendingPlay = false;
+    this.buffered = false;
+    this.firedError = false;
+    this.errorTimer = null;
+    this.cueStart = start;
+    this.baseSeconds = start;
+    this.pausedSeconds = start;
+    this.state = STATES.UNSTARTED;
+    record('cue', { videoId: videoId, startSeconds: start, endSeconds: end });
+    this.later(function () {
+      if (self.destroyed) return;
+      self.metadataReady = true;
+      self.emitState(STATES.CUED);
+      if (self.cfg.error) self.scheduleError();
+      if (self.pendingPlay) { self.pendingPlay = false; self.startPlayback(); }
+    }, this.cfg.cueDelayMs);
+  };
+  Player.prototype.playVideo = function () {
+    if (this.destroyed) return;
+    record('play', { videoId: this.videoId, pending: !this.metadataReady });
+    if (!this.metadataReady) { this.pendingPlay = true; return; }
+    this.startPlayback();
+  };
+  Player.prototype.startPlayback = function () {
+    var self = this;
+    if (this.destroyed || this.firedError) return;
+    if (this.cfg.autoplayBlocked && !this.unblocked) {
+      this.unblocked = true;
+      this.blocked = true;
+      record('blocked', { videoId: this.videoId });
+      if (typeof this.events.onAutoplayBlocked === 'function') {
+        this.events.onAutoplayBlocked({ target: this });
+      }
       return;
     }
-    setTimeout(function () {
-      if (self.destroyed) return;
-      self.firedPlaying = true;
-      self.state = STATES.PLAYING;
-      if (typeof self.events.onStateChange === 'function') {
-        self.events.onStateChange({ target: self, data: STATES.PLAYING });
-      }
-    }, 0);
+    if (this.playing) return;
+    if (this.cfg.bufferingMs > 0 && !this.buffered) {
+      this.buffered = true;
+      this.emitState(STATES.BUFFERING);
+      this.later(function () { self.beginsPlaying(); }, this.cfg.bufferingMs);
+      return;
+    }
+    this.beginsPlaying();
+  };
+  Player.prototype.beginsPlaying = function () {
+    if (this.destroyed || this.playing || this.firedError) return;
+    var offset = num(this.cfg.startOffsetMs, 0) / 1000;
+    this.playing = true;
+    this.baseSeconds = this.cueStart + offset;
+    this.baseAt = perfNow();
+    this.emitState(STATES.PLAYING);
+  };
+  Player.prototype.position = function () {
+    if (!this.playing) return this.pausedSeconds;
+    return Math.min(
+      this.cfg.duration,
+      this.baseSeconds + (perfNow() - this.baseAt) / 1000,
+    );
   };
   Player.prototype.pauseVideo = function () {
-    this.state = STATES.PAUSED;
-    if (typeof this.events.onStateChange === 'function') {
-      this.events.onStateChange({ target: this, data: STATES.PAUSED });
+    if (this.destroyed) return;
+    record('pause', { videoId: this.videoId });
+    if (this.playing) {
+      this.pausedSeconds = this.position();
+      this.playing = false;
+    }
+    this.emitState(STATES.PAUSED);
+  };
+  Player.prototype.seekTo = function (seconds, allowSeekAhead) {
+    if (this.destroyed) return;
+    if (typeof seconds !== 'number' || !isFinite(seconds)) return;
+    record('seek', { videoId: this.videoId, seconds: seconds });
+    if (this.playing) {
+      this.baseSeconds = seconds;
+      this.baseAt = perfNow();
+      if (this.cfg.bufferingMs > 0) {
+        var self = this;
+        this.emitState(STATES.BUFFERING);
+        this.later(function () { if (!self.destroyed) self.emitState(STATES.PLAYING); }, 30);
+      }
+    } else {
+      this.pausedSeconds = seconds;
+      this.baseSeconds = seconds;
     }
   };
-  Player.prototype.seekTo = function (seconds) {
-    if (typeof seconds === 'number' && isFinite(seconds)) this.current = seconds;
+  Player.prototype.getCurrentTime = function () {
+    var value = this.position();
+    return isFinite(value) ? value : 0;
   };
-  Player.prototype.getCurrentTime = function () { return this.current; };
-  Player.prototype.getDuration = function () { return this.cfg.duration; };
+  Player.prototype.getDuration = function () { return this.metadataReady ? this.cfg.duration : 0; };
   Player.prototype.getVideoUrl = function () { return 'https://www.youtube.com/watch?v=' + this.videoId; };
   Player.prototype.getPlayerState = function () { return this.state; };
   Player.prototype.getVideoData = function () { return { video_id: this.videoId }; };
-  Player.prototype.mute = function () {};
-  Player.prototype.unMute = function () {};
-  Player.prototype.setVolume = function () {};
+  Player.prototype.setVolume = function (value) {
+    var clamped = Math.max(0, Math.min(100, Math.round(Number(value))));
+    if (!isFinite(clamped)) return;
+    this.volume = clamped;
+    record('volume', { videoId: this.videoId, value: clamped });
+  };
+  Player.prototype.getVolume = function () { return this.volume; };
+  Player.prototype.mute = function () { this.muted = true; record('mute', { videoId: this.videoId }); };
+  Player.prototype.unMute = function () { this.muted = false; record('unmute', { videoId: this.videoId }); };
+  Player.prototype.isMuted = function () { return this.muted; };
   Player.prototype.destroy = function () {
     this.destroyed = true;
-    if (this.readyTimer) clearTimeout(this.readyTimer);
-    if (this.errorTimer) clearTimeout(this.errorTimer);
+    var timers = this.timers;
+    this.timers = [];
+    for (var index = 0; index < timers.length; index += 1) clearTimeout(timers[index]);
+    record('destroy', { videoId: this.videoId });
   };
   Player.PlayerState = STATES;
   window.YT = { Player: Player, PlayerState: STATES, loaded: 1, ready: function (fn) { if (typeof fn === 'function') setTimeout(fn, 0); } };
@@ -186,6 +388,7 @@ export async function installYouTubeFixture(
 ): Promise<void> {
   await context.addInitScript((map) => {
     window.__bangerYtFixture = map;
+    window.__bangerYtCalls = [];
   }, videos);
 
   await context.route(
@@ -272,4 +475,28 @@ export function watchYouTubeRequests(page: Page): () => string[] {
     }
   });
   return () => [...seen];
+}
+
+/** Every low-level player call the page has made so far, in order. */
+export function youTubeCalls(page: Page): Promise<YouTubeCall[]> {
+  return page.evaluate(() => window.__bangerYtCalls ?? []);
+}
+
+/**
+ * Replaces one video's behaviour at runtime. The fixture reads
+ * `window.__bangerYtFixture` on every cue, so a later song can be given an
+ * error (or other behaviour) once the playback order is known.
+ */
+export async function setFixtureVideo(
+  page: Page,
+  videoId: string,
+  fixture: YouTubeVideoFixture,
+): Promise<void> {
+  await page.evaluate(
+    ([id, settings]) => {
+      window.__bangerYtFixture = window.__bangerYtFixture ?? {};
+      window.__bangerYtFixture[id] = settings;
+    },
+    [videoId, fixture] as const,
+  );
 }

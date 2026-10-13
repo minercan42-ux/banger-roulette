@@ -6,9 +6,9 @@ interface PhaseUnavailableProps {
 }
 
 /**
- * Honest label for phases M3 does not implement yet. The engine still advances
- * through them on deadlines, so the UI must say what is missing instead of
- * pretending playback, voting or reveal already work (M4/M5).
+ * Honest label for phases the app does not implement yet. The engine still
+ * advances through them on deadlines, so the UI must say what is missing
+ * instead of pretending voting or reveal already work (M5).
  */
 export function PhaseUnavailable({ phase }: PhaseUnavailableProps) {
   const { t } = useTranslation();

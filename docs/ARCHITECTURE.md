@@ -44,7 +44,7 @@ Migration injects the current full connection list into election and HOST_CHANGE
 
 Frames <=192KiB go directly; larger snapshot/handoff/replica events use 48KiB UTF-8 pieces, Base64, <=128 parts/6MiB. Apply only after atomic complete-event validation. Distinct accepted state versions remain FIFO; repeated requests for one version can share a pending publication. Five seconds without new unique valid progress expires an assembly; duplicate parts do not extend it. User approved this inactivity rule to preserve the full codec bounds under fanout-aware pacing.
 
-`api/time.ts` is a GET Web Handler with no-store server milliseconds. Vite invokes this same handler for local development; Vercel deploys it as a Node function. Clock synchronization uses multiple RTT midpoint samples and median offset. Unsynchronized clocks are reported rather than disguised as server time. Playback integration remains M4.
+`api/time.ts` is a GET Web Handler with no-store server milliseconds. Vite invokes this same handler for local development; Vercel deploys it as a Node function. Clock synchronization uses multiple RTT midpoint samples and median offset. Unsynchronized clocks are reported rather than disguised as server time. M4 consumes the existing normalized `GameSession.now()` and clock diagnostics; no new wire event or timer broadcast is introduced.
 
 `e2e/` contains an isolated test-only WebSocket bridge over the actual in-memory transport. Browser hosts still execute the real session/engine and the actual lobby UI. Neither the harness nor its window debug API is a production entry. Live SDK timing is measured separately, without claiming the in-memory results prove Supabase failover bounds. See ADR-002 for connection/version authority.
 
@@ -58,13 +58,13 @@ Frames <=192KiB go directly; larger snapshot/handoff/replica events use 48KiB UT
 
 The API and its complete shared-schema dependency graph use explicit `.js` relative specifiers so Vercel's emitted Node ESM modules resolve without a bundler. TypeScript/Vite resolve those specifiers to source `.ts` modules during development. Checking `vite build` alone does not exercise that server graph; emitted-JS Node execution and a deployed API request are separate runtime gates.
 
-`preview.ts` loads the official IFrame API lazily through one timeout-bounded, recoverable singleton. The actual iframe uses `www.youtube-nocookie.com`, the application origin and `strict-origin-when-cross-origin`. Ready is not proof of playability: only PLAYING plus a positive finite duration for the entered video enables saving. Current video URL is checked again before dispatch, preventing related-video navigation from mixing metadata and duration. Initialization errors are retained, and canceled sessions cannot emit status. Embed failures 2/100/101/150 block; other codes remain unconfirmed rather than becoming success.
+`iframe.ts` shares the official IFrame API's lazy, timeout-bounded, recoverable singleton and nocookie iframe lifecycle between preview and playback. The iframe includes the application origin and `strict-origin-when-cross-origin`. Preview ready is not proof of playability: only PLAYING plus a positive finite duration for the entered video enables saving. Current video URL is checked again before dispatch, preventing related-video navigation from mixing metadata and duration. Initialization errors are retained, and canceled sessions cannot emit status. Embed failures 2/100/101/150 block; other codes remain unconfirmed rather than becoming success.
 
-At aggregation the existing engine groups video IDs and retains the first remaining submission's media/start. `LinkedAnimation` reads anonymous-safe SongViews during the first playback preroll, or the single-song reveal, and respects reduced motion. Actual synchronized playback and the remaining voting/reveal/finale surfaces are M4/M5, not simulated by M3.
+At aggregation the existing engine groups video IDs and retains the first remaining submission's media/start. `LinkedAnimation` reads anonymous-safe SongViews during the first playback preroll, or the single-song reveal, and respects reduced motion. M4 plays the resulting shuffled order; voting/reveal/finale surfaces remain M5.
 
 Official sources checked for M3: [IFrame API](https://developers.google.com/youtube/iframe_api_reference), [player parameters](https://developers.google.com/youtube/player_parameters), [privacy-enhanced embedding and Referer](https://support.google.com/youtube/answer/171780?hl=en), [live YouTube oEmbed](https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DM7lc1UVf-VE&format=json), [Vercel Node Web handlers](https://vercel.com/docs/functions/runtimes/node-js).
 
-## Planned playback synchronization (M4 player integration, not implemented)
+## M4 playback synchronization
 
 ```mermaid
 sequenceDiagram
@@ -79,9 +79,18 @@ sequenceDiagram
   T-->>C: serverNow, no-store
   H->>R: Complete SNAPSHOT with media, startAt, deadlineAt
   R-->>C: Validated snapshot
-  C->>Y: Prebuffer clip after embedding consent
-  C->>Y: play at normalized startAt
+  C->>Y: cueVideoById with clip bounds after consent
+  Y-->>C: CUED (5), ready for scheduled play
+  C->>Y: playVideo at normalized startAt
+  Y-->>C: PLAYING (1), capture observed start/skew
   C->>Y: Local seek if drift exceeds 750 ms
+  C->>Y: pauseVideo at independent deadlineAt
 ```
 
-The time API and snapshot transport above are M2; real preview validation is M3, while synchronized playback and drift correction remain M4. Advertisements, cold seeks, buffering, autoplay policies and browser scheduling can prevent the ±500ms target. Presence timeout/partitions can prevent five-second migration; measure AK goals, never represent them as API guarantees. See ADR-001, ADR-002 and SECURITY.md.
+`selectPlayback` exposes privacy-safe media, absolute timestamps, frozen pause time and exact viewer-tab flag permissions. `PlaybackPhase` shares in-memory per-tab consent with submission, maintains local volume/mute, and restarts pending creations when the authoritative plan changes. Live controllers update in place across songs. The consent checkbox stays mounted, so consent can be withdrawn during playback; withdrawal and unmount abort work and destroy the frame. Only selector-visible owners reach the DOM.
+
+`playback.ts` ignores player states until its own clip cue is issued: the iframe reports its URL video before the clip bounds exist, and acting on that CUED would start playback that the following cue stops again. It then waits for CUED before requesting playback, catches up after delayed cue or buffering, and samples drift every 250 ms. Seek requires the expected current video and more than 750 ms drift, with a one-second cooldown. The absolute deadline independently pauses playback, since `seekTo` invalidates YouTube's `endSeconds`. Host pause cancels scheduling and freezes elapsed time; resume uses the engine's shifted timestamps. Terminal errors skip only the local clip. Late PLAYING events after pause/error/deadline cannot restart it, and native PLAYING before `startAt` is paused until the scheduled start. Autoplay blocking requires a direct recovery gesture; Web Audio unlock alone is not proof.
+
+The opt-in `?debug=1` overlay shows existing clock offset/RTT/sync plus planned start/deadline, first actual PLAYING time/skew, media drift and status. The external-boundary fixture advances media with `performance.now()` independently of injected client wall-clock offsets. Fixture results validate application behavior, not live YouTube timing.
+
+Official M4 sources: [IFrame API](https://developers.google.com/youtube/iframe_api_reference) and [privacy-enhanced embedding/Referer](https://support.google.com/youtube/answer/171780?hl=en). Cueing does not fetch the video stream. Advertisements, cold seeks, buffering, autoplay policies and browser scheduling can prevent the ±500ms target. Presence timeout/partitions can prevent five-second migration; measure AK goals, never represent them as API guarantees. See ADR-001, ADR-002 and SECURITY.md.
