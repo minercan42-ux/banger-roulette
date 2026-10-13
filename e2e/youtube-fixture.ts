@@ -42,15 +42,18 @@ export interface YouTubeVideoFixture {
    */
   cueDelayMs?: number;
   /**
-   * Milliseconds of BUFFERING before the first PLAYING state change; the
-   * position freezes meanwhile, so a large value simulates buffering recovery.
-   * Default 0.
+   * Milliseconds of BUFFERING before the audible start. It lands on the first
+   * *unmuted* play, or on the muted *resume* after the prebuffer rewind (a
+   * resumed clip buffers even while muted), once per cue; the position freezes
+   * meanwhile, so a large value simulates buffering recovery. Default 0.
    */
   bufferingMs?: number;
   /**
    * Signed milliseconds the reported position is offset from the timeline when
-   * playback begins (positive = ahead, e.g. an ad overshoot). A magnitude over
-   * 750 must trigger a drift `seekTo`; below must not. Default 0.
+   * audible playback begins (positive = ahead, e.g. an ad overshoot). Injected
+   * once per cue when the media first becomes audible (the unmute), so the muted
+   * pre-start warm-up does not consume it. A magnitude over 750 must trigger a
+   * drift `seekTo`; below must not. Default 0.
    */
   startOffsetMs?: number;
   /**
@@ -206,6 +209,7 @@ const IFRAME_API_FIXTURE = `
     this.pausedSeconds = this.cueStart;
     this.volume = 100;
     this.muted = false;
+    this.offsetApplied = false;
     this.timers = [];
     var ready = function () {
       if (self.destroyed || self.readyFired) return;
@@ -265,6 +269,7 @@ const IFRAME_API_FIXTURE = `
     this.cueStart = start;
     this.baseSeconds = start;
     this.pausedSeconds = start;
+    this.offsetApplied = false;
     this.state = STATES.UNSTARTED;
     record('cue', { videoId: videoId, startSeconds: start, endSeconds: end });
     this.later(function () {
@@ -277,14 +282,16 @@ const IFRAME_API_FIXTURE = `
   };
   Player.prototype.playVideo = function () {
     if (this.destroyed) return;
-    record('play', { videoId: this.videoId, pending: !this.metadataReady });
+    record('play', { videoId: this.videoId, pending: !this.metadataReady, muted: this.muted });
     if (!this.metadataReady) { this.pendingPlay = true; return; }
     this.startPlayback();
   };
   Player.prototype.startPlayback = function () {
     var self = this;
     if (this.destroyed || this.firedError) return;
-    if (this.cfg.autoplayBlocked && !this.unblocked) {
+    // Muted autoplay is permitted by policy; only an audible (unmuted) play is
+    // blocked, so the muted prebuffer never consumes the single blocked signal.
+    if (this.cfg.autoplayBlocked && !this.unblocked && !this.muted) {
       this.unblocked = true;
       this.blocked = true;
       record('blocked', { videoId: this.videoId });
@@ -294,6 +301,8 @@ const IFRAME_API_FIXTURE = `
       return;
     }
     if (this.playing) return;
+    // Buffering models the first (muted pre-roll or cold) playback start of the
+    // clip stalling, once per cue; the position freezes meanwhile.
     if (this.cfg.bufferingMs > 0 && !this.buffered) {
       this.buffered = true;
       this.emitState(STATES.BUFFERING);
@@ -304,9 +313,10 @@ const IFRAME_API_FIXTURE = `
   };
   Player.prototype.beginsPlaying = function () {
     if (this.destroyed || this.playing || this.firedError) return;
-    var offset = num(this.cfg.startOffsetMs, 0) / 1000;
     this.playing = true;
-    this.baseSeconds = this.cueStart + offset;
+    // Resume from where the player was paused (or a rewind seek moved it),
+    // never from the original cue start.
+    this.baseSeconds = this.pausedSeconds;
     this.baseAt = perfNow();
     this.emitState(STATES.PLAYING);
   };
@@ -331,6 +341,7 @@ const IFRAME_API_FIXTURE = `
     if (typeof seconds !== 'number' || !isFinite(seconds)) return;
     record('seek', { videoId: this.videoId, seconds: seconds });
     if (this.playing) {
+      // While playing: the position jumps and playback continues.
       this.baseSeconds = seconds;
       this.baseAt = perfNow();
       if (this.cfg.bufferingMs > 0) {
@@ -338,9 +349,14 @@ const IFRAME_API_FIXTURE = `
         this.emitState(STATES.BUFFERING);
         this.later(function () { if (!self.destroyed) self.emitState(STATES.PLAYING); }, 30);
       }
-    } else {
-      this.pausedSeconds = seconds;
-      this.baseSeconds = seconds;
+      return;
+    }
+    this.pausedSeconds = seconds;
+    this.baseSeconds = seconds;
+    // Official docs: seeking from CUED/UNSTARTED starts playback, while a seek
+    // from PAUSED leaves the player paused.
+    if (this.state === STATES.CUED || this.state === STATES.UNSTARTED) {
+      this.startPlayback();
     }
   };
   Player.prototype.getCurrentTime = function () {
@@ -359,7 +375,21 @@ const IFRAME_API_FIXTURE = `
   };
   Player.prototype.getVolume = function () { return this.volume; };
   Player.prototype.mute = function () { this.muted = true; record('mute', { videoId: this.videoId }); };
-  Player.prototype.unMute = function () { this.muted = false; record('unmute', { videoId: this.videoId }); };
+  Player.prototype.unMute = function () {
+    this.muted = false;
+    // The injected start offset models an audible-start overshoot: it lands when
+    // the media first becomes audible, once per cue.
+    if (!this.offsetApplied) {
+      this.offsetApplied = true;
+      var offset = num(this.cfg.startOffsetMs, 0) / 1000;
+      if (offset !== 0) {
+        this.baseSeconds = this.position() + offset;
+        this.baseAt = perfNow();
+        if (!this.playing) this.pausedSeconds = this.baseSeconds;
+      }
+    }
+    record('unmute', { videoId: this.videoId });
+  };
   Player.prototype.isMuted = function () { return this.muted; };
   Player.prototype.destroy = function () {
     this.destroyed = true;
@@ -480,6 +510,25 @@ export function watchYouTubeRequests(page: Page): () => string[] {
 /** Every low-level player call the page has made so far, in order. */
 export function youTubeCalls(page: Page): Promise<YouTubeCall[]> {
   return page.evaluate(() => window.__bangerYtCalls ?? []);
+}
+
+/**
+ * Fails the next `times` `/iframe_api` loads on this page, then lets the shared
+ * fixture serve them again. Models a transient API-load failure so a caller can
+ * prove a failed creation is retried instead of staying skipped.
+ */
+export async function failIframeApi(page: Page, times = 1): Promise<void> {
+  let remaining = times;
+  await page.route(
+    (url) => url.pathname === '/iframe_api',
+    (route) => {
+      if (remaining > 0) {
+        remaining -= 1;
+        return route.abort('failed');
+      }
+      return route.fallback();
+    },
+  );
 }
 
 /**

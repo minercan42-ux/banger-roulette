@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectPlayback,
@@ -7,17 +7,12 @@ import {
   selectViewerPermissions,
 } from '../engine/selectors';
 import type { GameSession } from '../net/session';
-import {
-  createPlayback,
-  type PlaybackController,
-  type PlaybackDiagnostics,
-  type PlaybackPlan,
-  type PlaybackStatus,
-} from '../player/playback';
+import type { PlaybackPlan, PlaybackStatus } from '../player/playback';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
 import { formatDuration } from './format';
 import { LinkedAnimation } from './LinkedAnimation';
+import { usePlaybackControllerContext } from './playback-controller';
 import { useSessionNow } from './use-session-now';
 
 interface PlaybackPhaseProps {
@@ -83,27 +78,19 @@ export function PlaybackPhase({
   const { consented, setConsent } = useEmbedConsent();
   const now = useSessionNow(session, true, PROGRESS_FRAME_MS);
 
-  const hostRef = useRef<HTMLDivElement | null>(null);
-  const controllerRef = useRef<PlaybackController | null>(null);
-  const pendingRef = useRef<{
-    generation: number;
-    abort: AbortController;
-  } | null>(null);
-  const generationRef = useRef(0);
   const aliveRef = useRef(true);
-  const planRef = useRef<PlaybackPlan | null>(null);
   const videoIdRef = useRef<string | null>(null);
-  const titleRef = useRef('');
-  const volumeRef = useRef(DEFAULT_VOLUME);
-  const mutedRef = useRef(false);
+  const planRef = useRef<PlaybackPlan | null>(null);
 
-  const [diagnostics, setDiagnostics] = useState<PlaybackDiagnostics | null>(
-    null,
-  );
-  const [volume, setVolume] = useState(DEFAULT_VOLUME);
-  const [muted, setMuted] = useState(false);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
   const [flagBusy, setFlagBusy] = useState(false);
+
+  // The controller is owned by RoomView (M4 AK-7 pre-warm): it is created
+  // during SUBMISSION and reused into PLAYBACK. This view only drives it.
+  const controller = usePlaybackControllerContext();
+  const volume = controller?.volume ?? DEFAULT_VOLUME;
+  const muted = controller?.muted ?? false;
+  const diagnostics = controller?.diagnostics ?? null;
 
   const planKey =
     view === null
@@ -122,10 +109,7 @@ export function PlaybackPhase({
             pausedAt: view.pausedAt,
           };
     videoIdRef.current = view?.song.videoId ?? null;
-    titleRef.current = view?.song.title ?? '';
-    volumeRef.current = volume;
-    mutedRef.current = muted;
-  }, [view, volume, muted]);
+  }, [view]);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -134,105 +118,15 @@ export function PlaybackPhase({
     };
   }, []);
 
-  // Aborts a pending factory call and destroys the live controller. Used for
-  // consent/phase teardown and unmount; ordinary plan changes never destroy.
-  const teardown = useCallback(() => {
-    generationRef.current += 1;
-    pendingRef.current?.abort.abort();
-    pendingRef.current = null;
-    const live = controllerRef.current;
-    controllerRef.current = null;
-    live?.destroy();
-  }, []);
-
-  // Starts a fresh controller for the latest plan, aborting any pending one so
-  // a pause or song change during API readiness is never played from a stale
-  // plan (the returned promise alone resolves too late once startAt has passed).
-  const startCreation = useCallback(
-    (initialPlan: PlaybackPlan) => {
-      const host = hostRef.current;
-      if (host === null) {
-        return;
-      }
-      generationRef.current += 1;
-      const generation = generationRef.current;
-      pendingRef.current?.abort.abort();
-      const abort = new AbortController();
-      pendingRef.current = { generation, abort };
-      void createPlayback(host, {
-        plan: initialPlan,
-        title: titleRef.current,
-        serverNow: () => session.now(),
-        onDiagnostics: (next) => {
-          if (generation === generationRef.current) {
-            setDiagnostics(next);
-          }
-        },
-        signal: abort.signal,
-        volume: volumeRef.current,
-        muted: mutedRef.current,
-      })
-        .then((instance) => {
-          if (generation !== generationRef.current) {
-            instance.destroy();
-            return;
-          }
-          pendingRef.current = null;
-          controllerRef.current = instance;
-          // Volume or mute may have moved while the player loaded.
-          if (planRef.current !== null) {
-            instance.update(planRef.current);
-          }
-          instance.setVolume(volumeRef.current);
-          instance.setMuted(mutedRef.current);
-        })
-        .catch(() => {
-          // The iframe API itself could not start: this client is skipped, it
-          // never blocks the host timeline.
-          if (generation === generationRef.current) {
-            pendingRef.current = null;
-            setDiagnostics({
-              status: 'skipped',
-              observedStartAt: null,
-              startSkewMs: null,
-              driftMs: null,
-              currentSeconds: 0,
-              expectedSeconds: 0,
-              errorCode: null,
-            });
-          }
-        });
-    },
-    [session],
-  );
-
-  // Reconciles the controller with the latest plan: a live controller is
-  // updated in place; a pending factory call is aborted and restarted so it can
-  // never schedule the initial (already stale) plan.
+  // Push the current plan into the lifted controller; the room creates it
+  // plan-less and it adopts this plan on its first update.
   useEffect(() => {
     const current = planRef.current;
-    if (!consented || current === null) {
-      teardown();
-      setDiagnostics(null);
+    if (!consented || current === null || controller === null) {
       return;
     }
-    if (controllerRef.current !== null) {
-      controllerRef.current.update(current);
-      return;
-    }
-    startCreation(current);
-  }, [consented, planKey, startCreation, teardown]);
-
-  // Final teardown on unmount only.
-  useEffect(() => teardown, [teardown]);
-
-  useEffect(() => {
-    controllerRef.current?.setVolume(volume);
-  }, [volume]);
-
-  useEffect(() => {
-    controllerRef.current?.setMuted(muted);
-  }, [muted]);
+    controller.update(current);
+  }, [consented, planKey, controller]);
 
   if (view === null) {
     return null;
@@ -440,15 +334,6 @@ export function PlaybackPhase({
         </label>
       </div>
 
-      <div
-        ref={(node) => {
-          hostRef.current = node;
-        }}
-        data-testid="playback-host"
-        className="overflow-hidden rounded-lg border border-gold-400/20 bg-black/60"
-        style={{ minHeight: '1px' }}
-      />
-
       {consented && (
         <div className="mt-3 space-y-3">
           <p
@@ -489,7 +374,7 @@ export function PlaybackPhase({
                 type="button"
                 data-testid="playback-recover"
                 onClick={() => {
-                  controllerRef.current?.recover();
+                  controller?.recover();
                 }}
                 className="rounded-md border border-gold-400/50 bg-gold-500/20 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30"
               >
@@ -515,7 +400,7 @@ export function PlaybackPhase({
                 data-value={volume}
                 value={volume}
                 onChange={(event) => {
-                  setVolume(Number(event.target.value));
+                  controller?.setVolume(Number(event.target.value));
                 }}
               />
             </label>
@@ -526,7 +411,7 @@ export function PlaybackPhase({
                 data-muted={muted}
                 checked={muted}
                 onChange={(event) => {
-                  setMuted(event.target.checked);
+                  controller?.setMuted(event.target.checked);
                 }}
               />
               <span>{t('playback.muteLabel')}</span>

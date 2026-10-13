@@ -16,15 +16,18 @@ import {
   type Stage,
 } from './m3-support';
 import {
+  audibleCalls,
   consentToPlayback,
   enablePlaybackDebug,
   playbackStatus,
   playbackTiming,
+  preStartAudioLeaks,
   readDiagnostics,
   waitForPlaybackIndex,
   waitForPlaybackState,
 } from './m4-support';
 import {
+  failIframeApi,
   installYouTubeFixture,
   setFixtureVideo,
   watchYouTubeRequests,
@@ -132,6 +135,7 @@ test('four clients share one song order and start within ±500 ms across skewed 
 
     // FR-31: one absolute server `startAt`, independent of the wall clock.
     const timing = playbackTiming(await stateOf(stages[0]!.page));
+    const firstVideoId = orders[0]![0]!;
     const nows = await Promise.all(
       stages.map((stage) =>
         stage.page.evaluate(() => window.__banger!.session.now()),
@@ -141,6 +145,16 @@ test('four clients share one song order and start within ±500 ms across skewed 
       const stage = stages[index]!;
       const localTiming = playbackTiming(await stateOf(stage.page));
       expect(localTiming.startAt).toBe(timing.startAt);
+      // AK-7: the preroll stays silent. Any audible (unmuted) start of the first
+      // song must sit at or after the agreed start; the recorded
+      // mute/unmute/volume/play order proves the preroll play was muted.
+      const audible = await audibleCalls(stage.page, firstVideoId, 'play');
+      for (const { serverAt } of audible) {
+        expect(serverAt).toBeGreaterThanOrEqual(timing.startAt - 200);
+      }
+      // And nothing may be unmuted (or raised above zero) while the media is
+      // still playing before the agreed start.
+      expect(await preStartAudioLeaks(stage.page, timing.startAt)).toEqual([]);
       // No playback before the agreed start, whenever the read lands early.
       if (nows[index]! >= timing.startAt - 100) {
         continue;
@@ -219,14 +233,14 @@ test('drift over 750 ms is corrected while a sub-threshold offset is left alone'
     // Let the ~250 ms drift loop observe, seek and settle.
     await stages[0]!.page.waitForTimeout(2_000);
 
-    const seekTargets = async (stage: Stage) =>
-      (await youTubeCalls(stage.page)).filter(
-        (call) => call.type === 'seek' && call.videoId === videoId,
-      );
-    // FR-32: only the >750 ms client seeks, and it converges back under 750.
-    expect((await seekTargets(stages[0]!)).length).toBeGreaterThanOrEqual(1);
-    expect((await seekTargets(stages[1]!)).length).toBe(0);
-    expect((await seekTargets(stages[2]!)).length).toBe(0);
+    // The muted pre-start warm-up rewinds silently; only audible (unmuted)
+    // seeks are drift corrections. FR-32: only the >750 ms client seeks, and it
+    // converges back under 750.
+    const driftSeeks = async (stage: Stage) =>
+      audibleCalls(stage.page, videoId, 'seek');
+    expect((await driftSeeks(stages[0]!)).length).toBeGreaterThanOrEqual(1);
+    expect((await driftSeeks(stages[1]!)).length).toBe(0);
+    expect((await driftSeeks(stages[2]!)).length).toBe(0);
 
     for (const stage of stages) {
       const diagnostics = await readDiagnostics(stage.page);
@@ -248,9 +262,9 @@ test('a late cue and heavy buffering catch up without blocking the round', async
     [SONG_C]: { cueDelayMs: 4_000 },
   };
   const buffering: YouTubeFixtureMap = {
-    [SONG_A]: { bufferingMs: 1_200 },
-    [SONG_B]: { bufferingMs: 1_200 },
-    [SONG_C]: { bufferingMs: 1_200 },
+    [SONG_A]: { bufferingMs: 4_000 },
+    [SONG_B]: { bufferingMs: 4_000 },
+    [SONG_C]: { bufferingMs: 4_000 },
   };
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice', videos: lateCue }),
@@ -275,9 +289,10 @@ test('a late cue and heavy buffering catch up without blocking the round', async
     const order = playbackOrder(await stateOf(stages[0]!.page));
     const videoId = order[0]!;
     for (const stage of [stages[0]!, stages[1]!]) {
-      const seeks = (await youTubeCalls(stage.page)).filter(
-        (call) => call.type === 'seek' && call.videoId === videoId,
-      );
+      // Both the late cue and the heavy buffering start the muted media only
+      // after startAt, so each needs a real (audible) FR-32 correction; the
+      // silent pre-start alignment seeks do not count.
+      const seeks = await audibleCalls(stage.page, videoId, 'seek');
       expect(seeks.length).toBeGreaterThanOrEqual(1);
       const diagnostics = await readDiagnostics(stage.page);
       expect(diagnostics.status).toBe('playing');
@@ -303,9 +318,12 @@ test('a blocked autoplay needs a direct gesture while others keep playing', asyn
     await submitAll(stages, [SONG_A, SONG_B, SONG_C]);
     // Only the *playback* of Alice's browser blocks autoplay; her preview has
     // already been validated and destroyed, so this flips the playback edge.
+    // A late cue keeps her from prebuffering (the muted pre-start play is
+    // permitted), so the audible start is a cold, unmuted play that is blocked.
     for (const videoId of [SONG_A, SONG_B, SONG_C]) {
       await setFixtureVideo(stages[0]!.page, videoId, {
         autoplayBlocked: true,
+        cueDelayMs: 4_000,
       });
     }
     for (const stage of stages) {
@@ -584,6 +602,146 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     await expect(spectatorFlag).toBeVisible();
     await expect(spectatorFlag).toBeDisabled();
     await spectatorContext.close();
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('the playback player is pre-warmed during SUBMISSION and reused into PLAYBACK', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const stages = await Promise.all([
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [alice, bruno] = stages;
+    await assembleRoom(alice, stages.slice(1));
+    await enterSubmission(stages.map((stage) => stage.page));
+
+    // (a) Before consent: the stable host slot exists, but there is no playback
+    // iframe and no external YouTube traffic of any kind.
+    await expect(bruno.page.getByTestId('playback-host')).toHaveCount(1);
+    await expect(
+      bruno.page.locator('[data-testid="playback-host"] iframe'),
+    ).toHaveCount(0);
+    expect(bruno.youtubeRequests()).toEqual([]);
+
+    // Consenting inside SUBMISSION (via the submission panel) pre-warms the
+    // player before PLAYBACK ever starts.
+    await submitSongViaUi(alice.page, watchUrl(SONG_A));
+    await submitSongViaUi(bruno.page, watchUrl(SONG_B));
+    await submitSongViaUi(stages[2]!.page, watchUrl(SONG_C));
+
+    const hostIframe = bruno.page.locator(
+      '[data-testid="playback-host"] iframe',
+    );
+    const prewarmReady = async () =>
+      (await youTubeCalls(bruno.page)).filter(
+        (call) => call.type === 'ready' && !call.videoId,
+      );
+    // (b) Exactly one playback player is constructed during SUBMISSION, it is
+    // marked, and it stays idle (no cue, no play).
+    await expect(hostIframe).toHaveCount(1);
+    await expect(
+      bruno.page.locator(
+        '[data-testid="playback-host"] iframe[data-playback-player="true"]',
+      ),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => (await prewarmReady()).length, { timeout: 10_000 })
+      .toBe(1);
+    expect(
+      (await youTubeCalls(bruno.page)).filter(
+        (call) => call.type === 'play' && !call.videoId,
+      ),
+    ).toEqual([]);
+    // It is invisible to the user during SUBMISSION.
+    await expect(bruno.page.getByTestId('playback-host')).toHaveAttribute(
+      'data-warm',
+      'true',
+    );
+    await expect(bruno.page.getByTestId('playback-host')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+
+    // Mark the warmed iframe so we can prove it is the *same* DOM node later.
+    await hostIframe.evaluate((element) => {
+      (element as HTMLElement).dataset.prewarmMark = 'keep';
+    });
+
+    for (const stage of stages) {
+      await enablePlaybackDebug(stage.page);
+    }
+    await finishToPlayback(stages);
+
+    // (c) The same player instance/iframe survives into PLAYBACK: the marked
+    // node is still the one in the host slot and no second player was built.
+    await expect(
+      bruno.page.locator(
+        '[data-testid="playback-host"] iframe[data-prewarm-mark="keep"]',
+      ),
+    ).toHaveCount(1);
+    await expect(hostIframe).toHaveCount(1);
+    expect((await prewarmReady()).length).toBe(1);
+    await expect(bruno.page.getByTestId('playback-host')).toHaveAttribute(
+      'data-warm',
+      'false',
+    );
+
+    // (d) Playback still starts within the existing ±500 ms bound, with no
+    // pre-start audio leak on the warmed player.
+    await waitForPlaybackState(bruno.page, 'playing', 20000);
+    const diagnostics = await readDiagnostics(bruno.page);
+    expect(diagnostics.status).toBe('playing');
+    expect(diagnostics.observedStart).not.toBeNull();
+    expect(Math.abs(diagnostics.startSkewMs ?? Infinity)).toBeLessThanOrEqual(
+      500,
+    );
+    const timing = playbackTiming(await stateOf(bruno.page));
+    expect(await preStartAudioLeaks(bruno.page, timing.startAt)).toEqual([]);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a failed pre-warm is retried when the playback plan arrives', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const stages = await Promise.all([
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [alice, bruno, cleo] = stages;
+    await assembleRoom(alice, stages.slice(1));
+    await enterSubmission(stages.map((stage) => stage.page));
+    await submitSongViaUi(alice.page, watchUrl(SONG_A));
+    await submitSongViaUi(bruno.page, watchUrl(SONG_B));
+
+    // Cleo's first iframe-API load (her SUBMISSION pre-warm) fails. The shared
+    // script promise resets, so her preview load recovers it; the plan that
+    // arrives at PLAYBACK must retry the pre-warm creation.
+    await failIframeApi(cleo.page, 1);
+    await submitSongViaUi(cleo.page, watchUrl(SONG_C));
+    for (const stage of stages) {
+      await enablePlaybackDebug(stage.page);
+    }
+    await finishToPlayback(stages);
+
+    // Without the retry Cleo would stay 'skipped' for the whole round.
+    await waitForPlaybackState(cleo.page, 'playing', 25000);
+    const status = await playbackStatus(cleo.page);
+    expect(status.state).toBe('playing');
+    expect(status.errorCode).toBeNull();
+    const diagnostics = await readDiagnostics(cleo.page);
+    expect(diagnostics.status).toBe('playing');
+    expect(diagnostics.observedStart).not.toBeNull();
   } finally {
     await closeStages(stages);
   }

@@ -20,6 +20,8 @@ interface FakeIframe {
   allowFullscreen: boolean;
   title: string;
   style: Record<string, string>;
+  dataset: Record<string, string>;
+  tabIndex: number;
   isConnected: boolean;
   remove(): void;
 }
@@ -227,6 +229,8 @@ function installDom(): Harness {
         allowFullscreen: false,
         title: '',
         style: {},
+        dataset: {},
+        tabIndex: 0,
         isConnected: false,
         remove() {
           this.isConnected = false;
@@ -314,25 +318,354 @@ afterEach(() => {
 });
 
 describe('createPlayback', () => {
-  it('cues but never plays or seeks before the absolute start time', async () => {
+  it('prebuffers muted and issues the real start play before startAt', async () => {
     const harness = installDom();
     const playback = plan({ startAt: T0 + 3_000 });
-    const { player, clock, diagnostics } = await create(harness, playback, {
-      now: playback.startAt - 5_000,
-    });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
 
     expect(hasCall(player, 'cue:')).toBe(true);
-    expect(hasCall(player, 'play')).toBe(false);
     expect(statuses(diagnostics)).toContain('cued');
     expect(statuses(diagnostics)).toContain('scheduled');
+    expect(statuses(diagnostics)).not.toContain('playing');
 
-    clock.advance(4_999);
-    expect(hasCall(player, 'play')).toBe(false);
-    expect(hasCall(player, 'seek:')).toBe(false);
+    // AK-7: the warm-up play is muted and at zero volume, never audible.
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(1);
+    const firstPlay = player.calls.indexOf('play');
+    const beforePlay = player.calls.slice(0, firstPlay);
+    expect(beforePlay).toContain('volume:0');
+    expect(
+      [...beforePlay]
+        .reverse()
+        .find((call) => call === 'mute' || call === 'unmute'),
+    ).toBe('mute');
+
+    // Its PLAYING pauses and rewinds to the clip start.
+    player.state(1);
+    expect(player.calls).toContain(`seek:${playback.startSeconds}:true`);
+    expect(player.calls.filter((call) => call === 'pause')).toHaveLength(1);
+    expect(diagnostics.at(-1)?.status).toBe('scheduled');
     expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
 
+    // The real start play is issued START_LEAD_MS (250) before startAt, still
+    // muted, and never claims a start by itself.
+    clock.advance(2_749);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(1);
     clock.advance(1);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(2);
+    expect(player.muted).toBe(true);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+    controller.destroy();
+  });
+
+  it('keeps a close prebuffer running muted without pausing', async () => {
+    const harness = installDom();
+    // Lead 400 is enough to prebuffer, too little to pause and resume.
+    const playback = plan({ startAt: T0 + 400 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(1);
+    // Its PLAYING is too close to startAt: never paused, never seeked.
+    player.state(1);
+    expect(player.calls.filter((call) => call === 'pause')).toHaveLength(0);
+    expect(
+      player.calls.filter((call) => call.startsWith('seek:')),
+    ).toHaveLength(0);
+    expect(player.muted).toBe(true);
+    expect(diagnostics.at(-1)?.status).toBe('scheduled');
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    // Content is 400 ms ahead at the unmute.
+    player.current = playback.startSeconds + 0.4;
+    clock.advance(400);
+    expect(player.muted).toBe(false);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(playback.startAt);
+    expect(last?.startSkewMs).toBeCloseTo(-400, 3);
+    controller.destroy();
+  });
+
+  it('unmutes and claims at startAt with the honest content offset', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    // Prebuffer PLAYING pauses + rewinds; the real start play is issued early.
+    player.state(1);
+    clock.advance(2_750);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(2);
+    expect(player.muted).toBe(true);
+
+    // Its muted PLAYING lands before startAt: keep it running, never claim.
+    player.state(1);
+    expect(player.muted).toBe(true);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    // The media is 300 ms ahead of the timeline at the unmute.
+    player.current = playback.startSeconds + 0.3;
+    clock.advance(250);
+    expect(player.muted).toBe(false);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(playback.startAt);
+    // Honest skew is the content offset: negative means ahead.
+    expect(last?.startSkewMs).toBeCloseTo(-300, 3);
+    controller.destroy();
+  });
+
+  it('starts late with real skew when the muted pre-roll only plays after startAt', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 1_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    // startAt passes while the pre-roll is still buffering: unmute, no claim.
+    clock.advance(1_000);
+    expect(player.muted).toBe(false);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    // The real (late) PLAYING claims with the honest start skew.
+    clock.advance(500);
+    player.state(1);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(T0 + 1_500);
+    expect(last?.startSkewMs).toBe(500);
+    controller.destroy();
+  });
+
+  it('never claims a silent start when the pre-roll stalls before startAt', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    player.state(1);
+    expect(player.muted).toBe(true);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    // A stall before startAt: the media is no longer confirmed playing.
+    player.state(3);
+    clock.advance(3_000);
+    // The start timer must not claim a silent start from the stalled media.
+    expect(diagnostics.at(-1)?.status).not.toBe('playing');
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+    expect(player.muted).toBe(false);
+
+    // The real PLAYING claims with the honest skew.
+    player.state(1);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(T0 + 3_000);
+    controller.destroy();
+  });
+
+  it('re-engages the warm-up after a host pause that resumes before startAt', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000, deadlineAt: T0 + 33_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    player.state(1);
+    expect(player.muted).toBe(true);
+    expect(player.calls).toContain(`seek:${playback.startSeconds}:true`);
+
+    // Host pause keeps the player silent and cancels the warm-up.
+    controller.update({ ...playback, pausedAt: T0 + 500 });
+    expect(diagnostics.at(-1)?.status).toBe('paused');
+    expect(player.muted).toBe(true);
+
+    // Resume shifts the timeline: still pre-start, so the warm-up re-engages.
+    const resumed = {
+      ...playback,
+      startAt: T0 + 5_000,
+      deadlineAt: T0 + 35_000,
+      pausedAt: null,
+    };
+    controller.update(resumed);
+    expect(
+      player.calls.filter((call) => call === 'play').length,
+    ).toBeGreaterThan(1);
+    expect(player.muted).toBe(true);
+
+    // The re-engaged warm-up completes and the start lands on the new timeline.
+    player.state(1);
+    clock.advance(4_750);
+    player.state(1);
+    clock.advance(250);
+    expect(player.muted).toBe(false);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(resumed.startAt);
+    controller.destroy();
+  });
+
+  it('ignores a late ENDED from the previous clip before the new clip starts', async () => {
+    const harness = installDom();
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      plan(),
+      { now: T0 },
+    );
+    player.state(1);
+    expect(diagnostics.at(-1)?.status).toBe('playing');
+
+    // Song 2 cue: the shared player already reports the NEW video id, so a late
+    // ENDED(0) from the ended clip cannot be filtered as stale.
+    const next = plan({
+      videoId: OTHER_ID,
+      startAt: T0 + 10_000,
+      deadlineAt: T0 + 40_000,
+    });
+    controller.update(next);
+    player.videoId = OTHER_ID;
+    player.state(0);
+
+    // The new clip did not start yet, so the ENDED must not be terminal.
+    expect(diagnostics.at(-1)?.status).toBe('scheduled');
+
+    clock.advance(10_000);
+    player.state(1);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(T0 + 10_000);
+    controller.destroy();
+  });
+
+  it('restores the user volume and mute at the real start', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0, volume: 30 },
+    );
+
+    // The pre-roll is silent regardless of the user's own audio settings.
+    expect(player.muted).toBe(true);
+    expect(player.volume).toBe(0);
+
+    player.state(1);
+    clock.advance(2_750);
+    player.state(1);
+    clock.advance(250);
+    expect(player.muted).toBe(false);
+    expect(player.volume).toBe(30);
+    expect(diagnostics.at(-1)?.status).toBe('playing');
+    controller.destroy();
+  });
+
+  it('keeps the pre-start silence even when the user changes volume during the preroll', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, clock } = await create(harness, playback, {
+      now: T0,
+      volume: 50,
+    });
+
+    controller.setVolume(20);
+    controller.setMuted(true);
+    expect(player.volume).toBe(0);
+    expect(player.muted).toBe(true);
+
+    clock.advance(3_000);
+    // The user's latest values are restored verbatim at the real start.
+    expect(player.volume).toBe(20);
+    expect(player.muted).toBe(true);
+    controller.destroy();
+  });
+
+  it('does not prebuffer when joining at or after the start', async () => {
+    const harness = installDom();
+    const { controller, player, diagnostics } = await create(
+      harness,
+      plan({ startAt: T0 }),
+      { now: T0 + 2_000 },
+    );
+
+    expect(hasCall(player, 'mute')).toBe(false);
+    expect(hasCall(player, 'volume:0')).toBe(false);
     expect(hasCall(player, 'play')).toBe(true);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+    controller.destroy();
+  });
+
+  it('skips the prebuffer when less than the minimum lead remains', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 250 });
+    const { controller, player } = await create(harness, playback, {
+      now: T0,
+    });
+
+    expect(hasCall(player, 'mute')).toBe(false);
+    expect(hasCall(player, 'volume:0')).toBe(false);
+    controller.destroy();
+  });
+
+  it('does not surface an autoplay block that only hits the muted prebuffer', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    // The muted prebuffer's play is reported blocked: abandon it quietly.
+    player.blocked();
+    expect(diagnostics.at(-1)?.status).toBe('scheduled');
+    expect(player.muted).toBe(false);
+
+    // A block on the real, unmuted start is surfaced as usual.
+    clock.advance(3_000);
+    expect(hasCall(player, 'play')).toBe(true);
+    player.blocked();
+    expect(diagnostics.at(-1)?.status).toBe('blocked');
+    controller.destroy();
+  });
+
+  it('treats a muted prebuffer still in flight at startAt as the real start', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 1_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    // The prebuffer PLAYING has not arrived when startAt does: audio is
+    // restored and the eventual PLAYING is the honest start, never a pause.
+    expect(player.muted).toBe(true);
+    clock.advance(1_000);
+    expect(player.muted).toBe(false);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    player.state(1);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(playback.startAt);
+    controller.destroy();
   });
 
   it('starts a late join only after its own clip cue, not the embed load', async () => {
@@ -367,21 +700,22 @@ describe('createPlayback', () => {
     controller.destroy();
   });
 
-  it('stops native early playback and starts again on the shared timeline', async () => {
+  it('stops a native early PLAYING when no pre-roll is engaged', async () => {
     const harness = installDom();
-    const playback = plan({ startAt: T0 + 3_000 });
+    // Lead 200 is below the pre-roll threshold, so nothing of ours is playing.
+    const playback = plan({ startAt: T0 + 200 });
     const { controller, player, clock, diagnostics } = await create(
       harness,
       playback,
       { now: T0 },
     );
 
+    // A pre-start PLAYING with no pre-roll of ours is native: stop it.
     player.state(1);
-    expect(hasCall(player, 'pause')).toBe(true);
-    expect(hasCall(player, 'seek:')).toBe(false);
+    expect(player.calls.filter((call) => call === 'pause')).toHaveLength(1);
     expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
-    clock.advance(3_000);
-    expect(hasCall(player, 'play')).toBe(true);
+
+    clock.advance(200);
     player.state(1);
     expect(diagnostics.at(-1)?.status).toBe('playing');
     expect(diagnostics.at(-1)?.observedStartAt).toBe(playback.startAt);
@@ -477,7 +811,50 @@ describe('createPlayback', () => {
     controller.destroy();
   });
 
-  it('cancels a pending start while paused and resumes on shifted timestamps', async () => {
+  it('cancels a pending prebuffer while paused and resumes on shifted timestamps', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 5_000, deadlineAt: T0 + 35_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    clock.advance(1_000);
+    const playsWhileRunning = player.calls.filter(
+      (call) => call === 'play',
+    ).length;
+    const pausesWhileRunning = player.calls.filter(
+      (call) => call === 'pause',
+    ).length;
+    controller.update({ ...playback, pausedAt: T0 + 1_000 });
+    expect(diagnostics.at(-1)?.status).toBe('paused');
+    // Host pause cancels the prebuffer but keeps the player silent.
+    expect(player.muted).toBe(true);
+    expect(player.calls.filter((call) => call === 'pause')).toHaveLength(
+      pausesWhileRunning + 1,
+    );
+
+    clock.advance(8_000);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(
+      playsWhileRunning,
+    );
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+
+    controller.update({
+      ...playback,
+      startAt: T0 + 13_000,
+      deadlineAt: T0 + 43_000,
+      pausedAt: null,
+    });
+    clock.advance(4_000);
+    expect(
+      player.calls.filter((call) => call === 'play').length,
+    ).toBeGreaterThan(playsWhileRunning);
+    expect(player.muted).toBe(false);
+  });
+
+  it('starts audibly when a resume after a cancelled prebuffer is already due', async () => {
     const harness = installDom();
     const playback = plan({ startAt: T0 + 5_000, deadlineAt: T0 + 35_000 });
     const { controller, player, clock, diagnostics } = await create(
@@ -488,19 +865,25 @@ describe('createPlayback', () => {
 
     clock.advance(1_000);
     controller.update({ ...playback, pausedAt: T0 + 1_000 });
-    expect(diagnostics.at(-1)?.status).toBe('paused');
-
     clock.advance(8_000);
-    expect(hasCall(player, 'play')).toBe(false);
-
+    const playsBeforeResume = player.calls.filter(
+      (call) => call === 'play',
+    ).length;
+    // The resume arrives late: the shifted start is already in the past.
     controller.update({
       ...playback,
-      startAt: T0 + 13_000,
-      deadlineAt: T0 + 43_000,
+      startAt: T0 + 8_000,
+      deadlineAt: T0 + 38_000,
       pausedAt: null,
     });
-    clock.advance(4_000);
-    expect(hasCall(player, 'play')).toBe(true);
+    expect(
+      player.calls.filter((call) => call === 'play').length,
+    ).toBeGreaterThan(playsBeforeResume);
+    expect(player.muted).toBe(false);
+    player.state(1);
+    expect(diagnostics.at(-1)?.status).toBe('playing');
+    expect(diagnostics.at(-1)?.observedStartAt).toBe(T0 + 9_000);
+    controller.destroy();
   });
 
   it('plays immediately and catches up when joining a song already underway', async () => {
@@ -617,7 +1000,7 @@ describe('createPlayback', () => {
     expect(diagnostics).toHaveLength(before);
   });
 
-  it('cues the next song without playing before its own start time', async () => {
+  it('cues the next song with only a silent pre-roll before its start', async () => {
     const harness = installDom();
     const { controller, player, clock } = await create(harness, plan(), {
       now: T0,
@@ -633,15 +1016,17 @@ describe('createPlayback', () => {
     controller.update(next);
     expect(hasCall(player, `cue:${OTHER_ID}:5:35`)).toBe(true);
 
+    // The next song is only pre-rolled silently: never audible before startAt.
+    expect(player.muted).toBe(true);
     const playsAfterCue = player.calls.filter((call) => call === 'play').length;
-    clock.advance(9_999);
+    clock.advance(9_000);
     expect(player.calls.filter((call) => call === 'play')).toHaveLength(
       playsAfterCue,
     );
-    clock.advance(1);
-    expect(player.calls.filter((call) => call === 'play')).toHaveLength(
-      playsAfterCue + 1,
-    );
+    expect(player.muted).toBe(true);
+
+    clock.advance(1_000);
+    expect(player.muted).toBe(false);
     controller.destroy();
   });
 
@@ -793,18 +1178,24 @@ describe('createPlayback', () => {
 
     expect(diagnostics.at(-1)?.status).toBe('skipped');
     expect(diagnostics.at(-1)?.errorCode).toBe(101);
+    // A pre-roll may already have been positioned with the cue; the error is
+    // still terminal and nothing further plays or seeks.
+    const plays = player.calls.filter((call) => call === 'play').length;
+    const seeks = player.calls.filter((call) =>
+      call.startsWith('seek:'),
+    ).length;
     clock.advance(5_000);
-    expect(hasCall(player, 'play')).toBe(false);
-    expect(hasCall(player, 'seek:')).toBe(false);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(plays);
+    expect(
+      player.calls.filter((call) => call.startsWith('seek:')),
+    ).toHaveLength(seeks);
   });
 
   it('re-cues and resets start evidence on a same-video clip change', async () => {
     const harness = installDom();
-    const { controller, player, clock, diagnostics } = await create(
-      harness,
-      plan(),
-      { now: T0 },
-    );
+    const { controller, player, diagnostics } = await create(harness, plan(), {
+      now: T0,
+    });
 
     player.state(1);
     expect(diagnostics.at(-1)?.observedStartAt).toBe(T0);
@@ -814,12 +1205,8 @@ describe('createPlayback', () => {
     );
     expect(hasCall(player, `cue:${VIDEO_ID}:20:50`)).toBe(true);
     expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
-
-    const playsAfter = player.calls.filter((call) => call === 'play').length;
-    clock.advance(10_000);
-    expect(player.calls.filter((call) => call === 'play')).toHaveLength(
-      playsAfter + 1,
-    );
+    // The new clip is warmed up muted again, with no start evidence.
+    expect(player.muted).toBe(true);
     controller.destroy();
   });
 
@@ -895,5 +1282,166 @@ describe('createPlayback', () => {
       }),
     ).rejects.toMatchObject({ code: 'INVALID_OPTIONS' });
     expect(harness.scripts).toHaveLength(0);
+  });
+
+  it('creates the player plan-less and stays idle: no cue, no play', async () => {
+    const harness = installDom();
+    const clock = new FakeScheduler(T0);
+    const diagnostics: PlaybackDiagnostics[] = [];
+    const pending = createPlayback(
+      harness.container as unknown as HTMLElement,
+      {
+        plan: null,
+        title: 'Playback',
+        serverNow: () => clock.now,
+        onDiagnostics: (value) => diagnostics.push(value),
+        scheduler: clock,
+      },
+    );
+    harness.windowStub.YT = { Player: FakeYTPlayer };
+    harness.windowStub.onYouTubeIframeAPIReady?.();
+    const controller = await pending;
+    const player = FakeYTPlayer.instances.at(-1);
+    if (player === undefined) {
+      throw new Error('player was never constructed');
+    }
+
+    // Id-less pre-warm embed, marked so the e2e fixture can tell it apart.
+    expect(harness.iframes[0]?.src).toContain('/embed/?');
+    expect(harness.iframes[0]?.dataset.playbackPlayer).toBe('true');
+    expect(player.calls.filter((call) => call.startsWith('cue:'))).toHaveLength(
+      0,
+    );
+    expect(player.calls).not.toContain('play');
+    expect(diagnostics.at(-1)?.status).toBe('loading');
+
+    // Time passing alone must never cue or play without a plan.
+    clock.advance(5_000);
+    expect(player.calls).not.toContain('play');
+
+    // Destroy before the first plan still tears the player and iframe down.
+    controller.destroy();
+    expect(player.destroyed).toBe(true);
+    expect(harness.iframes[0]?.isConnected).toBe(false);
+  });
+
+  it('adopts the first plan on update: one cue, then the scheduled start', async () => {
+    const harness = installDom();
+    const clock = new FakeScheduler(T0);
+    const diagnostics: PlaybackDiagnostics[] = [];
+    const pending = createPlayback(
+      harness.container as unknown as HTMLElement,
+      {
+        plan: null,
+        title: 'Playback',
+        serverNow: () => clock.now,
+        onDiagnostics: (value) => diagnostics.push(value),
+        scheduler: clock,
+      },
+    );
+    harness.windowStub.YT = { Player: FakeYTPlayer };
+    harness.windowStub.onYouTubeIframeAPIReady?.();
+    const controller = await pending;
+    const player = FakeYTPlayer.instances.at(-1);
+    if (player === undefined) {
+      throw new Error('player was never constructed');
+    }
+    expect(player.calls).not.toContain('play');
+
+    const playback = plan({ startAt: T0 + 3_000 });
+    controller.update(playback);
+    const cues = player.calls.filter((call) => call.startsWith('cue:'));
+    expect(cues).toHaveLength(1);
+    expect(cues[0]).toBe(`cue:${VIDEO_ID}:10:40`);
+    // The CUED-gated schedule runs the muted warm-up play.
+    expect(player.calls).toContain('play');
+    expect(player.muted).toBe(true);
+    expect(statuses(diagnostics)).toContain('scheduled');
+
+    player.state(1);
+    clock.advance(2_750);
+    player.state(1);
+    clock.advance(250);
+    expect(player.muted).toBe(false);
+    const last = diagnostics.at(-1);
+    expect(last?.status).toBe('playing');
+    expect(last?.observedStartAt).toBe(playback.startAt);
+    controller.destroy();
+  });
+
+  it('stops the in-flight prebuffer before unmuting on a clip change', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 3_000 });
+    const { controller, player, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    // The muted prebuffer is in flight for the current clip.
+    const firstPlay = player.calls.indexOf('play');
+    expect(firstPlay).toBeGreaterThanOrEqual(0);
+    expect(player.muted).toBe(true);
+
+    // A clip change lands while that muted play is still running.
+    controller.update(
+      plan({
+        videoId: OTHER_ID,
+        startSeconds: 5,
+        startAt: T0 + 10_000,
+        deadlineAt: T0 + 40_000,
+      }),
+    );
+
+    const cueIndex = player.calls.findIndex((call) =>
+      call.startsWith(`cue:${OTHER_ID}:`),
+    );
+    const pauseIndex = player.calls.findIndex(
+      (call, index) => index > firstPlay && call === 'pause',
+    );
+    const unmuteAfterPlay = player.calls.findIndex(
+      (call, index) => index > firstPlay && call === 'unmute',
+    );
+    // The old media is stopped before the cue replaces it, and never unmuted.
+    expect(pauseIndex).toBeGreaterThan(firstPlay);
+    expect(pauseIndex).toBeLessThan(cueIndex);
+    expect(unmuteAfterPlay === -1 || unmuteAfterPlay > cueIndex).toBe(true);
+    // Audio stays suppressed for the new clip until its own real start.
+    expect(player.muted).toBe(true);
+    expect(diagnostics.at(-1)?.observedStartAt).toBeNull();
+    controller.destroy();
+  });
+
+  it('claims the start when the muted prebuffer is already playing at startAt', async () => {
+    const harness = installDom();
+    const playback = plan({ startAt: T0 + 1_000 });
+    const { controller, player, clock, diagnostics } = await create(
+      harness,
+      playback,
+      { now: T0 },
+    );
+
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(1);
+    expect(player.muted).toBe(true);
+
+    // startAt arrives while the muted prebuffer media is still running.
+    clock.now = T0 + 1_000;
+    player.state(1);
+    const claimed = diagnostics.at(-1);
+    expect(claimed?.status).toBe('playing');
+    expect(claimed?.observedStartAt).toBe(T0 + 1_000);
+    expect(player.muted).toBe(false);
+
+    // The armed attemptStart must not issue a second playVideo or repaint the
+    // status back to 'scheduled'.
+    clock.advance(2_000);
+    expect(player.calls.filter((call) => call === 'play')).toHaveLength(1);
+    expect(diagnostics.at(-1)?.status).toBe('playing');
+
+    // Drift correction stays active after the claim.
+    player.current = 30;
+    clock.advance(250);
+    expect(hasCall(player, 'seek:')).toBe(true);
+    controller.destroy();
   });
 });

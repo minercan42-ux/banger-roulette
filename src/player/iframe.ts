@@ -190,9 +190,12 @@ export function awaitWithAbort<T>(
 /**
  * Builds the privacy enhanced embed. `origin` is required for the postMessage
  * API handshake; `strict-origin-when-cross-origin` keeps the referrer minimal.
+ * A `null` video id builds the id-less embed YouTube itself uses when a player
+ * is created before any video is known (M4 pre-warm); `cueVideoById` then loads
+ * the real clip into that same iframe.
  */
 export function createYouTubeIframe(
-  videoId: string,
+  videoId: string | null,
   title: string,
   startSeconds = 0,
 ): HTMLIFrameElement {
@@ -205,7 +208,10 @@ export function createYouTubeIframe(
     params.set('start', String(Math.floor(startSeconds)));
   }
   const iframe = document.createElement('iframe');
-  iframe.src = `${IFRAME_ORIGIN}/embed/${videoId}?${params.toString()}`;
+  iframe.src =
+    videoId === null
+      ? `${IFRAME_ORIGIN}/embed/?${params.toString()}`
+      : `${IFRAME_ORIGIN}/embed/${videoId}?${params.toString()}`;
   iframe.referrerPolicy = 'strict-origin-when-cross-origin';
   iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
   iframe.allowFullscreen = true;
