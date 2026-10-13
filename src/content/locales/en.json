@@ -73,8 +73,8 @@
     "storageNotice": "Only a local player ID is stored so a reload recognizes you. No login, no saved game."
   },
   "milestone": {
-    "title": "Milestone M4",
-    "body": "Genre roulette, song submission and synchronised playback are live. Voting, reveal and finale remain unavailable until M5.",
+    "title": "Milestone M5",
+    "body": "The first completely playable game: genre roulette, song submission, synchronised playback, voting, reveal and finale are live. Casino design, sounds and polish follow in M6.",
     "startHint": "The host starts the round once 3–10 players are ready (sound enabled)."
   },
   "lobby": {
@@ -260,6 +260,49 @@
     "debugDrift": "Drift",
     "debugStatus": "Status"
   },
+  "voting": {
+    "heading": "Voting",
+    "intro": "Rank the songs from best (place 1) to worst. You can also flag songs as genre fail.",
+    "partialHint": "Unranked songs count as 0 points.",
+    "spectator": "You are watching and will vote from the next round.",
+    "progressHeading": "Who has voted",
+    "progress": "{{done}}/{{total}} done",
+    "progressDone": "done",
+    "progressOpen": "open",
+    "done": "You voted. Waiting for the others.",
+    "finish": "Finish voting",
+    "noSongs": "You have no foreign songs to rank this round.",
+    "rankingHeading": "Your ranking",
+    "emptyRanking": "Nothing ranked yet. Add songs from the list below.",
+    "poolHeading": "Songs to rank",
+    "dragHint": "Drag songs to rank them, or tap a song to append it.",
+    "add": "Add",
+    "addAria": "Add {{title}} to the ranking",
+    "remove": "Remove",
+    "removeAria": "Remove {{title}} from the ranking",
+    "up": "Up",
+    "down": "Down",
+    "moveUpAria": "Move {{title}} up to place {{place}}",
+    "moveDownAria": "Move {{title}} down to place {{place}}",
+    "listen": "Listen",
+    "stop": "Stop",
+    "listenAria": "Listen to {{title}} locally",
+    "flag": "Genre fail",
+    "flagAria": "Flag {{title}} as genre fail",
+    "owners": "Submitted by: {{names}}",
+    "statusIdle": "No preview",
+    "statusLoading": "Loading preview …",
+    "statusReady": "Preview ready",
+    "statusPlaying": "Preview playing",
+    "statusAutoplayBlocked": "Playback blocked",
+    "statusError": "Preview error",
+    "consentLabel": "I agree that YouTube content (preview player and thumbnail) is loaded.",
+    "consentRequired": "Please consent to YouTube embedding first.",
+    "previewFailed": "The preview could not be started. Please try again.",
+    "addedAnnouncement": "{{title}} added at place {{place}}.",
+    "removedAnnouncement": "{{title}} removed from the ranking.",
+    "movedAnnouncement": "{{title}} is now at place {{place}} of {{total}}."
+  },
   "host": {
     "start": "Start game",
     "notReadyCount": "At least {{min}} active players are required.",
@@ -270,10 +313,39 @@
     "forceHint": "Resume below minimum?",
     "end": "End game"
   },
+  "reveal": {
+    "heading": "Reveal",
+    "round": "Round {{number}} · {{genre}}",
+    "noSongs": "No song was submitted this round, so no points are awarded.",
+    "owners": "Submitted by: {{names}}",
+    "points": "{{borda}} Borda points · bonus {{bonus}} · round score {{points}}",
+    "genreFailed": "Genre fail ({{flags}} flags)",
+    "jackpot": "Jackpot",
+    "announceEntry": "{{title}}: {{points}} points.",
+    "announceWinner": "Winner: {{title}} with {{points}} points."
+  },
+  "leaderboard": {
+    "heading": "Standings",
+    "score": "{{points}} points",
+    "deltaUp": "+{{points}}",
+    "deltaDown": "{{points}}",
+    "deltaNone": "±0"
+  },
+  "final": {
+    "heading": "Finale",
+    "hostEnded": "The host ended the game early, so fewer rounds are scored.",
+    "podiumHeading": "Podium",
+    "place": "Place {{rank}}",
+    "standingsHeading": "Final standings",
+    "bangersHeading": "Bangers of all rounds",
+    "round": "Round {{number}} · {{genre}}",
+    "roundNoSongs": "No song in this round.",
+    "roundSingleSong": "Only one song in this round, so there is no winner.",
+    "roundAllFailed": "Every song in this round got a genre fail.",
+    "rematch": "Play again",
+    "waitingHost": "Waiting for the host to start a new game …"
+  },
   "later": {
-    "playbackPreroll": "The song clips start shortly.",
-    "VOTING": "Voting arrives in M5. Nothing is ranked here yet.",
-    "REVEAL": "Reveal and scoring arrive in M5. This is not a result yet.",
-    "FINAL": "The finale arrives in M5."
+    "playbackPreroll": "The song clips start shortly."
   }
 }

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-/** Bilingual disclosure of completed M4 and the remaining gameplay milestones. */
+/** Bilingual disclosure of the completed M5 game loop and the remaining milestones. */
 export function MilestoneNotice() {
   const { t } = useTranslation();
   return (

@@ -4,7 +4,7 @@ import type { ClientAction } from '../src/shared/actions';
 import type { CommandResult } from '../src/net/errors';
 import type { SessionSnapshot } from '../src/net/session';
 import type { GameState } from '../src/shared/game';
-import type { Media } from '../src/shared/primitives';
+import { finishVoting, mediaFor, playToVoting } from './m5-support';
 
 /**
  * End-to-end M2 lobby and realtime scenarios. Every test drives the real UI,
@@ -14,19 +14,6 @@ import type { Media } from '../src/shared/primitives';
  */
 
 const CODE_PATTERN = /^[ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/;
-
-function mediaFor(round: number, index: number): Media {
-  // Nine-character base plus two digits keeps every videoId exactly 11 chars.
-  const videoId = `dQw4w9WgX${round}${index}`;
-  return {
-    videoId,
-    title: `Song ${round}-${index}`,
-    channel: `Channel ${index}`,
-    thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    durationSeconds: 200,
-    startSeconds: 0,
-  };
-}
 
 async function openHarness(context: BrowserContext, path = '/'): Promise<Page> {
   const page = await context.newPage();
@@ -117,53 +104,6 @@ async function unlockSound(page: Page): Promise<void> {
     'data-unlocked',
     'true',
   );
-}
-
-/** Plays one full round up to the VOTING phase through the real session. */
-async function playToVoting(players: Page[], round: number): Promise<Media[]> {
-  const [host, ...rest] = players;
-  const medias = players.map((_, index) => mediaFor(round, index));
-  for (const player of players) {
-    await unlockSound(player);
-  }
-  expect((await dispatch(host, { type: 'START_GAME' })).status).toBe(
-    'accepted',
-  );
-  await waitForPhase(host, 'GENRE_SPIN');
-  expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
-  await waitForPhase(host, 'SUBMISSION');
-  await Promise.all(rest.map((player) => waitForPhase(player, 'SUBMISSION')));
-  for (const [index, player] of players.entries()) {
-    expect(
-      (await dispatch(player, { type: 'SUBMIT_SONG', media: medias[index] }))
-        .status,
-    ).toBe('accepted');
-    expect((await dispatch(player, { type: 'FINISH_SUBMISSION' })).status).toBe(
-      'accepted',
-    );
-  }
-  await waitForPhase(host, 'PLAYBACK');
-  for (let index = 0; index < medias.length; index += 1) {
-    expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
-  }
-  await waitForPhase(host, 'VOTING');
-  await Promise.all(rest.map((player) => waitForPhase(player, 'VOTING')));
-  return medias;
-}
-
-/** Every player ranks every foreign song and finishes voting. */
-async function finishVoting(players: Page[], medias: Media[]): Promise<void> {
-  for (const [index, player] of players.entries()) {
-    const ranking = medias
-      .filter((_, songIndex) => songIndex !== index)
-      .map((media) => media.videoId);
-    expect(
-      (await dispatch(player, { type: 'SET_RANKING', ranking })).status,
-    ).toBe('accepted');
-    expect((await dispatch(player, { type: 'FINISH_VOTING' })).status).toBe(
-      'accepted',
-    );
-  }
 }
 
 test('three contexts create, join by code and deep link with host-only rules', async ({
