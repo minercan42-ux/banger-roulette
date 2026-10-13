@@ -93,7 +93,7 @@
     "soundOff": "Sound pending",
     "kick": "Remove",
     "leave": "Leave room",
-    "readOnly": "This tab is read-only because another tab already holds an active connection. Only that tab can write.",
+    "readOnly": "This tab is read-only. Only an active connection authorized for your player can send actions.",
     "waitingForHost": "Waiting for the host …",
     "settingsHeading": "Game rules",
     "settingsHostOnly": "Only the host can change the rules.",

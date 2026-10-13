@@ -93,7 +93,7 @@
     "soundOff": "Sound offen",
     "kick": "Entfernen",
     "leave": "Raum verlassen",
-    "readOnly": "Dieser Tab ist schreibgeschützt, weil in einem anderen Tab bereits eine aktive Verbindung besteht. Nur dort kann geschrieben werden.",
+    "readOnly": "Dieser Tab ist schreibgeschützt. Nur eine aktive, für deinen Spieler freigegebene Verbindung darf Aktionen senden.",
     "waitingForHost": "Warte auf den Host …",
     "settingsHeading": "Spielregeln",
     "settingsHostOnly": "Nur der Host kann die Regeln ändern.",
