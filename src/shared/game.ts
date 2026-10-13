@@ -59,6 +59,7 @@ export const ScoredSongSchema = z.strictObject({
   bonus: Int,
   ownerDeltas: z.record(Id, z.number().int()),
 });
+export type ScoredSong = z.infer<typeof ScoredSongSchema>;
 export const RoundResultSchema = z.strictObject({
   number: z.number().int().min(1).max(20),
   genre: GenreSchema,
@@ -106,6 +107,14 @@ export const GameStateSchema = z
     settings: RequiredSettingsSchema,
     players: z.record(Id, PlayerSchema),
     genrePool: z.array(GenreSchema).min(1).max(50),
+    rouletteGenrePool: z
+      .array(GenreSchema)
+      .min(30)
+      .max(50)
+      .refine(
+        (genres) => unique(genres.map((genre) => genre.id)),
+        'Duplicate roulette catalogue IDs',
+      ),
     remainingGenreIds: z.array(z.string().min(1)).max(50),
     rngState: z.number().int().min(1).max(0xffffffff),
     phase: PhaseSchema,
@@ -155,6 +164,12 @@ export const GameStateSchema = z
       issue('Invalid genre cycle');
     if (state.settings.genre.mode === 'roulette' && genreIds.length < 30)
       issue('Roulette requires thirty genres');
+    if (
+      state.settings.genre.mode === 'roulette' &&
+      (genreIds.length !== state.rouletteGenrePool.length ||
+        state.rouletteGenrePool.some((genre) => !genreIds.includes(genre.id)))
+    )
+      issue('Roulette pool must match injected catalogue');
     if (
       state.settings.genre.mode === 'custom' &&
       (genreIds.length !== state.settings.genre.items.length ||

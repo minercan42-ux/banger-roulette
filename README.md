@@ -2,7 +2,7 @@
 
 Browser party game: each round a genre is spun on a roulette wheel, every player submits a YouTube link to their biggest banger, everyone listens to the snippets in sync, ranks the others and scores points. No login, casino vibe, German and English UI.
 
-Status: M0 implemented and verified locally. Vercel Preview, hosted CI and merge approval are release gates. No gameplay, Realtime connection, YouTube player or API Functions yet. M1 starts after the M0 gate.
+Status: M0 is merged and deployed at [banger-roulette.vercel.app](https://banger-roulette.vercel.app/), with green hosted CI and actual production smoke acceptance. The user approved production-first verification for PR #2. M1's pure engine, scoring and filtered selectors are implemented on the engine feature branch, pending release review/CI and separate merge approval. The deployed shell is not a playable game; Realtime, YouTube player, gameplay UI and API Functions are later milestones.
 
 - Product and architecture spec: [SPEC.md](SPEC.md)
 - Rules for coding agents: [AGENTS.md](AGENTS.md)
@@ -58,3 +58,5 @@ pnpm test:e2e
 5. GitHub → **Pull requests → M0 PR → Checks**: CI green and independent review required. Merge only by the user or explicit approval, using **Squash and merge**.
 
 `vercel.json` excludes `/api` from SPA rewrites and adds CSP/Referer/nosniff headers. M0 has no Functions and no third-party connections; `connect-src` is self-only. M2 must add exact project-specific Supabase HTTPS/WSS origins. Later Functions milestones use `vercel dev` for same-origin app/API development; authorise CLI login/link yourself without sharing tokens.
+
+For this private repository, Vercel must associate the deployment commit with a GitHub account that has project access. Assistant-generated commits are published on behalf of the authenticated owner using the owner's public GitHub `ID+USERNAME@users.noreply.github.com` address, with explicit assistant attribution. Do not use an unlinked `assistant@localhost` address for a Preview trigger, read private email settings, disable access checks or rewrite published history just to trigger deployment. See [GitHub commit attribution](https://docs.github.com/en/account-and-profile/reference/email-addresses-reference#your-noreply-email-address) and [Vercel author access](https://vercel.com/docs/deployments/troubleshoot-project-collaboration).

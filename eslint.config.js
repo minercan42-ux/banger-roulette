@@ -59,6 +59,53 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/engine/**/*.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        'Date',
+        'crypto',
+        'fetch',
+        'window',
+        'document',
+        'navigator',
+        'performance',
+        'process',
+        'localStorage',
+        'sessionStorage',
+        'setTimeout',
+        'setInterval',
+        'requestAnimationFrame',
+        'XMLHttpRequest',
+        'WebSocket',
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Math',
+          property: 'random',
+          message:
+            'Inject the RNG seed; engine randomness must be deterministic.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            'node:*',
+            'fs',
+            'fs/*',
+            'http',
+            'https',
+            'crypto',
+            'timers',
+            'perf_hooks',
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['src/ui/**/*.{ts,tsx}', 'src/main.tsx'],
     plugins: { 'react-hooks': reactHooks },
     rules: reactHooks.configs.recommended.rules,
