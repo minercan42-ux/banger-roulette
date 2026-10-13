@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GenreSchema, unique } from './primitives';
+import { GenreSchema, unique } from './primitives.js';
 
 export const GenreModeSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('roulette') }),

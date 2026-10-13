@@ -71,9 +71,9 @@
     "storageNotice": "Gespeichert wird nur eine lokale Spieler-ID, damit ein Reload dich wiedererkennt. Kein Login, kein Spielstand."
   },
   "milestone": {
-    "title": "Meilenstein M2",
-    "body": "Diese Version bringt Lobby und Echtzeit-Raum. Spielansichten und der YouTube-Player folgen in M3–M5.",
-    "noStart": "Der Spielstart ist in der Oberfläche absichtlich noch nicht verfügbar."
+    "title": "Meilenstein M3",
+    "body": "Genre-Roulette und Song-Auswahl sind aktiv. Wiedergabe, Voting und Reveal folgen in M4 und M5.",
+    "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert)."
   },
   "lobby": {
     "heading": "Lobby",
@@ -159,7 +159,81 @@
     "pauseQuorum": "Pausiert: weniger als 3 aktive Spieler.",
     "pauseHost": "Vom Host pausiert.",
     "spectator": "Du schaust zu und spielst ab der nächsten Runde mit.",
-    "ended": "Das Spiel ist beendet.",
-    "gameplayComing": "Wiedergabe und Spielansichten entstehen in M3–M5. Hier steht nur der ehrliche Status."
+    "ended": "Das Spiel ist beendet."
+  },
+  "genre": {
+    "heading": "Genre-Roulette",
+    "spinning": "Das Rad dreht …",
+    "fixedNotice": "Festes Genre: Es wird nicht gedreht, alle Runden laufen mit diesem Genre.",
+    "resultLabel": "Genre",
+    "announcement": "Genre gezogen: {{genre}}"
+  },
+  "submission": {
+    "heading": "Song einreichen",
+    "intro": "Reiche den größten Banger des Genres als YouTube-Link ein.",
+    "linkLabel": "YouTube-Link",
+    "linkHint": "Unterstützt: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com und m.youtube.com. Andere Domains werden abgelehnt.",
+    "linkInvalid": "Kein gültiger YouTube-Link. Bitte eine unterstützte URL eingeben.",
+    "consentLabel": "Ich bin einverstanden, dass YouTube-Inhalte (Vorschau-Player und Vorschaubild) geladen werden.",
+    "consentRequired": "Bitte zuerst der Einbettung von YouTube zustimmen.",
+    "loadPreview": "Vorschau laden",
+    "previewPlay": "Vorschau abspielen",
+    "statusIdle": "Keine Vorschau geladen",
+    "statusLoading": "Vorschau wird geladen …",
+    "statusReady": "Vorschau bereit",
+    "statusPlaying": "Vorschau läuft",
+    "statusAutoplayBlocked": "Wiedergabe blockiert",
+    "statusError": "Vorschau-Fehler",
+    "embeddingBlocked": "Dieses Video erlaubt kein Einbetten (Code {{code}}). Bitte einen anderen Link wählen.",
+    "previewUnavailable": "Die Vorschau ist nicht verfügbar (Code {{code}}). Das Video gilt damit nicht als bestätigt.",
+    "previewFailed": "Die Vorschau konnte nicht gestartet werden. Bitte erneut versuchen.",
+    "metadataFailed": "Die Metadaten konnten nicht geladen werden.",
+    "autoplayBlocked": "Der Browser hat das Abspielen blockiert. Bitte erneut auf „Vorschau abspielen“ klicken.",
+    "startLabel": "Startpunkt (Sekunden)",
+    "setStart": "Startpunkt setzen",
+    "minus1": "−1 s",
+    "plus1": "+1 s",
+    "minus5": "−5 s",
+    "plus5": "+5 s",
+    "durationLabel": "Videolänge: {{duration}} s",
+    "clipLabel": "Ausschnitt: {{clip}} s ab Startpunkt",
+    "save": "Einreichung speichern",
+    "savedNotice": "Einreichung gespeichert.",
+    "savedHeading": "Deine Einreichung",
+    "savedStart": "Start bei {{start}}",
+    "remove": "Einreichung entfernen",
+    "finish": "Fertig",
+    "finished": "Du bist fertig. Du kannst zuschauen, bis die Auswahlzeit endet.",
+    "progress": "{{done}}/{{total}} fertig",
+    "progressDone": "fertig",
+    "progressOpen": "offen",
+    "spectatorOnly": "Du bist Zuschauer und reichst erst ab der nächsten Runde ein.",
+    "previewRequired": "Erst eine laufende Vorschau bestätigt, dass das Video abspielbar ist."
+  },
+  "linked": {
+    "heading": "Spiritually Linked",
+    "body_one": "{{count}} Spieler hat dasselbe Video eingereicht.",
+    "body_other": "{{count}} Spieler haben dasselbe Video eingereicht.",
+    "names": "Eingereicht von: {{names}}",
+    "anonymousNote": "Namen folgen beim Reveal.",
+    "none": "Kein Song wurde doppelt eingereicht.",
+    "single": "Nur ein Song in dieser Runde: kein Voting, keine Punkte."
+  },
+  "host": {
+    "start": "Spiel starten",
+    "notReadyCount": "Mindestens {{min}} aktive Spieler nötig.",
+    "notReadySound": "Noch nicht alle Spieler haben Sound aktiviert.",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "resumeForce": "Trotzdem fortsetzen",
+    "forceHint": "Unter Minimum fortsetzen?",
+    "end": "Spiel beenden"
+  },
+  "later": {
+    "playbackPreroll": "Die Song-Ausschnitte starten gleich.",
+    "PLAYBACK": "Die synchrone Wiedergabe folgt in M4. Die Ausschnitte werden hier noch nicht abgespielt.",
+    "VOTING": "Das Voting folgt in M5. Hier wird noch nicht abgestimmt.",
+    "REVEAL": "Reveal und Wertung folgen in M5. Dies ist noch keine Wertung.",
+    "FINAL": "Das Finale folgt in M5."
   }
 }

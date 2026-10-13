@@ -1,0 +1,194 @@
+import { expect } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type { ClientAction } from '../src/shared/actions';
+import type { CommandResult } from '../src/net/errors';
+import type { SessionSnapshot } from '../src/net/session';
+import type { GameState } from '../src/shared/game';
+import type { Settings } from '../src/shared/settings';
+import {
+  installYouTubeFixture,
+  watchYouTubeRequests,
+  type YouTubeFixtureMap,
+} from './youtube-fixture';
+
+/**
+ * Shared Playwright wiring for the M3 submission suite. Every stage is a real
+ * browser context driving the real UI, the real `GameSession` over the WS
+ * bridge and the real engine; only the external YouTube edge is replaced by
+ * `youtube-fixture.ts`.
+ */
+export interface Stage {
+  readonly nickname: string;
+  readonly context: BrowserContext;
+  readonly page: Page;
+  readonly youtubeRequests: () => string[];
+}
+
+export interface StageOptions {
+  nickname: string;
+  videos?: YouTubeFixtureMap;
+  locale?: string;
+  reducedMotion?: 'reduce' | 'no-preference';
+  viewport?: { width: number; height: number };
+}
+
+export async function newStage(
+  browser: Browser,
+  options: StageOptions,
+): Promise<Stage> {
+  const context = await browser.newContext({
+    locale: options.locale ?? 'en-US',
+    reducedMotion: options.reducedMotion,
+    viewport: options.viewport,
+  });
+  await installYouTubeFixture(context, options.videos ?? {});
+  const page = await context.newPage();
+  const youtubeRequests = watchYouTubeRequests(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__banger !== undefined);
+  return { nickname: options.nickname, context, page, youtubeRequests };
+}
+
+export async function closeStages(stages: readonly Stage[]): Promise<void> {
+  await Promise.all(stages.map((stage) => stage.context.close()));
+}
+
+export function snapshot(page: Page): Promise<SessionSnapshot> {
+  return page.evaluate(() => window.__banger!.snapshot());
+}
+
+export async function stateOf(page: Page): Promise<GameState | null> {
+  return (await snapshot(page)).state;
+}
+
+export function dispatch(
+  page: Page,
+  action: ClientAction,
+): Promise<CommandResult> {
+  return page.evaluate((payload) => window.__banger!.dispatch(payload), action);
+}
+
+export async function createRoom(
+  page: Page,
+  nickname: string,
+): Promise<string> {
+  await page.getByTestId('create-nickname').fill(nickname);
+  await page.getByTestId('create-room').click();
+  await expect(page.getByTestId('room-view')).toBeVisible();
+  const code = (await page.getByTestId('room-code').innerText()).trim();
+  expect(code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/);
+  return code;
+}
+
+export async function joinRoom(
+  page: Page,
+  code: string,
+  nickname: string,
+): Promise<void> {
+  await expect(
+    page.getByTestId('route-join-view').or(page.getByTestId('home-forms')),
+  ).toBeVisible();
+  await page.getByTestId('join-code').fill(code);
+  await page.getByTestId('join-nickname').fill(nickname);
+  await page.getByTestId('join-room').click();
+  await expect(page.getByTestId('room-view')).toBeVisible();
+}
+
+export async function unlockSound(page: Page): Promise<void> {
+  await page.getByTestId('sound-consent').click();
+  await expect(page.getByTestId('sound-status')).toHaveAttribute(
+    'data-unlocked',
+    'true',
+  );
+}
+
+export async function waitForPhase(
+  page: Page,
+  phase: string,
+  timeoutMs = 20000,
+): Promise<void> {
+  await expect
+    .poll(async () => (await stateOf(page))?.phase.type, { timeout: timeoutMs })
+    .toBe(phase);
+}
+
+/** Assembles a room through the visible forms: first stage hosts, rest join. */
+export async function assembleRoom(
+  host: Stage,
+  joiners: readonly Stage[],
+): Promise<string> {
+  const code = await createRoom(host.page, host.nickname);
+  for (const joiner of joiners) {
+    await joinRoom(joiner.page, code, joiner.nickname);
+  }
+  return code;
+}
+
+export async function setSettings(
+  page: Page,
+  patch: Partial<Settings>,
+): Promise<void> {
+  const state = await stateOf(page);
+  if (state === null) {
+    throw new Error('Cannot patch settings without a room state');
+  }
+  const result = await dispatch(page, {
+    type: 'SET_SETTINGS',
+    settings: { ...state.settings, ...patch },
+  });
+  expect(result.status).toBe('accepted');
+}
+
+/** Unlocks sound everywhere, starts the game and lands on the SUBMISSION phase. */
+export async function enterSubmission(players: Page[]): Promise<void> {
+  const [host, ...others] = players;
+  for (const player of players) {
+    await unlockSound(player);
+  }
+  await host.getByTestId('start-game').click();
+  await waitForPhase(host, 'SUBMISSION');
+  await Promise.all(others.map((player) => waitForPhase(player, 'SUBMISSION')));
+}
+
+export async function ensureConsent(page: Page): Promise<void> {
+  await page.getByTestId('youtube-consent').check();
+}
+
+/** Loads the preview for a link and proves it reached PLAYING. */
+export async function startPlayingPreview(
+  page: Page,
+  url: string,
+): Promise<void> {
+  await page.getByTestId('song-link').fill(url);
+  await page.getByTestId('load-preview').click();
+  const status = page.getByTestId('preview-status');
+  await expect(status).toHaveAttribute('data-state', 'ready', {
+    timeout: 15000,
+  });
+  await page.getByTestId('preview-play').click();
+  await expect(status).toHaveAttribute('data-state', 'playing', {
+    timeout: 15000,
+  });
+}
+
+export interface SubmitSongOptions {
+  plus5?: number;
+  setStart?: boolean;
+}
+
+/** Full consumer path: consent, link, validated preview, start, save. */
+export async function submitSongViaUi(
+  page: Page,
+  url: string,
+  options: SubmitSongOptions = {},
+): Promise<void> {
+  await ensureConsent(page);
+  await startPlayingPreview(page, url);
+  if (options.setStart === true) {
+    await page.getByTestId('set-start').click();
+  }
+  for (let index = 0; index < (options.plus5 ?? 0); index += 1) {
+    await page.getByTestId('start-plus-5').click();
+  }
+  await page.getByTestId('save-submission').click();
+}

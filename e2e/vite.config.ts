@@ -12,6 +12,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { GET } from '../api/time.ts';
+import { GET as getOEmbed } from '../api/oembed.ts';
 import { attachBridge } from './bridge';
 
 const timeApi: Plugin = {
@@ -25,6 +26,22 @@ const timeApi: Plugin = {
         return;
       }
       const result = GET();
+      response.writeHead(
+        result.status,
+        Object.fromEntries(result.headers.entries()),
+      );
+      response.end(await result.text());
+    });
+    server.middlewares.use('/api/oembed', async (request, response, next) => {
+      if (request.url?.split('?')[0] !== '/') return next();
+      const result = await getOEmbed(
+        new Request(
+          `http://localhost/api/oembed${request.url?.slice(1) ?? ''}`,
+          {
+            method: request.method,
+          },
+        ),
+      );
       response.writeHead(
         result.status,
         Object.fromEntries(result.headers.entries()),

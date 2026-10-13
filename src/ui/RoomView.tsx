@@ -2,17 +2,24 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectLobbyReadiness,
+  selectReveal,
   selectRoom,
-  type PlayerView,
   selectViewerPermissions,
+  type PlayerView,
 } from '../engine/selectors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
+import { GenreSpin } from './GenreSpin';
+import { HostControls } from './HostControls';
 import { MilestoneNotice } from './MilestoneNotice';
 import { PhaseSummary } from './PhaseSummary';
+import { PhaseUnavailable } from './PhaseUnavailable';
+import { PlaybackPhase } from './PlaybackPhase';
 import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
+import { SingleSongPhase } from './SingleSongPhase';
 import { SoundControl } from './SoundControl';
+import { SubmissionPanel } from './SubmissionPanel';
 
 interface RoomViewProps {
   session: GameSession;
@@ -42,6 +49,7 @@ export function RoomView({
   );
   const room = selectRoom(state);
   const readiness = selectLobbyReadiness(state);
+  const reveal = selectReveal(state);
   const shareUrl = `${window.location.origin}/r/${room.roomCode}`;
 
   async function copyLink() {
@@ -154,9 +162,48 @@ export function RoomView({
         </p>
       )}
 
+      <HostControls
+        session={session}
+        state={state}
+        permissions={permissions}
+        readiness={readiness}
+      />
+
       {room.phase !== 'LOBBY' && (
         <PhaseSummary session={session} state={state} room={room} self={self} />
       )}
+
+      {room.phase === 'GENRE_SPIN' && (
+        <GenreSpin session={session} state={state} />
+      )}
+
+      {room.phase === 'SUBMISSION' && (
+        <SubmissionPanel
+          key={`${room.gameNumber}:${room.roundNumber}`}
+          session={session}
+          state={state}
+          viewerId={viewerId}
+          room={room}
+          roster={roster}
+          self={self}
+          permissions={permissions}
+        />
+      )}
+
+      {room.phase === 'PLAYBACK' && (
+        <PlaybackPhase session={session} state={state} viewerId={viewerId} />
+      )}
+
+      {room.phase === 'VOTING' && <PhaseUnavailable phase="VOTING" />}
+
+      {room.phase === 'REVEAL' &&
+        (reveal?.reason === 'singleSong' ? (
+          <SingleSongPhase state={state} viewerId={viewerId} />
+        ) : (
+          <PhaseUnavailable phase="REVEAL" />
+        ))}
+
+      {room.phase === 'FINAL' && <PhaseUnavailable phase="FINAL" />}
 
       <SoundControl
         session={session}

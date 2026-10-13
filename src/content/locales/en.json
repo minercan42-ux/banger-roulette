@@ -71,9 +71,9 @@
     "storageNotice": "Only a local player ID is stored so a reload recognizes you. No login, no saved game."
   },
   "milestone": {
-    "title": "Milestone M2",
-    "body": "This version brings the lobby and the realtime room. Game views and the YouTube player arrive in M3–M5.",
-    "noStart": "The game start is intentionally not available in the interface yet."
+    "title": "Milestone M3",
+    "body": "Genre roulette and song submission are live. Playback, voting and reveal arrive in M4 and M5.",
+    "startHint": "The host starts the round once 3–10 players are ready (sound enabled)."
   },
   "lobby": {
     "heading": "Lobby",
@@ -159,7 +159,81 @@
     "pauseQuorum": "Paused: fewer than 3 active players.",
     "pauseHost": "Paused by the host.",
     "spectator": "You are watching and will play from the next round.",
-    "ended": "The game has ended.",
-    "gameplayComing": "Playback and game views arrive in M3–M5. Only the honest status is shown here."
+    "ended": "The game has ended."
+  },
+  "genre": {
+    "heading": "Genre roulette",
+    "spinning": "Spinning …",
+    "fixedNotice": "Fixed genre: no spin, every round uses this genre.",
+    "resultLabel": "Genre",
+    "announcement": "Genre drawn: {{genre}}"
+  },
+  "submission": {
+    "heading": "Submit a song",
+    "intro": "Submit the biggest banger of the genre as a YouTube link.",
+    "linkLabel": "YouTube link",
+    "linkHint": "Supported: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com and m.youtube.com. Other domains are rejected.",
+    "linkInvalid": "Not a valid YouTube link. Please enter a supported URL.",
+    "consentLabel": "I agree that YouTube content (preview player and thumbnail) is loaded.",
+    "consentRequired": "Please consent to YouTube embedding first.",
+    "loadPreview": "Load preview",
+    "previewPlay": "Play preview",
+    "statusIdle": "No preview loaded",
+    "statusLoading": "Loading preview …",
+    "statusReady": "Preview ready",
+    "statusPlaying": "Preview playing",
+    "statusAutoplayBlocked": "Playback blocked",
+    "statusError": "Preview error",
+    "embeddingBlocked": "This video cannot be embedded (code {{code}}). Please pick another link.",
+    "previewUnavailable": "The preview is unavailable (code {{code}}). The video is therefore not confirmed.",
+    "previewFailed": "The preview could not be started. Please try again.",
+    "metadataFailed": "The metadata could not be loaded.",
+    "autoplayBlocked": "The browser blocked playback. Please click “Play preview” again.",
+    "startLabel": "Start point (seconds)",
+    "setStart": "Set start point",
+    "minus1": "−1 s",
+    "plus1": "+1 s",
+    "minus5": "−5 s",
+    "plus5": "+5 s",
+    "durationLabel": "Video length: {{duration}} s",
+    "clipLabel": "Clip: {{clip}} s from the start point",
+    "save": "Save submission",
+    "savedNotice": "Submission saved.",
+    "savedHeading": "Your submission",
+    "savedStart": "Starts at {{start}}",
+    "remove": "Remove submission",
+    "finish": "Done",
+    "finished": "You are done. You can watch until the submission time ends.",
+    "progress": "{{done}}/{{total}} done",
+    "progressDone": "done",
+    "progressOpen": "open",
+    "spectatorOnly": "You are a spectator and may submit from the next round.",
+    "previewRequired": "A playing preview first confirms that the video is playable."
+  },
+  "linked": {
+    "heading": "Spiritually Linked",
+    "body_one": "{{count}} player submitted the same video.",
+    "body_other": "{{count}} players submitted the same video.",
+    "names": "Submitted by: {{names}}",
+    "anonymousNote": "Names follow at the reveal.",
+    "none": "No song was submitted twice.",
+    "single": "Only one song this round: no voting, no points."
+  },
+  "host": {
+    "start": "Start game",
+    "notReadyCount": "At least {{min}} active players are required.",
+    "notReadySound": "Not every player has enabled sound yet.",
+    "pause": "Pause",
+    "resume": "Resume",
+    "resumeForce": "Resume anyway",
+    "forceHint": "Resume below minimum?",
+    "end": "End game"
+  },
+  "later": {
+    "playbackPreroll": "The song clips start shortly.",
+    "PLAYBACK": "Synchronised playback arrives in M4. The clips are not played here yet.",
+    "VOTING": "Voting arrives in M5. Nothing is ranked here yet.",
+    "REVEAL": "Reveal and scoring arrive in M5. This is not a result yet.",
+    "FINAL": "The finale arrives in M5."
   }
 }

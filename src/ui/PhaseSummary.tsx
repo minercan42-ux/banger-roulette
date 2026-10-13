@@ -17,8 +17,8 @@ interface PhaseSummaryProps {
 }
 
 /**
- * Honest running-room status: phase, bounded polite countdown and pause. No
- * pretend gameplay; the real views arrive in M3-M5.
+ * Honest running-room status: phase, bounded polite countdown and pause. The
+ * M3 game views (roulette, submission) render below; the timer stays generic.
  */
 export function PhaseSummary({
   session,
@@ -133,13 +133,6 @@ export function PhaseSummary({
           {t('phase.spectator')}
         </p>
       )}
-
-      <p
-        data-testid="gameplay-coming"
-        className="mt-3 text-xs leading-relaxed text-cream-100/60"
-      >
-        {t('phase.gameplayComing')}
-      </p>
     </section>
   );
 }

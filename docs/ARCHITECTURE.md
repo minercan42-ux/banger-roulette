@@ -19,7 +19,7 @@ Vite/React strict TypeScript shell, Tailwind styles, Zustand language selection 
 
 ## Pure engine and public UI boundary
 
-The M1 kernel is in `src/engine/`. Host/Net integration uses `index.ts`; UI imports only `selectors.ts`. The shell does not dispatch gameplay yet.
+The M1 kernel is in `src/engine/`. Host/Net integration uses `index.ts`; UI imports only `selectors.ts`. M3 dispatches gameplay commands through the existing GameSession without changing engine or wire contracts.
 
 | API                                                                      | Contract                                                                                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -48,6 +48,22 @@ Frames <=192KiB go directly; larger snapshot/handoff/replica events use 48KiB UT
 
 `e2e/` contains an isolated test-only WebSocket bridge over the actual in-memory transport. Browser hosts still execute the real session/engine and the actual lobby UI. Neither the harness nor its window debug API is a production entry. Live SDK timing is measured separately, without claiming the in-memory results prove Supabase failover bounds. See ADR-002 for connection/version authority.
 
+## M3 genre and submission
+
+`GenreSpin` derives its common target angle from the active pool and the already-drawn genre. Its rotation follows normalized elapsed phase time from selectors; pause freezes the same point, late mounting does not start a new draw, fixed mode shows a brief notice and reduced motion jumps to the target. `HostControls` exposes ready-lobby start and running-room pause/resume/end.
+
+`SubmissionPanel` owns only the local editor and external-player lifecycle. Own accepted media/progress/permissions come from selectors; writes use the exact local connection binding. Changing links, leaving, finishing, pausing or losing the binding aborts metadata and destroys the player, with generation checks suppressing obsolete callbacks. Accepted media survives reload in the host snapshot; no local song persistence or consent persistence is introduced.
+
+`src/player/links.ts` recognizes supported YouTube hosts/routes and bounded whole-second timestamps. `metadata.ts` calls same-origin `/api/oembed`; the GET Web handler uses a fixed upstream URL, disallows redirects, validates normalized title/channel/thumbnail, propagates cancellation and bounds work to five seconds. Vite invokes the same production handler.
+
+The API and its complete shared-schema dependency graph use explicit `.js` relative specifiers so Vercel's emitted Node ESM modules resolve without a bundler. TypeScript/Vite resolve those specifiers to source `.ts` modules during development. Checking `vite build` alone does not exercise that server graph; emitted-JS Node execution and a deployed API request are separate runtime gates.
+
+`preview.ts` loads the official IFrame API lazily through one timeout-bounded, recoverable singleton. The actual iframe uses `www.youtube-nocookie.com`, the application origin and `strict-origin-when-cross-origin`. Ready is not proof of playability: only PLAYING plus a positive finite duration for the entered video enables saving. Current video URL is checked again before dispatch, preventing related-video navigation from mixing metadata and duration. Initialization errors are retained, and canceled sessions cannot emit status. Embed failures 2/100/101/150 block; other codes remain unconfirmed rather than becoming success.
+
+At aggregation the existing engine groups video IDs and retains the first remaining submission's media/start. `LinkedAnimation` reads anonymous-safe SongViews during the first playback preroll, or the single-song reveal, and respects reduced motion. Actual synchronized playback and the remaining voting/reveal/finale surfaces are M4/M5, not simulated by M3.
+
+Official sources checked for M3: [IFrame API](https://developers.google.com/youtube/iframe_api_reference), [player parameters](https://developers.google.com/youtube/player_parameters), [privacy-enhanced embedding and Referer](https://support.google.com/youtube/answer/171780?hl=en), [live YouTube oEmbed](https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DM7lc1UVf-VE&format=json), [Vercel Node Web handlers](https://vercel.com/docs/functions/runtimes/node-js).
+
 ## Planned playback synchronization (M4 player integration, not implemented)
 
 ```mermaid
@@ -68,4 +84,4 @@ sequenceDiagram
   C->>Y: Local seek if drift exceeds 750 ms
 ```
 
-The time API and snapshot transport above are M2; YouTube playback and drift correction are future M3/M4 work. Advertisements, cold seeks, buffering, autoplay policies and browser scheduling can prevent the ±500ms target. Presence timeout/partitions can prevent five-second migration; measure AK goals, never represent them as API guarantees. See ADR-001, ADR-002 and SECURITY.md.
+The time API and snapshot transport above are M2; real preview validation is M3, while synchronized playback and drift correction remain M4. Advertisements, cold seeks, buffering, autoplay policies and browser scheduling can prevent the ±500ms target. Presence timeout/partitions can prevent five-second migration; measure AK goals, never represent them as API guarantees. See ADR-001, ADR-002 and SECURITY.md.
