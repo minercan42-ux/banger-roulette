@@ -9,6 +9,7 @@ import type {
 } from '../shared/game';
 import type { Genre, Media } from '../shared/primitives';
 import type { Settings } from '../shared/settings';
+import { REVEAL_PER_SONG_MS } from './reducer';
 import { MAX_PLAYERS, MIN_PLAYERS, isActivePlayer, sortPlayers } from './state';
 
 /**
@@ -171,12 +172,28 @@ export interface RevealEntryView {
   winner: boolean;
 }
 
+export interface StagedRevealEntryView extends RevealEntryView {
+  /**
+   * Absolute server time this entry is revealed at (ascending, one per song).
+   * A late joiner only sees entries whose `revealAt` is already in the past.
+   */
+  revealAt: number;
+}
+
 export interface RevealView {
   roundNumber: number;
   genre: Genre;
   reason: RoundResult['reason'];
+  /** Absolute server time the reveal phase started at. */
+  startedAt: number;
+  /** Absolute server time the phase ends (hold after the last entry). */
+  deadlineAt: number;
+  /** Staging pipeline: entry i is revealed at `startedAt + i * perSongMs`. */
+  perSongMs: number;
+  /** Frozen reference instant while paused; null while running. */
+  pausedAt: number | null;
   /** Ascending Borda; equal scores keep the frozen submission order. */
-  entries: RevealEntryView[];
+  entries: StagedRevealEntryView[];
 }
 
 export interface RoundResultView {
@@ -194,6 +211,15 @@ export interface StandingView {
   totalScore: number;
   status: Player['status'];
   isSelf: boolean;
+  /** Score change from the latest revealed round (0 before any result). */
+  delta: number;
+  /** Dense rank before the latest round's delta; equals `rank` if unchanged. */
+  previousRank: number;
+}
+
+export interface FinalView {
+  /** `hostEnded` finales may have fewer rounds than configured. */
+  reason: Extract<Phase, { type: 'FINAL' }>['reason'];
 }
 
 /**
@@ -505,7 +531,8 @@ export function selectViewerPermissions(
 
 export function selectReveal(state: GameState): RevealView | null {
   const round = state.round;
-  if (!round || state.phase.type !== 'REVEAL') {
+  const phase = state.phase;
+  if (!round || phase.type !== 'REVEAL') {
     return null;
   }
   const result = state.results[state.results.length - 1];
@@ -516,8 +543,21 @@ export function selectReveal(state: GameState): RevealView | null {
     roundNumber: result.number,
     genre: { ...result.genre },
     reason: result.reason,
-    entries: revealEntries(state, result.songs),
+    startedAt: phase.startedAt,
+    deadlineAt: phase.deadlineAt,
+    perSongMs: REVEAL_PER_SONG_MS,
+    pausedAt: state.pause ? state.pause.at : null,
+    // Worst first: entry i becomes visible at startedAt + i * REVEAL_PER_SONG_MS.
+    entries: revealEntries(state, result.songs).map((entry, index) => ({
+      ...entry,
+      revealAt: phase.startedAt + index * REVEAL_PER_SONG_MS,
+    })),
   };
+}
+
+/** FINAL phase outcome for the finale surface (null outside FINAL). */
+export function selectFinal(state: GameState): FinalView | null {
+  return state.phase.type === 'FINAL' ? { reason: state.phase.reason } : null;
 }
 
 /** All revealed rounds, including their owner mapping. */
@@ -534,28 +574,46 @@ export function selectStandings(
   state: GameState,
   viewerId: string,
 ): StandingView[] {
-  const sorted = Object.values(state.players).sort(
-    (a, b) =>
-      b.totalScore - a.totalScore ||
-      a.joinedAt - b.joinedAt ||
-      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  const players = Object.values(state.players);
+  const latest = state.results[state.results.length - 1];
+  const deltas = latest ? latest.playerDeltas : {};
+  const current = new Map(players.map((p) => [p.id, p.totalScore]));
+  // The score before this round's delta is the animation's start position.
+  const previous = new Map(
+    players.map((p) => [p.id, p.totalScore - (deltas[p.id] ?? 0)]),
   );
-  let rank = 0;
-  let previousScore: number | null = null;
-  return sorted.map((player) => {
-    if (previousScore === null || player.totalScore !== previousScore) {
-      rank += 1;
-      previousScore = player.totalScore;
+  const compare = (scores: Map<string, number>, a: Player, b: Player) =>
+    (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) ||
+    a.joinedAt - b.joinedAt ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const denseRanks = (scores: Map<string, number>) => {
+    const ranks = new Map<string, number>();
+    let rank = 0;
+    let previousScore: number | null = null;
+    for (const player of [...players].sort((a, b) => compare(scores, a, b))) {
+      const score = scores.get(player.id) ?? 0;
+      if (previousScore === null || score !== previousScore) {
+        rank += 1;
+        previousScore = score;
+      }
+      ranks.set(player.id, rank);
     }
-    return {
-      rank,
+    return ranks;
+  };
+  const ranks = denseRanks(current);
+  const previousRanks = denseRanks(previous);
+  return [...players]
+    .sort((a, b) => compare(current, a, b))
+    .map((player) => ({
+      rank: ranks.get(player.id) ?? 0,
       playerId: player.id,
       nickname: player.nickname,
       totalScore: player.totalScore,
       status: player.status,
       isSelf: player.id === viewerId,
-    };
-  });
+      delta: deltas[player.id] ?? 0,
+      previousRank: previousRanks.get(player.id) ?? 0,
+    }));
 }
 
 type TargetKind = 'rank' | 'flag';
@@ -719,10 +777,15 @@ function revealEntries(
   state: GameState,
   scored: readonly ScoredSong[],
 ): RevealEntryView[] {
+  // Ascending placement (FR-60): winners always close the reveal, even when a
+  // genre-failed song collected more Borda points and lost the bonus.
   return scored
     .map((scoredSong, index) => ({ scoredSong, index }))
     .sort(
-      (a, b) => a.scoredSong.borda - b.scoredSong.borda || a.index - b.index,
+      (a, b) =>
+        Number(a.scoredSong.winner) - Number(b.scoredSong.winner) ||
+        a.scoredSong.borda - b.scoredSong.borda ||
+        a.index - b.index,
     )
     .map(({ scoredSong }) => toRevealEntry(state, scoredSong));
 }

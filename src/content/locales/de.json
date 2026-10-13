@@ -73,8 +73,8 @@
     "storageNotice": "Gespeichert wird nur eine lokale Spieler-ID, damit ein Reload dich wiedererkennt. Kein Login, kein Spielstand."
   },
   "milestone": {
-    "title": "Meilenstein M4",
-    "body": "Genre-Roulette, Song-Auswahl und synchrone Wiedergabe sind aktiv. Voting, Reveal und Finale sind bis M5 nicht verfügbar.",
+    "title": "Meilenstein M5",
+    "body": "Das erste komplett spielbare Spiel: Genre-Roulette, Song-Auswahl, synchrone Wiedergabe, Voting, Reveal und Finale sind aktiv. Casino-Design, Sounds und Feinschliff folgen in M6.",
     "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert)."
   },
   "lobby": {
@@ -260,6 +260,49 @@
     "debugDrift": "Drift",
     "debugStatus": "Status"
   },
+  "voting": {
+    "heading": "Voting",
+    "intro": "Sortiere die Songs vom besten (Platz 1) zum schlechtesten. Du kannst Songs auch als Genre-Fail markieren.",
+    "partialHint": "Nicht platzierte Songs zählen 0 Punkte.",
+    "spectator": "Du schaust zu und stimmst ab der nächsten Runde ab.",
+    "progressHeading": "Wer hat abgestimmt",
+    "progress": "{{done}}/{{total}} fertig",
+    "progressDone": "fertig",
+    "progressOpen": "offen",
+    "done": "Du hast abgestimmt. Warte auf die anderen.",
+    "finish": "Abstimmen",
+    "noSongs": "Du hast diese Runde keine fremden Songs zum Ranken.",
+    "rankingHeading": "Deine Reihenfolge",
+    "emptyRanking": "Noch nichts gereiht. Füge unten Songs hinzu.",
+    "poolHeading": "Songs zum Ranken",
+    "dragHint": "Ziehe Songs, um sie zu reihen, oder tippe einen Song an, um ihn anzuhängen.",
+    "add": "Hinzufügen",
+    "addAria": "{{title}} zur Reihenfolge hinzufügen",
+    "remove": "Entfernen",
+    "removeAria": "{{title}} aus der Reihenfolge entfernen",
+    "up": "Hoch",
+    "down": "Runter",
+    "moveUpAria": "{{title}} auf Platz {{place}} nach oben schieben",
+    "moveDownAria": "{{title}} auf Platz {{place}} nach unten schieben",
+    "listen": "Anhören",
+    "stop": "Stopp",
+    "listenAria": "{{title}} lokal anhören",
+    "flag": "Genre-Fail",
+    "flagAria": "{{title}} als Genre-Fail markieren",
+    "owners": "Eingereicht von: {{names}}",
+    "statusIdle": "Keine Vorschau",
+    "statusLoading": "Vorschau wird geladen …",
+    "statusReady": "Vorschau bereit",
+    "statusPlaying": "Vorschau läuft",
+    "statusAutoplayBlocked": "Wiedergabe blockiert",
+    "statusError": "Vorschau-Fehler",
+    "consentLabel": "Ich bin einverstanden, dass YouTube-Inhalte (Vorschau-Player und Vorschaubild) geladen werden.",
+    "consentRequired": "Bitte zuerst der Einbettung von YouTube zustimmen.",
+    "previewFailed": "Die Vorschau konnte nicht gestartet werden. Bitte erneut versuchen.",
+    "addedAnnouncement": "{{title}} auf Platz {{place}} hinzugefügt.",
+    "removedAnnouncement": "{{title}} aus der Reihenfolge entfernt.",
+    "movedAnnouncement": "{{title}} ist jetzt auf Platz {{place}} von {{total}}."
+  },
   "host": {
     "start": "Spiel starten",
     "notReadyCount": "Mindestens {{min}} aktive Spieler nötig.",
@@ -270,10 +313,39 @@
     "forceHint": "Unter Minimum fortsetzen?",
     "end": "Spiel beenden"
   },
+  "reveal": {
+    "heading": "Reveal",
+    "round": "Runde {{number}} · {{genre}}",
+    "noSongs": "In dieser Runde wurde kein Song eingereicht, daher gibt es keine Punkte.",
+    "owners": "Eingereicht von: {{names}}",
+    "points": "{{borda}} Borda-Punkte · Bonus {{bonus}} · Rundenpunkte {{points}}",
+    "genreFailed": "Genre-Fail ({{flags}} Markierungen)",
+    "jackpot": "Jackpot",
+    "announceEntry": "{{title}}: {{points}} Punkte.",
+    "announceWinner": "Gewinner: {{title}} mit {{points}} Punkten."
+  },
+  "leaderboard": {
+    "heading": "Zwischenstand",
+    "score": "{{points}} Punkte",
+    "deltaUp": "+{{points}}",
+    "deltaDown": "{{points}}",
+    "deltaNone": "±0"
+  },
+  "final": {
+    "heading": "Finale",
+    "hostEnded": "Der Host hat das Spiel vorzeitig beendet, daher werden weniger Runden gewertet.",
+    "podiumHeading": "Podium",
+    "place": "Platz {{rank}}",
+    "standingsHeading": "Endstand",
+    "bangersHeading": "Banger aller Runden",
+    "round": "Runde {{number}} · {{genre}}",
+    "roundNoSongs": "Kein Song in dieser Runde.",
+    "roundSingleSong": "Nur ein Song in dieser Runde, daher kein Gewinner.",
+    "roundAllFailed": "Alle Songs dieser Runde bekamen einen Genre-Fail.",
+    "rematch": "Nochmal",
+    "waitingHost": "Warte, bis der Host eine neue Runde startet …"
+  },
   "later": {
-    "playbackPreroll": "Die Song-Ausschnitte starten gleich.",
-    "VOTING": "Das Voting folgt in M5. Hier wird noch nicht abgestimmt.",
-    "REVEAL": "Reveal und Wertung folgen in M5. Dies ist noch keine Wertung.",
-    "FINAL": "Das Finale folgt in M5."
+    "playbackPreroll": "Die Song-Ausschnitte starten gleich."
   }
 }

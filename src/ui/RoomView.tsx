@@ -11,21 +11,23 @@ import {
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
+import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
 import { MilestoneNotice } from './MilestoneNotice';
 import { PhaseSummary } from './PhaseSummary';
-import { PhaseUnavailable } from './PhaseUnavailable';
 import { PlaybackPhase } from './PlaybackPhase';
 import {
   PlaybackControllerContext,
   usePlaybackController,
 } from './playback-controller';
+import { RevealPhase } from './RevealPhase';
 import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
 import { SingleSongPhase } from './SingleSongPhase';
 import { SoundControl } from './SoundControl';
 import { SubmissionPanel } from './SubmissionPanel';
+import { VotingPhase } from './VotingPhase';
 
 interface RoomViewProps {
   session: GameSession;
@@ -226,16 +228,37 @@ export function RoomView({
           />
         )}
 
-        {room.phase === 'VOTING' && <PhaseUnavailable phase="VOTING" />}
+        {room.phase === 'VOTING' && (
+          <VotingPhase
+            key={`${room.gameNumber}:${room.roundNumber}`}
+            session={session}
+            state={state}
+            viewerId={viewerId}
+            viewerConnectionId={snapshot.connectionId}
+            roster={roster}
+          />
+        )}
 
         {room.phase === 'REVEAL' &&
           (reveal?.reason === 'singleSong' ? (
             <SingleSongPhase state={state} viewerId={viewerId} />
           ) : (
-            <PhaseUnavailable phase="REVEAL" />
+            <RevealPhase
+              key={`${room.gameNumber}:${room.roundNumber}`}
+              session={session}
+              state={state}
+              viewerId={viewerId}
+            />
           ))}
 
-        {room.phase === 'FINAL' && <PhaseUnavailable phase="FINAL" />}
+        {room.phase === 'FINAL' && (
+          <FinalPhase
+            session={session}
+            state={state}
+            viewerId={viewerId}
+            viewerConnectionId={snapshot.connectionId}
+          />
+        )}
 
         {/* One stable host node across SUBMISSION and PLAYBACK, so the warm
             player is never moved in the DOM (a move would reload the iframe).

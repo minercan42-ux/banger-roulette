@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../shared/game';
-import { classifyCommand, reducer } from './reducer';
+import { REVEAL_PER_SONG_MS, classifyCommand, reducer } from './reducer';
 import {
   areOwnersVisible,
   selectCurrentSong,
   selectEligibleSongs,
+  selectFinal,
   selectFlaggableSongs,
   selectGenrePool,
   selectLobbyReadiness,
@@ -23,6 +24,7 @@ import {
 import {
   action,
   command,
+  finalState,
   fireDeadline,
   genre,
   id,
@@ -624,6 +626,40 @@ describe('selectReveal and selectResults', () => {
     });
   });
 
+  it('reveals winners last even when a genre-failed song had more Borda', () => {
+    let state = votingState();
+    state = command(
+      state,
+      id(1),
+      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
+      200000,
+    );
+    state = command(
+      state,
+      id(2),
+      { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
+      200001,
+    );
+    for (const [index, flagger] of [id(1), id(2)].entries()) {
+      state = command(
+        state,
+        flagger,
+        { type: 'SET_GENRE_FAIL', videoId: videoId(3), flagged: true },
+        200002 + index,
+      );
+    }
+    const entries = selectReveal(fireDeadline(state, 236203))?.entries ?? [];
+    expect(
+      entries.map((entry) => [entry.videoId, entry.borda, entry.winner]),
+    ).toEqual([
+      [videoId(4), 2, false],
+      [videoId(3), 4, false],
+      [videoId(1), 3, true],
+      [videoId(2), 3, true],
+    ]);
+    expect(entries[1].genreFailed).toBe(true);
+  });
+
   it('omits the start offset from a banger link without a clip start', () => {
     let state = submissionState();
     state = command(
@@ -675,6 +711,50 @@ describe('selectReveal and selectResults', () => {
     expect(results[0].entries[2].owners).toEqual([
       { id: id(1), nickname: 'Host' },
     ]);
+  });
+
+  it('stages entries on server time, worst first', () => {
+    const reveal = scoredReveal();
+    const view = selectReveal(reveal);
+    expect(view).not.toBeNull();
+    expect(view?.perSongMs).toBe(REVEAL_PER_SONG_MS);
+    expect(view?.pausedAt).toBeNull();
+    expect(view?.entries.map((entry) => entry.revealAt)).toEqual([
+      view!.startedAt,
+      view!.startedAt + REVEAL_PER_SONG_MS,
+      view!.startedAt + 2 * REVEAL_PER_SONG_MS,
+      view!.startedAt + 3 * REVEAL_PER_SONG_MS,
+    ]);
+    // Late joiners / reloads only see entries whose revealAt is in the past.
+    const now = view!.startedAt + REVEAL_PER_SONG_MS + 1;
+    expect(view!.entries.filter((entry) => entry.revealAt <= now)).toHaveLength(
+      2,
+    );
+    // Pausing freezes the reveal reference at the pause instant.
+    const paused = command(
+      reveal,
+      id(1),
+      { type: 'PAUSE' },
+      reveal.phase.type === 'REVEAL' ? reveal.phase.startedAt + 1 : 0,
+    );
+    expect(selectReveal(paused)?.pausedAt).toBe(
+      paused.pause === null ? null : paused.pause.at,
+    );
+  });
+
+  it('reports no entries and the phase reason for a noSongs round', () => {
+    const reveal = revealState();
+    const view = selectReveal(reveal);
+    expect(view?.reason).toBe('noSongs');
+    expect(view?.entries).toEqual([]);
+  });
+});
+
+describe('selectFinal', () => {
+  it('is null outside FINAL and exposes the finale reason', () => {
+    expect(selectFinal(votingState())).toBeNull();
+    expect(selectFinal(scoredFinalState())).toEqual({ reason: 'completed' });
+    expect(selectFinal(finalState())).toEqual({ reason: 'hostEnded' });
   });
 });
 
@@ -968,7 +1048,19 @@ describe('selectStandings', () => {
       totalScore: 3,
       isSelf: true,
       status: 'player',
+      delta: 3,
+      previousRank: 1,
     });
+    expect(
+      selectStandings(final, id(1)).map((entry) => [
+        entry.playerId,
+        entry.delta,
+      ]),
+    ).toEqual([
+      [id(1), 6],
+      [id(2), 3],
+      [id(3), 2],
+    ]);
     let tied = votingState();
     tied = command(tied, id(4), { type: 'LEAVE' }, 200000);
     tied = fireDeadline(tied, 236203);
