@@ -7,8 +7,8 @@ import {
   Time,
   VideoId,
   VideoIds,
-} from './primitives';
-import { RequiredSettingsSchema } from './settings';
+} from './primitives.js';
+import { RequiredSettingsSchema } from './settings.js';
 
 export const ClientActionSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('JOIN'), nickname: Nickname }),

@@ -12,8 +12,8 @@ import {
   VideoIds,
   unique,
   nicknameKey,
-} from './primitives';
-import { RequiredSettingsSchema } from './settings';
+} from './primitives.js';
+import { RequiredSettingsSchema } from './settings.js';
 
 export const PlayerSchema = z.strictObject({
   id: Id,

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { ClientActionSchema } from './actions';
-import { GameStateSchema } from './game';
-import { Id, Int, RoomCode, Thumbnail, Time } from './primitives';
+import { ClientActionSchema } from './actions.js';
+import { GameStateSchema } from './game.js';
+import { Id, Int, RoomCode, Thumbnail, Time } from './primitives.js';
 
 export const RejectionSchema = z.enum([
   'INVALID',

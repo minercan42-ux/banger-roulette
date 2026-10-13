@@ -1,5 +1,5 @@
-import { VideoId } from '../src/shared/primitives';
-import { OEmbedResponseSchema } from '../src/shared/protocol';
+import { VideoId } from '../src/shared/primitives.js';
+import { OEmbedResponseSchema } from '../src/shared/protocol.js';
 
 /**
  * Fixed upstream endpoint. The client can never influence the target beyond the
