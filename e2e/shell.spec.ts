@@ -20,17 +20,15 @@ async function visibleShellText(page: Page): Promise<string> {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-async function headingText(page: Page): Promise<string> {
-  return page.getByRole('heading', { level: 1 }).innerText();
-}
-
+/**
+ * The bilingual shell contract that survives every milestone: the product name
+ * stays visible, the language switch keeps its stable test id, the document
+ * language reflects the selection and the title never localizes.
+ */
 async function expectShell(page: Page, lang: string): Promise<void> {
-  // The product name is identical in every locale and must stay visible.
   await expect(
-    page.locator('body').getByText(TITLE, { exact: true }),
+    page.locator('body').getByText(TITLE, { exact: true }).first(),
   ).toBeVisible();
-  // The level-1 heading carries the language-specific shell copy.
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   await expect(page.getByTestId('language-switch')).toHaveValue(lang);
   await expect(page.locator('html')).toHaveAttribute('lang', lang);
   await expect(page).toHaveTitle(TITLE);
@@ -77,15 +75,14 @@ test('three isolated contexts render the bilingual shell', async ({
     await expectShell(frPage, 'de');
 
     // The visible shell copy is localized; the fallback matches German.
-    const deHeading = await headingText(dePage);
-    const enHeading = await headingText(enPage);
-    const frHeading = await headingText(frPage);
-    expect(deHeading.trim()).not.toBe('');
-    expect(enHeading.trim()).not.toBe('');
-    expect(deHeading.trim()).not.toBe(enHeading.trim());
-    expect(frHeading.trim()).toBe(deHeading.trim());
-    // An empty M0 shell offers no playable controls.
-    expect(await dePage.getByRole('button').count()).toBe(0);
+    const deText = await visibleShellText(dePage);
+    const enText = await visibleShellText(enPage);
+    const frText = await visibleShellText(frPage);
+    expect(deText.trim()).not.toBe('');
+    expect(enText.trim()).not.toBe('');
+    expect(deText).not.toBe(enText);
+    // The unsupported locale renders exactly the German fallback shell.
+    expect(frText).toBe(deText);
 
     const deSelect = dePage.getByTestId('language-switch');
     const enSelect = enPage.getByTestId('language-switch');
@@ -101,13 +98,6 @@ test('three isolated contexts render the bilingual shell', async ({
     expect(deLabel).toBeTruthy();
     expect(enLabel).toBeTruthy();
     expect(deLabel).not.toBe(enLabel);
-
-    const deText = await visibleShellText(dePage);
-    const enText = await visibleShellText(enPage);
-    const frText = await visibleShellText(frPage);
-    expect(deText).not.toBe(enText);
-    // The unsupported locale renders exactly the German fallback shell.
-    expect(frText).toBe(deText);
 
     expect(deErrors).toEqual([]);
     expect(enErrors).toEqual([]);
@@ -202,7 +192,7 @@ test('shell has no horizontal overflow at 360px', async ({ browser }) => {
   const errors = trackErrors(page);
   try {
     await page.goto('/');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expectShell(page, 'de');
 
     const widths = await page.evaluate(() => ({
       innerWidth: window.innerWidth,
@@ -218,7 +208,7 @@ test('shell has no horizontal overflow at 360px', async ({ browser }) => {
   }
 });
 
-test('shell renders under a reduced motion preference', async ({ browser }) => {
+test('shell honours a reduced motion preference', async ({ browser }) => {
   const context = await browser.newContext({
     locale: 'de-DE',
     reducedMotion: 'reduce',
@@ -229,10 +219,22 @@ test('shell renders under a reduced motion preference', async ({ browser }) => {
     await page.goto('/');
     await expectShell(page, 'de');
 
-    await expect(page.getByRole('heading', { level: 1 })).toHaveCSS(
-      'animation-name',
-      'none',
+    await expect
+      .poll(async () =>
+        page.evaluate(
+          () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        ),
+      )
+      .toBe(true);
+
+    // With reduced motion requested no element may run a CSS animation.
+    const running = await page.evaluate(
+      () =>
+        document
+          .getAnimations()
+          .filter((animation) => animation.playState === 'running').length,
     );
+    expect(running).toBe(0);
 
     expect(errors).toEqual([]);
   } finally {

@@ -1333,13 +1333,16 @@ describe('pause and quorum', () => {
 });
 
 describe('host change', () => {
+  const hostlessPresence = [id(102), id(103), id(104)];
+  const fullPresence = [id(101), id(102), id(103), id(104)];
+
   function hostless(): GameState {
-    const state = presence(startedGame(), 2000, [id(102), id(103), id(104)]);
+    const state = presence(startedGame(), 2000, hostlessPresence);
     expect(state.players[id(1)]).toMatchObject({
       status: 'player',
       connected: false,
     });
-    expect(electHost(state)).toBe(id(2));
+    expect(electHost(state, hostlessPresence)).toBe(id(2));
     return state;
   }
 
@@ -1351,6 +1354,7 @@ describe('host change', () => {
       hostId: id(2),
       hostEpoch: 1,
       hostBaseVersion: state.stateVersion,
+      connectionIds: hostlessPresence,
     });
     expect(changed).toMatchObject({
       hostId: id(2),
@@ -1363,6 +1367,113 @@ describe('host change', () => {
     expect(validationError(changed)).toBeNull();
   });
 
+  it('elects a genuinely present snapshot-disconnected candidate without touching the base', () => {
+    // Snapshot still flags the absent host connected, while the genuinely
+    // present candidate id(2) is flagged disconnected. Migration must follow
+    // the authoritative presence list and adopt the unmodified base.
+    const state = presence(startedGame(), 2000, [id(101), id(103), id(104)]);
+    expect(state.players[id(1)]).toMatchObject({
+      status: 'player',
+      connected: true,
+    });
+    expect(state.players[id(2)]).toMatchObject({
+      status: 'player',
+      connected: false,
+    });
+    const present = [id(102), id(103), id(104)];
+    expect(electHost(state, present)).toBe(id(2));
+    const changed = reducer(state, {
+      type: 'HOST_CHANGED',
+      at: 2001,
+      hostId: id(2),
+      hostEpoch: 1,
+      hostBaseVersion: state.stateVersion,
+      connectionIds: present,
+    });
+    expect(changed).toMatchObject({
+      hostId: id(2),
+      hostEpoch: 1,
+      hostBaseVersion: state.stateVersion,
+      stateVersion: state.stateVersion + 1,
+    });
+    // Only the host lineage changes: the stale connected:true host record and
+    // every other field stay byte-identical.
+    expect(changed.players).toEqual(state.players);
+    expect(changed.players[id(1)].connected).toBe(true);
+    expect(changed.phase).toEqual(state.phase);
+    expect(changed.round).toBe(state.round);
+    expect(changed.results).toEqual(state.results);
+    expect(changed.pause).toEqual(state.pause);
+    expect(validationError(changed)).toBeNull();
+  });
+
+  it('no-ops on absent and duplicated presence candidates', () => {
+    const state = presence(startedGame(), 2000, [id(101), id(103), id(104)]);
+    expect(
+      reducer(state, {
+        type: 'HOST_CHANGED',
+        at: 2001,
+        hostId: id(1),
+        hostEpoch: 1,
+        hostBaseVersion: state.stateVersion,
+        connectionIds: [id(102), id(103), id(104)],
+      }),
+    ).toBe(state);
+    expect(
+      reducer(state, {
+        type: 'HOST_CHANGED',
+        at: 2001,
+        hostId: id(2),
+        hostEpoch: 1,
+        hostBaseVersion: state.stateVersion,
+        connectionIds: [id(103), id(104)],
+      }),
+    ).toBe(state);
+    expect(
+      reducer(state, {
+        type: 'HOST_CHANGED',
+        at: 2001,
+        hostId: id(2),
+        hostEpoch: 1,
+        hostBaseVersion: state.stateVersion,
+        connectionIds: [id(102), id(102)],
+      }),
+    ).toBe(state);
+  });
+
+  it('never elects a kicked or left candidate', () => {
+    const base = startedGame();
+    const kicked = command(
+      base,
+      id(1),
+      { type: 'KICK', playerId: id(2) },
+      2000,
+    );
+    expect(kicked.players[id(2)].status).toBe('kicked');
+    expect(
+      reducer(kicked, {
+        type: 'HOST_CHANGED',
+        at: 2001,
+        hostId: id(2),
+        hostEpoch: 1,
+        hostBaseVersion: kicked.stateVersion,
+        connectionIds: fullPresence,
+      }),
+    ).toBe(kicked);
+    const left = command(base, id(2), { type: 'LEAVE' }, 2000);
+    expect(left.players[id(2)].status).toBe('left');
+    expect(
+      reducer(left, {
+        type: 'HOST_CHANGED',
+        at: 2001,
+        hostId: id(2),
+        hostEpoch: 1,
+        hostBaseVersion: left.stateVersion,
+        connectionIds: fullPresence,
+      }),
+    ).toBe(left);
+  });
+
   it('rejects a non-elected candidate, a stale epoch and a wrong base version', () => {
     const state = hostless();
     expect(
@@ -1372,6 +1483,7 @@ describe('host change', () => {
         hostId: id(3),
         hostEpoch: 1,
         hostBaseVersion: state.stateVersion,
+        connectionIds: hostlessPresence,
       }),
     ).toBe(state);
     expect(
@@ -1381,6 +1493,7 @@ describe('host change', () => {
         hostId: id(2),
         hostEpoch: 0,
         hostBaseVersion: state.stateVersion,
+        connectionIds: hostlessPresence,
       }),
     ).toBe(state);
     expect(
@@ -1390,6 +1503,7 @@ describe('host change', () => {
         hostId: id(2),
         hostEpoch: 2,
         hostBaseVersion: state.stateVersion,
+        connectionIds: hostlessPresence,
       }),
     ).toBe(state);
     expect(
@@ -1399,6 +1513,7 @@ describe('host change', () => {
         hostId: id(2),
         hostEpoch: 1,
         hostBaseVersion: state.stateVersion - 1,
+        connectionIds: hostlessPresence,
       }),
     ).toBe(state);
   });
@@ -1413,13 +1528,14 @@ describe('host change', () => {
     );
     const phase = state.phase;
     const score = state.players[id(1)].totalScore;
-    state = presence(state, 200100, [id(102), id(103), id(104)]);
+    state = presence(state, 200100, hostlessPresence);
     const changed = reducer(state, {
       type: 'HOST_CHANGED',
       at: 200200,
       hostId: id(2),
       hostEpoch: 1,
       hostBaseVersion: state.stateVersion,
+      connectionIds: hostlessPresence,
     });
     expect(changed.hostId).toBe(id(2));
     expect(changed.phase).toEqual(phase);
@@ -1591,7 +1707,7 @@ describe('final phase and rematch', () => {
       .filter((player) => player.connected && player.id !== revealed.hostId)
       .map((player) => player.connectionId);
     const synced = presence(revealed, 160000, peers);
-    const candidate = electHost(synced);
+    const candidate = electHost(synced, peers);
     expect(candidate).not.toBeNull();
     const migrated = reducer(synced, {
       type: 'HOST_CHANGED',
@@ -1599,6 +1715,7 @@ describe('final phase and rematch', () => {
       hostId: candidate ?? '',
       hostEpoch: 1,
       hostBaseVersion: synced.stateVersion,
+      connectionIds: peers,
     });
     expect(migrated.players[id(1)].totalScore).toBe(score);
     expect(migrated.results).toHaveLength(1);
@@ -1643,7 +1760,7 @@ describe('migration in every phase', () => {
         .filter((player) => player.connected && player.id !== state.hostId)
         .map((player) => player.connectionId);
       const synced = presence(state, 300000, peers);
-      const candidate = electHost(synced);
+      const candidate = electHost(synced, peers);
       expect(candidate).not.toBeNull();
       expect(candidate).not.toBe(state.hostId);
       const changed = reducer(synced, {
@@ -1652,6 +1769,7 @@ describe('migration in every phase', () => {
         hostId: candidate ?? '',
         hostEpoch: 1,
         hostBaseVersion: synced.stateVersion,
+        connectionIds: peers,
       });
       expect(changed.hostId).toBe(candidate);
       expect(changed.hostEpoch).toBe(1);
@@ -1978,7 +2096,7 @@ describe('host election', () => {
   it('returns null when no candidate survives and host changes then noop', () => {
     let state = startedGame();
     state = presence(state, 2000, []);
-    expect(electHost(state)).toBeNull();
+    expect(electHost(state, [])).toBeNull();
     expect(state.pause).toEqual({ at: 2000, reason: 'quorum' });
     expect(
       reducer(state, {
@@ -1987,6 +2105,7 @@ describe('host election', () => {
         hostId: id(2),
         hostEpoch: 1,
         hostBaseVersion: state.stateVersion,
+        connectionIds: [],
       }),
     ).toBe(state);
     expect(
@@ -1996,6 +2115,7 @@ describe('host election', () => {
         hostId: id(1),
         hostEpoch: 1,
         hostBaseVersion: state.stateVersion,
+        connectionIds: [],
       }),
     ).toBe(state);
     expect(state.hostId).toBe(id(1));
@@ -2009,9 +2129,9 @@ describe('host election', () => {
       { type: 'JOIN', nickname: 'Late' },
       { actorId: id(9), connectionId: id(109), at: 190000 },
     );
-    expect(electHost(state)).toBe(id(1));
+    expect(electHost(state, allConnections(state))).toBe(id(1));
     const spectatorOnly = presence(state, 195000, [id(109)]);
-    expect(electHost(spectatorOnly)).toBe(id(9));
+    expect(electHost(spectatorOnly, [id(109)])).toBe(id(9));
     expect(validationError(spectatorOnly)).toBeNull();
   });
 
@@ -2030,7 +2150,7 @@ describe('host election', () => {
       { actorId: lowerId, connectionId: id(502), at: 0 },
     );
     const synced = presence(state, 100, [id(501), id(502)]);
-    expect(electHost(synced)).toBe(upperId);
+    expect(electHost(synced, [id(501), id(502)])).toBe(upperId);
     expect(validationError(synced)).toBeNull();
   });
 });

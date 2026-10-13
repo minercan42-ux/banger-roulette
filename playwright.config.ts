@@ -5,9 +5,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure' },
   webServer: {
-    command: 'pnpm dev --port 4173',
+    command: 'pnpm exec vite --config e2e/vite.config.ts',
     url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 });

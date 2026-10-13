@@ -1,23 +1,23 @@
 # Approved defaults and outstanding gates
 
-The section-13 M0/M1 plan was approved. These defaults resolve specification gaps, not external API guarantees.
+The section-13 M0/M1 plan was approved; the user subsequently authorized M2. These defaults resolve specification gaps, not external API guarantees.
 
-| Area               | Approved default                                                                                                                                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Room codes         | ABCDEFGHJKLMNPQRSTUVWXYZ; after SUBSCRIBED and Presence sync, roomId collision tie-break; no atomic reservation guarantee.                                                                                           |
-| Identity           | localStorage clientId; per-tab connectionId; latest accepted JOIN binds the writable connection. Trim/NFKC/case-insensitive nickname uniqueness; reconnect keeps original identity and nickname.                     |
-| Quorum             | Freeze participants at GENRE_SPIN; late joins spectate until next round. Ten connected clients including spectators. Keep accepted submissions/votes/flags after disconnect or kick.                                 |
-| Pause              | Orthogonal pause; resume shifts all phase timestamps by elapsed pause. Host forceBelowMinimum survives until further disconnect or next round.                                                                       |
-| Submission         | Finish irreversible within round; changing videoId receives a new acceptedOrder. First remaining duplicate submission determines media.                                                                              |
-| Scoring            | Partial ranking k gives k..1. Strict majority over frozen participants minus owners. Eligible highest Borda gets +2; all ties. halfCeil = ceil((Borda+bonus)/2) + full penalty. Zero/one song: no points or penalty. |
-| Timing             | Spin 3s/fixed 1s; every playback 3s pre-roll. Reveal worst to best, 2.5s/song +5s scoreboard; zero songs 5s notice. Host may advance nonpaused timed phases.                                                         |
-| Validation/player  | Real preview playback; errors 2/100/101/150 block, 5/153/unknown remain unproven/environment errors. Autoplay blocked resets local sound status without blocking the round. M3/M4 implementation only.               |
-| oEmbed/privacy     | M3 same-origin proxy for validated videoId; never trust supplied HTML or arbitrary URLs. nocookie is not tracking-free; require transparent embedding consent before loading YouTube.                                |
-| Migration          | joinedAt/clientId election, hostEpoch, 250ms replica collection, highest complete old snapshot; no partition-consensus claim. One designated replica ACK. No ticker messages.                                        |
-| Snapshot transport | M2 direct <=192KiB, otherwise 48KiB UTF8 pieces in Base64, <=128 parts/6MiB, atomic validation/reassembly, 5s timeout. No codec in engine.                                                                           |
-| Rematch            | Preserve settings, gameNumber and connected clients; reset scores/results/round/command cache. Keep kicked IDs as room bans. Dense shared final ranks.                                                               |
-| Tooling            | Node24, pnpm10 exact patch. TypeScript6.0.3 chosen instead of current7 because typescript-eslint8.71.2 supports <6.1; compatibility takes precedence over unsupported latest.                                        |
-| CSP                | M0 connect-src is self-only because the shell has no Realtime connection. Add exact project-ref Supabase HTTPS/WSS origins in M2; no wildcard and no .env.local read.                                                |
+| Area               | Approved default                                                                                                                                                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Room codes         | ABCDEFGHJKLMNPQRSTUVWXYZ; after SUBSCRIBED and Presence sync, roomId collision tie-break; no atomic reservation guarantee.                                                                                                                   |
+| Identity           | localStorage clientId; per-tab connectionId; latest accepted JOIN binds the writable connection. Trim/NFKC/case-insensitive nickname uniqueness; reconnect keeps original identity and nickname.                                             |
+| Quorum             | Freeze participants at GENRE_SPIN; late joins spectate until next round. Ten connected clients including spectators. Keep accepted submissions/votes/flags after disconnect or kick.                                                         |
+| Pause              | Orthogonal pause; resume shifts all phase timestamps by elapsed pause. Host forceBelowMinimum survives until further disconnect or next round.                                                                                               |
+| Submission         | Finish irreversible within round; changing videoId receives a new acceptedOrder. First remaining duplicate submission determines media.                                                                                                      |
+| Scoring            | Partial ranking k gives k..1. Strict majority over frozen participants minus owners. Eligible highest Borda gets +2; all ties. halfCeil = ceil((Borda+bonus)/2) + full penalty. Zero/one song: no points or penalty.                         |
+| Timing             | Spin 3s/fixed 1s; every playback 3s pre-roll. Reveal worst to best, 2.5s/song +5s scoreboard; zero songs 5s notice. Host may advance nonpaused timed phases.                                                                                 |
+| Validation/player  | Real preview playback; errors 2/100/101/150 block, 5/153/unknown remain unproven/environment errors. Autoplay blocked resets local sound status without blocking the round. M3/M4 implementation only.                                       |
+| oEmbed/privacy     | M3 same-origin proxy for validated videoId; never trust supplied HTML or arbitrary URLs. nocookie is not tracking-free; require transparent embedding consent before loading YouTube.                                                        |
+| Migration          | joinedAt/clientId election, hostEpoch, 250ms replica collection, highest complete old snapshot; no partition-consensus claim. One designated replica ACK. No ticker messages.                                                                |
+| Snapshot transport | M2 direct <=192KiB, otherwise 48KiB UTF8 pieces in Base64, <=128 parts/6MiB, atomic validation/reassembly. User explicitly selected 5s without new unique valid progress, not 5s total; duplicates do not extend expiry. No codec in engine. |
+| Rematch            | Preserve settings, gameNumber and connected clients; reset scores/results/round/command cache. Keep kicked IDs as room bans. Dense shared final ranks.                                                                                       |
+| Tooling            | Node24, pnpm10 exact patch. TypeScript6.0.3 chosen instead of current7 because typescript-eslint8.71.2 supports <6.1; compatibility takes precedence over unsupported latest.                                                                |
+| CSP                | M2 permits self plus exact HTTPS/WSS origins for xbslarvipodajdvaxrwe.supabase.co, observed from the real browser SDK connection without reading `.env.local`. No wildcard; a project change also needs header changes.                      |
 
 ## User-only gates
 
@@ -37,3 +37,12 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - Zero-ballot nondegenerate rounds have a Borda-0 tie: every eligible song receives the approved +2 tie bonus. A positive Borda threshold would be a separate product change.
 - Ten admitted active identities is a hard cap even on reconnect. Already admitted present bindings are never evicted automatically; an active identity may rebind a tab without another slot. Inactive JOIN returns `ROOM_FULL` while full; Presence removes absent bindings first and recovers retained inactive bindings in joinedAt/code-unit order only into free slots. Overflow stays disconnected with score/drafts/identity retained until capacity frees. Left/kicked identities are not auto-restored by Presence.
 - UI write hints and rank/flag target lists require the local `viewerConnectionId`, not just clientId. Stale tabs remain read-only after a real rebind while their own stored choices stay readable. A completed voter cannot edit rankings or flags.
+
+## M2 integration decisions
+
+- `HOST_CHANGED` requires full Presence connection IDs and applies to the unmodified adopted snapshot. A separate Presence mutation follows under the new host; stale connected flags do not alter the chosen migration base.
+- `HOST_HANDOFF` explicitly moves the current host's write connection to its latest accepted tab at the same epoch. The old confirmed connection announces the new binding; peers validate against the old binding, then accept ordinary snapshots from the new one. No fake sender or replica alias.
+- Reconnect discovers a retained nickname from the complete live snapshot; no local nickname/game persistence. An unknown identity must enter a nickname.
+- `ViewerPermissions.canWrite` exposes the bound tab's phase-independent write permission for Sound and read-only lobby controls.
+- Five-second snapshot inactivity timeout was explicitly approved to keep the full 128-part/6-MiB codec bound compatible with fanout-aware pacing. This does not change AK-4/5 or promise a project-wide quota guarantee. See ADR-002.
+- M2 Sound consent unlocks Web Audio only. Real YouTube preview validation/autoplay is M3/M4; the lobby does not expose a misleading game-start control before gameplay screens exist.

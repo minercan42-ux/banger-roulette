@@ -113,6 +113,8 @@ export interface ViewerChoices {
 }
 
 export interface ViewerPermissions {
+  /** The viewer holds the active write connection, regardless of phase/role. */
+  canWrite: boolean;
   isHost: boolean;
   isParticipant: boolean;
   canStartGame: boolean;
@@ -440,6 +442,7 @@ export function selectViewerPermissions(
     !access.paused &&
     !round.votingDoneIds.includes(viewerId);
   return {
+    canWrite: access.bound,
     isHost: access.isHost,
     isParticipant: access.member,
     canStartGame: access.isHost && phase === 'LOBBY',
@@ -525,6 +528,7 @@ interface ViewerAccess {
    * participant flag. Older tabs of the same viewer stay read-only.
    */
   participant: boolean;
+  bound: boolean;
   isHost: boolean;
   paused: boolean;
   phase: Phase['type'];
@@ -546,6 +550,7 @@ function viewerAccess(
   return {
     round,
     member,
+    bound,
     participant: bound && member,
     isHost: bound && viewerId === state.hostId,
     paused: state.pause !== null,

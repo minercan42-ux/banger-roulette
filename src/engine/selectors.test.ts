@@ -572,25 +572,14 @@ describe('selectViewerPermissions', () => {
       canFinishVoting: false,
       canSetGenreFail: false,
     });
+    const unknown = selectViewerPermissions(voting, id(77), null);
+    expect(unknown.isHost).toBe(false);
+    expect(unknown.isParticipant).toBe(false);
     expect(
-      selectViewerPermissions(voting, id(77), conn(voting, id(77))),
-    ).toEqual({
-      isHost: false,
-      isParticipant: false,
-      canStartGame: false,
-      canEditSettings: false,
-      canKick: false,
-      canAdvance: false,
-      canPause: false,
-      canResume: false,
-      canEndGame: false,
-      canRematch: false,
-      canSubmit: false,
-      canFinishSubmission: false,
-      canRank: false,
-      canFinishVoting: false,
-      canSetGenreFail: false,
-    });
+      Object.entries(unknown)
+        .filter(([name]) => name.startsWith('can'))
+        .every(([, granted]) => granted === false),
+    ).toBe(true);
   });
 });
 
@@ -690,6 +679,30 @@ describe('selectReveal and selectResults', () => {
 });
 
 describe('lobby selector edges', () => {
+  it('exposes sound-write access only to the currently bound lobby tab', () => {
+    const lobby = newGame();
+    const rebound = send(
+      lobby,
+      { type: 'JOIN', nickname: 'Reconnect' },
+      { actorId: id(2), connectionId: id(777), at: 10 },
+    );
+    expect(selectViewerPermissions(rebound, id(2), id(777))).toMatchObject({
+      canWrite: true,
+      canEditSettings: false,
+    });
+    expect(selectViewerPermissions(rebound, id(2), id(102)).canWrite).toBe(
+      false,
+    );
+    expect(selectViewerPermissions(rebound, id(2), null).canWrite).toBe(false);
+    const staleSound = action(
+      rebound,
+      { type: 'SOUND_STATUS', unlocked: true },
+      { actorId: id(2), connectionId: id(102), at: 11 },
+    );
+    expect(classifyCommand(rebound, staleSound)).toBe('STALE');
+    expect(reducer(rebound, staleSound)).toBe(rebound);
+  });
+
   it('returns empty views before the first round exists', () => {
     const lobby = newGame();
     expect(selectRound(lobby, id(1))).toBeNull();
