@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-/** Bilingual, honest disclosure that M2 has no game screens or player yet. */
+/** Bilingual disclosure of completed M3 and the remaining gameplay milestones. */
 export function MilestoneNotice() {
   const { t } = useTranslation();
   return (
@@ -10,7 +10,7 @@ export function MilestoneNotice() {
     >
       <p className="font-semibold text-gold-300">{t('milestone.title')}</p>
       <p className="mt-1">{t('milestone.body')}</p>
-      <p className="mt-1">{t('milestone.noStart')}</p>
+      <p className="mt-1">{t('milestone.startHint')}</p>
     </aside>
   );
 }

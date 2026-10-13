@@ -1,3 +1,10 @@
+import type { Genre } from '../shared/primitives';
+
+/** Localized genre label; German is the fallback language (SPEC §2). */
+export function genreName(genre: Genre, language: string | undefined): string {
+  return language === 'en' ? genre.en : genre.de;
+}
+
 /** mm:ss for a non-negative millisecond duration. */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));

@@ -1,6 +1,6 @@
 # Approved defaults and outstanding gates
 
-The section-13 M0/M1 plan was approved; the user subsequently authorized M2. These defaults resolve specification gaps, not external API guarantees.
+The section-13 M0/M1 plan was approved; the user subsequently authorized M2 and continuation with M3 onward. Each milestone still uses a feature PR and requires explicit merge approval. These defaults resolve specification gaps, not external API guarantees.
 
 | Area               | Approved default                                                                                                                                                                                                                             |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -11,7 +11,7 @@ The section-13 M0/M1 plan was approved; the user subsequently authorized M2. The
 | Submission         | Finish irreversible within round; changing videoId receives a new acceptedOrder. First remaining duplicate submission determines media.                                                                                                      |
 | Scoring            | Partial ranking k gives k..1. Strict majority over frozen participants minus owners. Eligible highest Borda gets +2; all ties. halfCeil = ceil((Borda+bonus)/2) + full penalty. Zero/one song: no points or penalty.                         |
 | Timing             | Spin 3s/fixed 1s; every playback 3s pre-roll. Reveal worst to best, 2.5s/song +5s scoreboard; zero songs 5s notice. Host may advance nonpaused timed phases.                                                                                 |
-| Validation/player  | Real preview playback; errors 2/100/101/150 block, 5/153/unknown remain unproven/environment errors. Autoplay blocked resets local sound status without blocking the round. M3/M4 implementation only.                                       |
+| Validation/player  | M3 requires real preview playback for the entered video; errors 2/100/101/150 block, 5/153/unknown remain unconfirmed/environment errors. Lobby Web Audio consent is not YouTube autoplay proof. Synchronized autoplay recovery remains M4.  |
 | oEmbed/privacy     | M3 same-origin proxy for validated videoId; never trust supplied HTML or arbitrary URLs. nocookie is not tracking-free; require transparent embedding consent before loading YouTube.                                                        |
 | Migration          | joinedAt/clientId election, hostEpoch, 250ms replica collection, highest complete old snapshot; no partition-consensus claim. One designated replica ACK. No ticker messages.                                                                |
 | Snapshot transport | M2 direct <=192KiB, otherwise 48KiB UTF8 pieces in Base64, <=128 parts/6MiB, atomic validation/reassembly. User explicitly selected 5s without new unique valid progress, not 5s total; duplicates do not extend expiry. No codec in engine. |
@@ -46,3 +46,11 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - `ViewerPermissions.canWrite` exposes the bound tab's phase-independent write permission for Sound and read-only lobby controls. The read-only hint describes the authorization requirement without assuming another tab is the cause; removed identities also remain read-only, with their status visible in the roster.
 - Five-second snapshot inactivity timeout was explicitly approved to keep the full 128-part/6-MiB codec bound compatible with fanout-aware pacing. This does not change AK-4/5 or promise a project-wide quota guarantee. See ADR-002.
 - M2 Sound consent unlocks Web Audio only. Real YouTube preview validation/autoplay is M3/M4; the lobby does not expose a misleading game-start control before gameplay screens exist.
+
+## M3 integration decisions and evidence
+
+- Separate per-tab embedding checkbox gates metadata, scripts, frames and thumbnails. It is not stored; reload retains accepted media from the host snapshot only. Unsaved edits are not persisted.
+- `t=` accepts whole seconds or h/m/s components; malformed or unsafe-integer timestamps reject the link instead of silently guessing. Start selection remains within the actual video length, and the engine bounds the clip's end.
+- The three-second first PLAYBACK preroll presents anonymous-safe linked songs without inserting a new engine phase or delaying authoritative deadlines. Single-song rounds use their existing REVEAL phase and zero-score rule. Synchronized playback is still M4.
+- Real YouTube/oEmbed runtime smoke used three actual UI/session/engine clients over the test transport: official video M7lc1UVf-VE played, duration 1343 seconds, t=42 restored, +1 saved at 43, pause destroyed the iframe and disabled saving after resume, Done removed the editor, DE switched without reload and 360px had no horizontal overflow. Roulette and player screenshots were inspected; no browser runtime errors were recorded. This is not a live Supabase timing claim.
+- A separate local production-entry Supabase smoke created a room but both peer JOIN attempts returned ROOM_NOT_FOUND. Cause was not established; no M2 behavior or timing guard was weakened. Preview/production live-realtime acceptance must be observed separately before a release claim.
