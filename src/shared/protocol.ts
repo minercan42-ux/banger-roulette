@@ -119,7 +119,9 @@ export const NetworkEventSchema = z
               p.status !== 'left',
           )
           .sort(
-            (a, b) => a.joinedAt - b.joinedAt || a.id.localeCompare(b.id),
+            (a, b) =>
+              a.joinedAt - b.joinedAt ||
+              (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
           )[0];
         if (body.ackClientId !== (replica?.id ?? null))
           invalid('Invalid designated replica');

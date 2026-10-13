@@ -2,7 +2,7 @@
 
 Browser party game: each round a genre is spun on a roulette wheel, every player submits a YouTube link to their biggest banger, everyone listens to the snippets in sync, ranks the others and scores points. No login, casino vibe, German and English UI.
 
-Status: M0 implemented and verified locally. Vercel Preview, hosted CI and merge approval are release gates. No gameplay, Realtime connection, YouTube player or API Functions yet. M1 starts after the M0 gate.
+Status: M0 is merged and deployed at [banger-roulette.vercel.app](https://banger-roulette.vercel.app/), with green hosted CI and actual production smoke acceptance. The user approved production-first verification for PR #2. M1's pure engine, scoring and filtered selectors are implemented on the engine feature branch, pending release review/CI and separate merge approval. The deployed shell is not a playable game; Realtime, YouTube player, gameplay UI and API Functions are later milestones.
 
 - Product and architecture spec: [SPEC.md](SPEC.md)
 - Rules for coding agents: [AGENTS.md](AGENTS.md)

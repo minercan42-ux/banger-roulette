@@ -35,6 +35,11 @@ function fixture(): GameState {
       },
     },
     genrePool: [genre],
+    rouletteGenrePool: Array.from({ length: 30 }, (_, index) => ({
+      id: `catalogue-${index}`,
+      de: `Genre ${index}`,
+      en: `Genre ${index}`,
+    })),
     remainingGenreIds: ['rock'],
     rngState: 1,
     phase: { type: 'LOBBY' },
@@ -151,6 +156,30 @@ describe('wire contracts', () => {
       20,
     );
   });
+  it.each([30, 50])(
+    'accepts a matching roulette catalogue with %s genres',
+    (count) => {
+      const state = fixture();
+      state.rouletteGenrePool = Array.from({ length: count }, (_, index) => ({
+        id: `roulette-${index}`,
+        de: `Genre ${index}`,
+        en: `Genre ${index}`,
+      }));
+      state.settings.genre = { mode: 'roulette' };
+      state.genrePool = state.rouletteGenrePool.map((item) => ({ ...item }));
+      state.remainingGenreIds = state.genrePool.map((item) => item.id);
+      expect(GameStateSchema.safeParse(state).success).toBe(true);
+    },
+  );
+  it('rejects catalogues exceeding fifty genres', () => {
+    const state = fixture();
+    state.rouletteGenrePool = Array.from({ length: 51 }, (_, index) => ({
+      id: `roulette-${index}`,
+      de: `Genre ${index}`,
+      en: `Genre ${index}`,
+    }));
+    expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
   it.each([
     'not-a-url',
     'http://i.ytimg.com/a.jpg',
@@ -181,6 +210,29 @@ describe('wire contracts', () => {
       },
     ],
     [
+      'duplicate roulette catalogue',
+      (s: GameState) => {
+        s.rouletteGenrePool[1] = { ...s.rouletteGenrePool[0]! };
+      },
+    ],
+    [
+      'short roulette catalogue',
+      (s: GameState) => {
+        s.rouletteGenrePool.pop();
+      },
+    ],
+    [
+      'mismatched roulette active pool',
+      (s: GameState) => {
+        s.settings.genre = { mode: 'roulette' };
+        s.genrePool = s.rouletteGenrePool.map((item) => ({
+          ...item,
+          id: `other-${item.id}`,
+        }));
+        s.remainingGenreIds = s.genrePool.map((item) => item.id);
+      },
+    ],
+    [
       'paused lobby',
       (s: GameState) => {
         s.pause = { at: 0, reason: 'host' };
@@ -196,6 +248,12 @@ describe('wire contracts', () => {
     const state = fixture();
     mutate(state);
     expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
+  it('requires the retained catalogue on wire snapshots', () => {
+    expect(
+      GameStateSchema.safeParse({ ...fixture(), rouletteGenrePool: undefined })
+        .success,
+    ).toBe(false);
   });
   it.each([
     [
@@ -318,6 +376,42 @@ describe('wire contracts', () => {
         body: { type: 'STATE_REQUEST', knownVersion: null },
       }).success,
     ).toBe(true);
+  });
+  it('uses locale-independent code-unit ordering for replica ties', () => {
+    const state = fixture();
+    const upper = '00000000-0000-4000-8000-00000000000B';
+    const lower = '00000000-0000-4000-8000-00000000000a';
+    state.players[upper] = {
+      ...state.players[a]!,
+      id: upper,
+      connectionId: '00000000-0000-4000-8000-000000000004',
+      nickname: 'Upper',
+      joinedAt: 1,
+    };
+    state.players[lower] = {
+      ...state.players[a]!,
+      id: lower,
+      connectionId: '00000000-0000-4000-8000-000000000005',
+      nickname: 'Lower',
+      joinedAt: 1,
+    };
+    const event = {
+      protocolVersion: 1,
+      roomCode: state.roomCode,
+      roomId,
+      senderId: a,
+      connectionId: b,
+      hostEpoch: 0,
+      sentAt: 1,
+      body: { type: 'SNAPSHOT', recipientId: null, ackClientId: upper, state },
+    };
+    expect(NetworkEventSchema.safeParse(event).success).toBe(true);
+    expect(
+      NetworkEventSchema.safeParse({
+        ...event,
+        body: { ...event.body, ackClientId: lower },
+      }).success,
+    ).toBe(false);
   });
   it('rejects invalid fragment indices and unsupported protocol versions', () => {
     const envelope = {

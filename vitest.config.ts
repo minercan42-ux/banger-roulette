@@ -5,7 +5,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/shared/**/*.ts', 'src/engine/**/*.ts'],
-      exclude: ['**/*.{test,spec}.{ts,tsx}'],
+      exclude: ['**/*.{test,spec}.{ts,tsx}', 'src/engine/fixtures.ts'],
       thresholds: { 'src/engine/**': { lines: 90 } },
     },
   },
