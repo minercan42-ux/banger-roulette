@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Stat</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-row" style="max-width: 420px; flex-wrap: nowrap">
+      <div
+        class="br-stat"
+        id="timer"
+        style="flex: 1"
+        role="timer"
+        aria-label="Restzeit"
+      >
+        <span class="br-label">Zeit</span
+        ><span class="br-stat__value" id="tv">0:14</span>
+      </div>
+      <div class="br-stat" style="flex: 1">
+        <span class="br-label">Fertig</span
+        ><span class="br-stat__value">3/5</span>
+      </div>
+      <div class="br-stat" style="flex: 1">
+        <span class="br-label">Runde</span
+        ><span class="br-stat__value">2/5</span>
+      </div>
+    </div>
+    <script>
+      var s = 14;
+      setInterval(function () {
+        s = s <= 0 ? 14 : s - 1;
+        document.getElementById('tv').textContent =
+          '0:' + String(s).padStart(2, '0');
+        document.getElementById('timer').classList.toggle('is-urgent', s <= 10);
+      }, 1000);
+    </script>
+  </body>
+</html>

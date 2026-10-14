@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Backdrop</title>
+  </head>
+  <body class="br-stage" style="padding: 0">
+    <div
+      id="bd"
+      class="br-backdrop"
+      style="
+        height: 280px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 20px;
+      "
+    >
+      <div class="br-backdrop__swirl"></div>
+      <div>
+        <p class="br-logo">BANGER<br />ROULETTE</p>
+        <p class="br-label" style="margin: 14px 0 0; color: var(--gold)">
+          Runde 2 / 5
+        </p>
+      </div>
+      <div class="br-row">
+        <button class="br-btn" id="hype">Hype!</button
+        ><span class="br-read"
+          >Beschleunigt den Wirbel kurz (Jackpot, Rundensieg).</span
+        >
+      </div>
+    </div>
+    <script>
+      var bd = document.getElementById('bd');
+      var swirl = bd.querySelector('.br-backdrop__swirl');
+      document.getElementById('hype').addEventListener('click', function () {
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        var a = swirl.getAnimations()[0];
+        bd.classList.add('is-hype');
+        if (a) a.updatePlaybackRate(8);
+        setTimeout(function () {
+          if (a) a.updatePlaybackRate(1);
+          bd.classList.remove('is-hype');
+        }, 2400);
+      });
+    </script>
+  </body>
+</html>

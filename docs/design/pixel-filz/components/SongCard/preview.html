@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>SongCard</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-hand" id="hand">
+      <button
+        class="br-card br-wobble"
+        style="--r: -6deg; animation-delay: -2s"
+        aria-label="Banger 1, verdeckt"
+      >
+        <span class="br-card__inner">
+          <span class="br-card__back"></span>
+          <span class="br-card__face br-card__face--front"></span>
+        </span>
+      </button>
+      <button
+        class="br-card br-wobble is-flipped"
+        style="--r: -1deg; animation-delay: -1s"
+        aria-label="Banger 3: Sandsturm 3000"
+      >
+        <span class="br-card__inner">
+          <span class="br-card__back"></span>
+          <span class="br-card__face br-card__face--front">
+            <span class="br-card__corner">#3</span>
+            <span class="br-card__mid"
+              ><span
+                class="br-card__thumb"
+                style="
+                  display: block;
+                  background: repeating-linear-gradient(
+                    45deg,
+                    var(--swirl-blue) 0 6px,
+                    var(--blue) 6px 12px
+                  );
+                "
+              ></span
+              ><span class="br-card__title">Sandsturm 3000</span
+              ><span class="br-card__sub">DJ Unbekannt</span></span
+            >
+            <span class="br-card__corner br-card__corner--end">#3</span>
+          </span>
+        </span>
+      </button>
+      <button
+        class="br-card br-wobble is-flipped is-selected"
+        style="--r: 5deg; animation-delay: -0.4s"
+        aria-pressed="true"
+        aria-label="Banger 5: Herzbeben, ausgewählt"
+      >
+        <span class="br-card__rank">1</span>
+        <span class="br-card__inner">
+          <span class="br-card__back"></span>
+          <span class="br-card__face br-card__face--front">
+            <span class="br-card__corner">#5</span>
+            <span class="br-card__mid"
+              ><span
+                class="br-card__thumb"
+                style="
+                  display: block;
+                  background: repeating-linear-gradient(
+                    45deg,
+                    var(--swirl-red) 0 6px,
+                    var(--red) 6px 12px
+                  );
+                "
+              ></span
+              ><span class="br-card__title">Herzbeben</span
+              ><span class="br-card__sub">Die Schlagerfreunde</span></span
+            >
+            <span class="br-card__corner br-card__corner--end">#5</span>
+          </span>
+        </span>
+      </button>
+      <button
+        class="br-card br-wobble is-flipped is-winner"
+        id="win"
+        style="--r: 9deg; animation-delay: -1.6s"
+        aria-label="Banger 7: Discofieber"
+      >
+        <span class="br-card__inner">
+          <span class="br-card__back"></span>
+          <span class="br-card__face br-card__face--front">
+            <span class="br-card__corner">#7</span>
+            <span class="br-card__mid"
+              ><span
+                class="br-card__thumb"
+                style="
+                  display: block;
+                  background: repeating-linear-gradient(
+                    45deg,
+                    var(--gold-deep) 0 6px,
+                    var(--gold) 6px 12px
+                  );
+                "
+              ></span
+              ><span class="br-card__title">Discofieber</span
+              ><span class="br-card__sub">Laser Lena</span></span
+            >
+            <span class="br-card__corner br-card__corner--end">#7</span>
+          </span>
+        </span>
+      </button>
+    </div>
+    <div class="br-row" style="justify-content: center; margin-top: 8px">
+      <button class="br-replay" id="flip">Karte 1 umdrehen</button>
+      <button class="br-replay" id="owner">Owner aufdecken</button>
+    </div>
+    <script>
+      var cards = document.querySelectorAll('.br-card');
+      document.getElementById('flip').addEventListener('click', function () {
+        var c = cards[0];
+        if (!c.querySelector('.br-card__title')) {
+          c.querySelector('.br-card__face--front').innerHTML =
+            '<span class="br-card__corner">#1</span><span class="br-card__mid"><span class="br-card__thumb" style="display:block;background:repeating-linear-gradient(45deg,var(--swirl-green) 0 6px,var(--green) 6px 12px)"></span><span class="br-card__title">Bass im Blut</span><span class="br-card__sub">MC Mettbrot</span></span><span class="br-card__corner br-card__corner--end">#1</span>';
+        }
+        c.classList.toggle('is-flipped');
+      });
+      document.getElementById('owner').addEventListener('click', function () {
+        var w = document.getElementById('win');
+        var old = w.querySelector('.br-card__owner');
+        if (old) old.remove();
+        var s = document.createElement('span');
+        s.className = 'br-card__owner';
+        s.textContent = 'Mia';
+        w.appendChild(s);
+      });
+    </script>
+  </body>
+</html>

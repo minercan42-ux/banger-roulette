@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>SpiritLinked</title>
+  </head>
+  <body class="br-stage" style="padding: 0">
+    <div class="br-backdrop" style="min-height: 370px; padding: 16px">
+      <div class="br-backdrop__swirl"></div>
+      <div
+        class="br-linked"
+        id="lk"
+        role="status"
+        aria-live="polite"
+        aria-label="Spiritually Linked"
+      ></div>
+      <div class="br-row" style="justify-content: center">
+        <button class="br-replay" id="anon">Abspielen (anonym)</button>
+        <button class="br-replay" id="named">
+          Abspielen (Reveal mit Namen)
+        </button>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var face =
+          '<span class="br-card__inner"><span class="br-card__back"></span><span class="br-card__face br-card__face--front"><span class="br-card__corner">#4</span><span class="br-card__mid"><span class="br-card__thumb" style="display:block;background:repeating-linear-gradient(45deg,var(--swirl-blue) 0 6px,var(--blue) 6px 12px)"></span><span class="br-card__title">Ein Song</span><span class="br-card__sub">Zwei Seelen</span></span><span class="br-card__corner br-card__corner--end">#4</span></span></span>';
+        function play(names) {
+          var lk = document.getElementById('lk');
+          lk.innerHTML =
+            (names
+              ? '<div class="br-linked__names br-label" style="color:var(--gold)"></div>'
+              : '') +
+            '<div class="br-card is-flipped br-linked__card br-linked__card--a">' +
+            face +
+            '</div>' +
+            '<div class="br-linked__chain"></div>' +
+            '<div class="br-card is-flipped br-linked__card br-linked__card--b">' +
+            face +
+            '</div>' +
+            '<div class="br-linked__banner">Spiritually Linked!</div>';
+          if (names)
+            lk.querySelector('.br-linked__names').textContent =
+              'DJ Horst + Mia';
+        }
+        play(false);
+        document.getElementById('anon').addEventListener('click', function () {
+          play(false);
+        });
+        document.getElementById('named').addEventListener('click', function () {
+          play(true);
+        });
+      })();
+    </script>
+  </body>
+</html>

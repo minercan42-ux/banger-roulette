@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Jackpot</title>
+  </head>
+  <body class="br-stage" style="padding: 0">
+    <div
+      class="br-backdrop"
+      id="stage"
+      style="
+        min-height: 420px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+      "
+    >
+      <div class="br-backdrop__swirl"></div>
+      <div class="br-hand" style="padding-top: 28px">
+        <div class="br-card is-flipped" id="win" style="--r: -3deg">
+          <span class="br-card__inner">
+            <span class="br-card__back"></span>
+            <span class="br-card__face br-card__face--front">
+              <span class="br-card__corner">#7</span>
+              <span class="br-card__mid"
+                ><span
+                  class="br-card__thumb"
+                  style="
+                    display: block;
+                    background: repeating-linear-gradient(
+                      45deg,
+                      var(--gold-deep) 0 6px,
+                      var(--gold) 6px 12px
+                    );
+                  "
+                ></span
+                ><span class="br-card__title">Discofieber</span
+                ><span class="br-card__sub">Laser Lena</span></span
+              >
+              <span class="br-card__corner br-card__corner--end">#7</span>
+            </span>
+          </span>
+        </div>
+      </div>
+      <button class="br-btn" id="go">Jackpot auslösen</button>
+      <div class="br-rain" id="rain"></div>
+      <div class="br-overlay" id="ov" hidden>
+        <div>
+          <div class="br-jackpot__word">JACKPOT!</div>
+          <div class="br-jackpot__sub">+2 für Mia</div>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var stage = document.getElementById('stage'),
+          win = document.getElementById('win');
+        var ov = document.getElementById('ov'),
+          rain = document.getElementById('rain');
+        var swirl = stage.querySelector('.br-backdrop__swirl');
+        var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var tones = ['', 'br-chip--blue', 'br-chip--gold'];
+        function restart(node, cls) {
+          node.classList.remove(cls);
+          void node.offsetWidth;
+          node.classList.add(cls);
+        }
+        document.getElementById('go').addEventListener('click', function () {
+          ov.hidden = true;
+          void ov.offsetWidth;
+          ov.hidden = false;
+          // re-mount overlay children so CSS animations restart
+          ov.innerHTML = ov.innerHTML;
+          win.classList.add('is-winner');
+          var o = win.querySelector('.br-card__owner');
+          if (o) o.remove();
+          var s = document.createElement('span');
+          s.className = 'br-card__owner';
+          s.textContent = 'Mia';
+          win.appendChild(s);
+          if (!reduce) {
+            restart(stage, 'br-shake');
+            stage.classList.add('is-hype');
+            var a = swirl.getAnimations()[0];
+            if (a) a.updatePlaybackRate(10);
+            rain.innerHTML = '';
+            for (var i = 0; i < 26; i++) {
+              var c = document.createElement('span');
+              c.className =
+                'br-chip ' + tones[i % 3] + (i % 4 === 0 ? ' br-chip--lg' : '');
+              c.style.left = ((i * 37) % 100) + '%';
+              c.style.setProperty('--delay', ((i * 53) % 700) + 'ms');
+              c.style.setProperty('--fall', 1100 + ((i * 71) % 700) + 'ms');
+              c.style.setProperty('--drift', ((i * 29) % 80) - 40 + 'px');
+              c.style.setProperty(
+                '--spin',
+                (360 + ((i * 47) % 360)) * (i % 2 ? 1 : -1) + 'deg',
+              );
+              rain.appendChild(c);
+            }
+            setTimeout(function () {
+              if (a) a.updatePlaybackRate(1);
+              stage.classList.remove('is-hype');
+              rain.innerHTML = '';
+            }, 2400);
+          }
+          setTimeout(function () {
+            ov.hidden = true;
+          }, 2400);
+        });
+      })();
+    </script>
+  </body>
+</html>

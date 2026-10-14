@@ -10,6 +10,7 @@ The product and architecture spec is `SPEC.md`. Read it before doing anything. I
 4. Check external APIs (YouTube IFrame API, oEmbed, Supabase Realtime, Vercel) against current official docs. Do not implement from memory.
 5. Unclear requirement: pick a sensible default, record it in `docs/OPEN_QUESTIONS.md` with the reasoning, continue. High-impact product decision: stop and ask the user.
 6. Something only the user can do (account, key, setting): stop and describe it with a concrete click path.
+7. Plans are not tasks. Never pick up, branch from, split or implement an issue labeled `plan` or `no-agent-pickup`, or anything under `docs/design/`, unless the user created a task issue for it and assigned it to you explicitly.
 
 ## Branches and commits
 - Branch names: `feat/<scope>-<short-desc>`, `fix/...`, `chore/...`, `docs/...`, `test/...` (e.g. `feat/engine-scoring`).

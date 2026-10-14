@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Field</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-row" style="align-items: flex-start">
+      <label class="br-field" style="flex: 1 1 240px">
+        <span class="br-field__label">Nickname</span>
+        <input class="br-field__input" value="DJ Horst" maxlength="20" />
+        <span class="br-field__hint">1–20 Zeichen, eindeutig im Raum.</span>
+      </label>
+      <label class="br-field is-error" id="err" style="flex: 1 1 240px">
+        <span class="br-field__label">YouTube-Link</span>
+        <input
+          class="br-field__input"
+          value="https://vimeo.com/123"
+          aria-invalid="true"
+          aria-describedby="h2"
+        />
+        <span class="br-field__hint" id="h2">Kein gültiger YouTube-Link.</span>
+      </label>
+    </div>
+    <button class="br-replay" id="again">Fehler nochmal zeigen</button>
+    <script>
+      document.getElementById('again').addEventListener('click', function () {
+        var f = document.getElementById('err');
+        f.classList.remove('is-error');
+        void f.offsetWidth;
+        f.classList.add('is-error');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixel-Filz Galerie (Plan)</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="components.css" />
+    <style>
+      body {
+        margin: 0;
+      }
+      .wrap {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: var(--space-6) var(--space-4) var(--space-12);
+      }
+      .plan {
+        background: var(--red);
+        color: var(--card-ink);
+        border-radius: var(--radius-md);
+        box-shadow: var(--press-red);
+        padding: var(--space-3) var(--space-4);
+        font: 400 15px/22px var(--font-text);
+        margin-bottom: var(--space-6);
+      }
+      h2 {
+        font: 400 30px/32px var(--font-pixel);
+        margin: var(--space-8) 0 var(--space-3);
+        color: var(--gold);
+      }
+      figure {
+        margin: 0 0 var(--space-4);
+      }
+      figcaption {
+        font: 400 16px/20px var(--font-label);
+        text-transform: uppercase;
+        color: var(--cream-muted);
+        margin-bottom: var(--space-2);
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: var(--radius-md);
+        box-shadow: var(--drop-edge);
+        background: var(--felt-950);
+      }
+    </style>
+  </head>
+  <body class="br-stage">
+    <div class="wrap">
+      <div class="plan">
+        <strong>PLAN, nicht umgesetzt.</strong> Referenz für das Redesign
+        "Pixel-Filz". Nichts hiervon wird ohne ausdrückliche Zuweisung durch
+        @minercan42-ux umgesetzt. Lokal öffnen: diese Datei direkt im Browser
+        oder <code>npx serve docs/design/pixel-filz</code>.
+      </div>
+      <iframe
+        src="components/Cover/preview.html"
+        title="Cover"
+        style="height: 288px"
+      ></iframe>
+      <div id="list"></div>
+    </div>
+    <script>
+      var groups = [
+        [
+          'Grundlagen',
+          [
+            ['Backdrop', 280],
+            ['Panel', 200],
+          ],
+        ],
+        [
+          'Aktionen',
+          [
+            ['Button', 150],
+            ['Field', 220],
+          ],
+        ],
+        [
+          'Spiel',
+          [
+            ['Badge', 110],
+            ['Chip', 170],
+            ['SongCard', 330],
+            ['GenrePlate', 170],
+            ['ScoreCombo', 190],
+            ['Stat', 130],
+            ['Progress', 120],
+            ['Leaderboard', 290],
+          ],
+        ],
+        [
+          'Animationen',
+          [
+            ['RouletteWheel', 470],
+            ['Jackpot', 420],
+            ['SpiritLinked', 370],
+            ['Motion', 250],
+          ],
+        ],
+      ];
+      var list = document.getElementById('list');
+      groups.forEach(function (g) {
+        var h = document.createElement('h2');
+        h.textContent = g[0];
+        list.appendChild(h);
+        g[1].forEach(function (c) {
+          var f = document.createElement('figure');
+          var cap = document.createElement('figcaption');
+          cap.textContent = c[0];
+          var fr = document.createElement('iframe');
+          fr.src = 'components/' + c[0] + '/preview.html';
+          fr.title = c[0];
+          fr.style.height = c[1] + 'px';
+          f.appendChild(cap);
+          f.appendChild(fr);
+          list.appendChild(f);
+        });
+      });
+    </script>
+  </body>
+</html>

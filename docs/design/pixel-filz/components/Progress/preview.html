@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Progress</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-stack" style="max-width: 420px">
+      <div class="br-row" style="justify-content: space-between">
+        <span class="br-label">Clip 3 / 5</span
+        ><span class="br-label" id="sec">0:00 / 0:40</span>
+      </div>
+      <div
+        class="br-progress"
+        role="progressbar"
+        aria-valuemin="0"
+        aria-valuemax="40"
+        aria-valuenow="0"
+        id="bar"
+      >
+        <div class="br-progress__fill" id="fill"></div>
+      </div>
+      <div class="br-progress br-progress--blue">
+        <div class="br-progress__fill" style="width: 60%"></div>
+      </div>
+    </div>
+    <script>
+      var t = 0;
+      setInterval(function () {
+        t = t >= 40 ? 0 : t + 0.5;
+        document.getElementById('fill').style.width = (t / 40) * 100 + '%';
+        document
+          .getElementById('bar')
+          .setAttribute('aria-valuenow', Math.floor(t));
+        document.getElementById('sec').textContent =
+          '0:' + String(Math.floor(t)).padStart(2, '0') + ' / 0:40';
+      }, 250);
+    </script>
+  </body>
+</html>

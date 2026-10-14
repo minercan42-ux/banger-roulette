@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Badge</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-row">
+      <span class="br-badge br-badge--gold">Host</span>
+      <span class="br-badge br-badge--green"
+        ><span class="br-badge__dot"></span>Sound an</span
+      >
+      <span class="br-badge"><span class="br-badge__dot"></span>Sound aus</span>
+      <span class="br-badge br-badge--ghost">Zuschauer</span>
+      <span class="br-badge br-badge--red">-3 Genre-Fail</span>
+      <span class="br-badge br-badge--green is-new" id="nb">Fertig!</span>
+    </div>
+    <button class="br-replay" id="again">Pop-in nochmal</button>
+    <script>
+      document.getElementById('again').addEventListener('click', function () {
+        var b = document.getElementById('nb');
+        b.classList.remove('is-new');
+        void b.offsetWidth;
+        b.classList.add('is-new');
+      });
+    </script>
+  </body>
+</html>
