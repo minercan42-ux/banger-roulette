@@ -144,6 +144,28 @@ export interface AudibleCall {
 }
 
 /**
+ * Samples the page clock mapping once per read: `[timeOrigin, offset]`, so a
+ * recorded call's absolute server time is `timeOrigin + call.at + offset`.
+ *
+ * Every call's `at` is a `performance.now()` reading (sub-millisecond), while
+ * the session clock is a *constant* offset on `Date.now()` (1 ms granularity).
+ * Reconstructing a call's server time from a single `session.now()` sample
+ * therefore loses the fractional part of the wall clock and lands up to 1 ms
+ * *early*; that used to report the controller's legitimate at-`startAt` unmute
+ * as a pre-start leak. Anchoring on `performance.timeOrigin` keeps the exact
+ * sub-millisecond wall time and removes the bias, so no tolerance is needed.
+ */
+async function readCallClock(page: Page): Promise<readonly [number, number]> {
+  return page.evaluate(
+    () =>
+      [
+        performance.timeOrigin,
+        window.__banger!.session.now() - Date.now(),
+      ] as const,
+  );
+}
+
+/**
  * Reads the recorded low-level calls for a video and classifies the `play`/`seek`
  * calls as audible (made while the player was unmuted). The call log is shared
  * with the submission *preview* player, so the walk only starts at the clip cue
@@ -152,20 +174,19 @@ export interface AudibleCall {
  *
  * `playback.ts` mutes the player for its preroll prebuffer, so the muted
  * pre-start `play` and the rewind `seekTo` are silent, while the real start (and
- * any drift correction) is audible. Each call's server time is derived in-page
- * from `performance.now()` and the session clock, so it can be compared to the
- * absolute `startAt` without cross-clock assumptions.
+ * any drift correction) is audible. Each call's server time is reconstructed
+ * in-page from `performance.now()` and the session clock, so it can be compared
+ * to the absolute `startAt` without cross-clock assumptions.
  */
-export function audibleCalls(
+export async function audibleCalls(
   page: Page,
   videoId: string,
   type: 'play' | 'seek',
 ): Promise<AudibleCall[]> {
+  const [origin, offset] = await readCallClock(page);
   return page.evaluate(
-    ([id, kind]) => {
+    ([id, kind, origin, offset]) => {
       const calls: YouTubeCall[] = window.__bangerYtCalls ?? [];
-      const perfNow = performance.now();
-      const serverNow = window.__banger!.session.now();
       let muted = false;
       let inPlayback = false;
       const audible: { call: YouTubeCall; serverAt: number }[] = [];
@@ -182,12 +203,12 @@ export function audibleCalls(
           call.videoId === id &&
           !muted
         ) {
-          audible.push({ call, serverAt: serverNow + (call.at - perfNow) });
+          audible.push({ call, serverAt: origin + call.at + offset });
         }
       }
       return audible;
     },
-    [videoId, type] as const,
+    [videoId, type, origin, offset] as const,
   );
 }
 
@@ -205,16 +226,20 @@ export interface PreStartLeak {
  * make the old clip audible). Unlike `audibleCalls` this walks the raw
  * playing/mute state, so an "unmute while already playing" leak cannot hide
  * behind the mute/unmute bookkeeping.
+ *
+ * The call's server time is reconstructed exactly (see {@link readCallClock}):
+ * the controller only restores audio once its own `Date.now()`-based clock
+ * reaches `startAt`, so a legitimate unmute maps to `serverAt >= startAt` and
+ * only a genuine pre-start leak falls below it.
  */
-export function preStartAudioLeaks(
+export async function preStartAudioLeaks(
   page: Page,
   startAt: number,
 ): Promise<PreStartLeak[]> {
+  const [origin, offset] = await readCallClock(page);
   return page.evaluate(
-    ([plannedStart]) => {
+    ([plannedStart, origin, offset]) => {
       const calls: YouTubeCall[] = window.__bangerYtCalls ?? [];
-      const perfNow = performance.now();
-      const serverNow = window.__banger!.session.now();
       let playing = false;
       // `playback.ts` is the only caller of `cueVideoById`, so the first cue
       // marks the long-lived playback player. Everything before it belongs to
@@ -231,19 +256,19 @@ export function preStartAudioLeaks(
         } else if (call.type === 'pause' || call.type === 'cue') {
           playing = false;
         }
-        const serverAt = serverNow + (call.at - perfNow);
-        if (serverAt >= plannedStart || !playing) {
+        const at = origin + call.at + offset;
+        if (at >= plannedStart || !playing) {
           continue;
         }
         if (
           call.type === 'unmute' ||
           (call.type === 'volume' && (call.value ?? 0) > 0)
         ) {
-          leaks.push({ call, serverAt });
+          leaks.push({ call, serverAt: at });
         }
       }
       return leaks;
     },
-    [startAt] as const,
+    [startAt, origin, offset] as const,
   );
 }
