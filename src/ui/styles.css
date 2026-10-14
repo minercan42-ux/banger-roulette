@@ -13,7 +13,7 @@
  *   neon-pink/cyan  accents ONLY (rules, room code, glows). Never a surface
  *                   colour and never body text.
  *   chip-red        poker chip body (Chip.tsx)
- *   control-border  opaque gold border of every text field and select. About
+ *   control-border  opaque gold border of the frame's fields and selects. About
  *                   5:1 against felt-900 and 6:1 against the black panel, so
  *                   field bounds meet WCAG 1.4.11 (3:1 non-text contrast).
  *
@@ -29,10 +29,11 @@
  *   text-glow-neon  neon text glow; pair with `text-neon-cyan|pink`.
  *   casino-button   primary action: gold gradient, dark text, gold glow.
  *   casino-ghost    secondary action: gold outline on black.
+ *   casino-field    opaque control-border colour for text fields and selects.
  *   animate-glow-pulse  slow glow pulse for neon chips and plates.
  *
- * Fields: one global rule (see bottom) sets the control border, so no
- * component needs a translucent border class on inputs/selects.
+ * Fields: `casino-field` gives frame inputs/selects an opaque border; phase
+ * screens keep their own field styles until their Wave 2 issues.
  *
  * Focus: one global gold `:focus-visible` ring (see bottom). Do not add
  * per-component ring classes.
@@ -187,6 +188,10 @@
   }
 }
 
+@utility casino-field {
+  border-color: var(--color-control-border);
+}
+
 @utility casino-ghost {
   border: 1px solid rgb(212 175 55 / 0.55);
   border-radius: 0.5rem;
@@ -219,18 +224,6 @@ body {
     'Segoe UI',
     sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-/*
- * Field bounds: opaque gold border on text-like inputs, selects and textareas.
- * Unlayered on purpose (beats the Tailwind `border-gold-*` utilities).
- */
-:is(
-  input:not([type='checkbox'], [type='radio'], [type='range'], [type='button']),
-  select,
-  textarea
-) {
-  border-color: var(--color-control-border);
 }
 
 /*

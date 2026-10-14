@@ -263,7 +263,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             onChange={(event) =>
               update({ mode: event.target.value as GenreMode })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           >
             <option value="roulette">{t('settings.modeRoulette')}</option>
             <option value="custom">{t('settings.modeCustom')}</option>
@@ -290,7 +290,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
         </label>
 
@@ -315,7 +315,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
         </label>
 
@@ -338,7 +338,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
         </label>
 
@@ -363,7 +363,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
         </label>
 
@@ -388,7 +388,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
           <span className="text-xs text-cream-100/50">
             {t('settings.genreFailPenaltyHint')}
@@ -406,7 +406,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             onChange={(event) =>
               update({ linkedPoints: event.target.value as LinkedPoints })
             }
-            className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           >
             <option value="full">{t('settings.linkedPointsFull')}</option>
             <option value="halfCeil">
@@ -452,7 +452,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                   onChange={(event) =>
                     updateCustom(index, { de: event.target.value })
                   }
-                  className="min-w-0 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+                  className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
                 />
               </label>
               <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
@@ -468,7 +468,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                   onChange={(event) =>
                     updateCustom(index, { en: event.target.value })
                   }
-                  className="min-w-0 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+                  className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
                 />
               </label>
               <button
@@ -520,7 +520,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
               onChange={(event) =>
                 update({ fixed: { ...draft.fixed, de: event.target.value } })
               }
-              className="min-w-0 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+              className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
             />
           </label>
           <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
@@ -534,7 +534,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
               onChange={(event) =>
                 update({ fixed: { ...draft.fixed, en: event.target.value } })
               }
-              className="min-w-0 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+              className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
             />
           </label>
         </div>

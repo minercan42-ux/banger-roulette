@@ -228,20 +228,46 @@ test('Home and Lobby field borders meet 3:1 non-text contrast', async ({
   }
 });
 
-test('Page background keeps the woven felt hatch above the glow', async ({
-  browser,
-}) => {
-  const host = await newStage(browser, { nickname: 'Ada' });
+test('Page background renders a visible felt weave', async ({ browser }) => {
+  const host = await newStage(browser, {
+    nickname: 'Ada',
+    viewport: { width: 1280, height: 800 },
+    reducedMotion: 'reduce',
+  });
   try {
-    const layers = await host.page.evaluate(
-      () => getComputedStyle(document.body).backgroundImage,
-    );
-    expect(layers.indexOf('repeating-linear-gradient')).toBeGreaterThanOrEqual(
-      0,
-    );
-    expect(layers.indexOf('repeating-linear-gradient')).toBeLessThan(
-      layers.indexOf('radial-gradient'),
-    );
+    // Bare page margin left of the panel: only the body background is drawn.
+    const png = await host.page.screenshot({
+      clip: { x: 0, y: 0, width: 96, height: 96 },
+    });
+    const stddev = await host.page.evaluate(async (base64) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${base64}`;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      if (context === null) {
+        throw new Error('2d canvas unavailable');
+      }
+      context.drawImage(image, 0, 0);
+      const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+      const lumas: number[] = [];
+      for (let index = 0; index < data.length; index += 4) {
+        lumas.push(
+          0.2126 * (data[index] ?? 0) +
+            0.7152 * (data[index + 1] ?? 0) +
+            0.0722 * (data[index + 2] ?? 0),
+        );
+      }
+      const mean = lumas.reduce((sum, value) => sum + value, 0) / lumas.length;
+      const variance =
+        lumas.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+        lumas.length;
+      return Math.sqrt(variance);
+    }, png.toString('base64'));
+    // Measured 4.2 with the hatch; a smooth gradient over 96 px is near 0.
+    expect(stddev).toBeGreaterThan(1.5);
   } finally {
     await closeStages([host]);
   }

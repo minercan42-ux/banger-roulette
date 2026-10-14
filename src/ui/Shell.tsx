@@ -225,7 +225,7 @@ export function Shell({ session }: { session: GameSession }) {
               onChange={(event) => {
                 setLanguage(event.target.value as Language);
               }}
-              className="rounded-md border bg-ink-950 px-2 py-1 text-sm text-cream-100"
+              className="casino-field rounded-md border bg-ink-950 px-2 py-1 text-sm text-cream-100"
             >
               {SUPPORTED_LANGUAGES.map((code) => (
                 <option key={code} value={code}>
