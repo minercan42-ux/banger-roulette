@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "api", "e2e", "*.ts"]
+  "include": ["src", "api", "e2e", "e2e-live", "*.ts"]
 }
