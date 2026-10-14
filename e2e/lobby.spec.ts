@@ -172,6 +172,86 @@ test('three contexts create, join by code and deep link with host-only rules', a
   }
 });
 
+test('the genre-fail penalty switches off to 0 and back on to -3', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const hostContext = await browser.newContext({ locale: 'en-US' });
+  const memberContext = await browser.newContext({ locale: 'en-US' });
+  try {
+    const host = await openHarness(hostContext);
+    const code = await createRoom(host, 'Host');
+    const member = await openHarness(memberContext);
+    await joinRoom(member, code, 'Member');
+
+    const penaltyOf = async () =>
+      (await stateOf(host))?.settings.genreFailPenalty;
+    const save = async () => {
+      await host.getByTestId('settings-save').click();
+      await expect(host.getByTestId('settings-status')).toHaveAttribute(
+        'data-state',
+        'saved',
+      );
+    };
+
+    // Both controls carry the genre-fail context and the help text that
+    // explains their meaning to assistive tech (SPEC §6).
+    const toggle = host.getByRole('checkbox', {
+      name: 'Genre-fail penalty Penalty active',
+    });
+    const penalty = host.getByRole('spinbutton', {
+      name: 'Genre-fail penalty',
+    });
+    await expect(toggle).toBeChecked();
+    await expect(penalty).toBeEnabled();
+    await expect(penalty).toHaveValue('-3');
+    await expect(toggle).toHaveAccessibleDescription('−1 to −10 points.');
+    await expect(penalty).toHaveAccessibleDescription('−1 to −10 points.');
+
+    // Switched off: the number input is disabled and 0 is saved.
+    await toggle.uncheck();
+    await expect(penalty).toBeDisabled();
+    await expect(host.getByTestId('settings-genre-fail-off')).toHaveText('Off');
+    await expect(toggle).toHaveAccessibleDescription('Off');
+    await expect(penalty).toHaveAccessibleDescription('Off');
+    await save();
+    await expect.poll(penaltyOf).toBe(0);
+
+    // Everyone else reads the localized "off" instead of a bare 0.
+    await expect(member.getByTestId('settings-genre-fail-off')).toHaveText(
+      'Off',
+    );
+    const memberToggle = member.getByRole('checkbox', {
+      name: 'Genre-fail penalty Penalty active',
+    });
+    const memberPenalty = member.getByRole('spinbutton', {
+      name: 'Genre-fail penalty',
+    });
+    await expect(memberToggle).toBeDisabled();
+    await expect(memberToggle).toHaveAccessibleDescription('Off');
+    await expect(memberPenalty).toBeDisabled();
+    await expect(memberPenalty).toHaveAccessibleDescription('Off');
+
+    // Switched on again: -3 is restored and saved unchanged.
+    await toggle.check();
+    await expect(penalty).toBeEnabled();
+    await expect(penalty).toHaveValue('-3');
+    await expect(host.getByTestId('settings-genre-fail-off')).toHaveCount(0);
+    await save();
+    await expect.poll(penaltyOf).toBe(-3);
+    await expect(member.getByTestId('settings-genre-fail-penalty')).toHaveValue(
+      '-3',
+    );
+
+    // And the input still accepts a value from the documented -1..-10 range.
+    await penalty.fill('-7');
+    await save();
+    await expect.poll(penaltyOf).toBe(-7);
+  } finally {
+    await Promise.all([hostContext.close(), memberContext.close()]);
+  }
+});
+
 test('a late join after START_GAME becomes a spectator', async ({
   browser,
 }) => {
