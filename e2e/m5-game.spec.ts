@@ -441,7 +441,11 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
     await expect(flagItem(cara.page, DUP)).toHaveCount(1);
     await expect(flagItem(cara.page, OTHER)).toHaveCount(0);
 
-    // A pause keeps the songs visible read-only instead of "nothing to rank".
+    // A pause keeps the songs visible read-only instead of "nothing to rank";
+    // a voter who already finished keeps the plain done view.
+    await bob.page.getByTestId('voting-finish').click();
+    await expect(bob.page.getByTestId('voting-done')).toBeVisible();
+    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
     expect((await dispatch(host.page, { type: 'PAUSE' })).status).toBe(
       'accepted',
     );
@@ -453,6 +457,8 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
     await expect(
       poolItem(cara.page, DUP).getByTestId('voting-song-add'),
     ).toBeDisabled();
+    await expect(bob.page.getByTestId('voting-paused')).toHaveCount(0);
+    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
     expect(
       (
         await dispatch(host.page, {

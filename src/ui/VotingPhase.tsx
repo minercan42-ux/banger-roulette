@@ -148,12 +148,14 @@ export function VotingPhase({
   const ranked = ranking
     .map((videoId) => allSongs.find((song) => song.videoId === videoId))
     .filter((song): song is SongView => song !== undefined);
-  // A pause empties the write-target lists; keep showing the foreign songs
-  // read-only instead of claiming there is nothing to rank.
+  // A pause empties the write-target lists; keep showing an active voter the
+  // foreign songs read-only instead of claiming there is nothing to rank.
+  // Finished voters keep their unchanged read-only ballot view.
   const paused = selectRoom(state).paused;
-  const unranked = paused
-    ? allSongs.filter((song) => !song.ownedByViewer)
-    : eligible;
+  const unranked =
+    paused && choices.isParticipant && !choices.votingDone
+      ? allSongs.filter((song) => !song.ownedByViewer)
+      : eligible;
   const pool = unranked.filter((song) => !ranking.includes(song.videoId));
   const participants = roster.filter((player) => player.isParticipant);
   const doneCount = participants.filter((player) => player.votingDone).length;
