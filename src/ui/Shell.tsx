@@ -5,6 +5,7 @@ import { REJECTIONS, SESSION_FAILURES, type SessionError } from '../net/errors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import './i18n';
 import './styles.css';
+import { Chip } from './Chip';
 import { HomeView } from './HomeView';
 import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
@@ -194,14 +195,21 @@ export function Shell({ session }: { session: GameSession }) {
       data-testid="app-shell"
       className="flex min-h-dvh justify-center px-4 py-10 sm:px-6"
     >
-      <div className="w-full max-w-2xl rounded-2xl border border-gold-400/25 bg-felt-900/70 p-5 shadow-2xl shadow-black/40 backdrop-blur-sm sm:p-8">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gold-400/20 pb-4">
-          <span
-            data-testid="app-title"
-            className="font-display text-xs tracking-[0.35em] text-gold-300 uppercase"
-          >
-            {t('app.title')}
-          </span>
+      <div className="panel-black w-full max-w-2xl rounded-2xl p-5 sm:p-8">
+        <header className="flex flex-wrap items-center justify-between gap-3 pb-4">
+          <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="flex -space-x-2">
+              <Chip tone="red" size="md" />
+              <Chip tone="gold" size="md" />
+              <Chip tone="neon" size="md" />
+            </span>
+            <span
+              data-testid="app-title"
+              className="font-display text-sm tracking-[0.3em] text-gold-300 uppercase"
+            >
+              {t('app.title')}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <label
               htmlFor="language-switch"
@@ -217,7 +225,7 @@ export function Shell({ session }: { session: GameSession }) {
               onChange={(event) => {
                 setLanguage(event.target.value as Language);
               }}
-              className="rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-sm text-cream-100 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none"
+              className="rounded-md border border-gold-400/50 bg-ink-950 px-2 py-1 text-sm text-cream-100"
             >
               {SUPPORTED_LANGUAGES.map((code) => (
                 <option key={code} value={code}>
@@ -227,6 +235,7 @@ export function Shell({ session }: { session: GameSession }) {
             </select>
           </div>
         </header>
+        <div aria-hidden="true" className="neon-rule" />
 
         <div className="space-y-4 pt-6">
           {showStatus && (
@@ -298,7 +307,7 @@ export function Shell({ session }: { session: GameSession }) {
           )}
         </div>
 
-        <footer className="mt-6 border-t border-gold-400/20 pt-4 text-xs text-cream-100/50">
+        <footer className="mt-6 border-t border-gold-400/25 pt-4 text-xs text-cream-100/70">
           {t('home.storageNotice')}
         </footer>
       </div>

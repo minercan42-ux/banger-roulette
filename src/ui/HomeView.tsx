@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import genres from '../content/genres.json';
 import type { SessionError } from '../net/errors';
+import { Chip } from './Chip';
 import { normalizeRoomCode, ROOM_CODE_PATTERN } from './format';
 
 interface HomeViewProps {
@@ -114,9 +115,10 @@ export function HomeView({
               event.preventDefault();
               void submitCreate();
             }}
-            className="space-y-2 rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+            className="felt-panel space-y-2 rounded-xl p-4"
           >
-            <h2 className="font-display text-lg text-gold-300">
+            <h2 className="flex items-center gap-2 font-display text-lg text-gold-300">
+              <Chip tone="gold" size="sm" />
               {t('home.createHeading')}
             </h2>
             <label className="flex flex-col gap-1 text-sm">
@@ -130,9 +132,9 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setNickname(event.target.value)}
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 text-cream-100"
+                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 text-cream-100"
               />
-              <span className="text-xs text-cream-100/50">
+              <span className="text-xs text-cream-100/70">
                 {t('home.nicknameHint')}
               </span>
             </label>
@@ -140,7 +142,7 @@ export function HomeView({
               type="submit"
               data-testid="create-room"
               disabled={busy}
-              className="rounded-md border border-gold-400/50 bg-gold-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:opacity-50"
+              className="casino-button px-4 py-2 text-sm"
             >
               {t('home.createButton')}
             </button>
@@ -152,9 +154,10 @@ export function HomeView({
               event.preventDefault();
               void submitJoin();
             }}
-            className="space-y-2 rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+            className="felt-panel space-y-2 rounded-xl p-4"
           >
-            <h2 className="font-display text-lg text-gold-300">
+            <h2 className="flex items-center gap-2 font-display text-lg text-gold-300">
+              <Chip tone="red" size="sm" />
               {t('home.joinHeading')}
             </h2>
             <label className="flex flex-col gap-1 text-sm">
@@ -171,9 +174,9 @@ export function HomeView({
                 onChange={(event) =>
                   setCode(normalizeRoomCode(event.target.value))
                 }
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
+                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
               />
-              <span className="text-xs text-cream-100/50">
+              <span className="text-xs text-cream-100/70">
                 {t('home.joinCodeHint')} {t('home.codeExample')}
               </span>
             </label>
@@ -188,14 +191,14 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setJoinNickname(event.target.value)}
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 text-cream-100"
+                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 text-cream-100"
               />
             </label>
             <button
               type="submit"
               data-testid="join-room"
               disabled={busy}
-              className="rounded-md border border-gold-400/50 bg-gold-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:opacity-50"
+              className="casino-button px-4 py-2 text-sm"
             >
               {t('home.joinButton')}
             </button>
