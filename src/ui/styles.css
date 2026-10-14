@@ -1,5 +1,14 @@
 @import 'tailwindcss';
 
+/*
+ * Casino palette (local CSS/SVG only; no asset or font downloads):
+ * felt 950/900 = page and frame, 800/700 = lifted green surfaces;
+ * panel 950 = black card surface; gold 500/400 = trim and primary fills,
+ * gold 300/200 = headings, highlights and the global keyboard focus ring;
+ * cream 100 = body copy; neon 400 = mint accent, neon 300 = soft glow;
+ * chip red = roulette-red chip face. Neon is decorative, never body text.
+ * --font-display uses installed serif fonts. The system stack serves body copy.
+ */
 @theme {
   --font-display: Georgia, 'Times New Roman', serif;
   --color-felt-950: #03130c;
@@ -9,7 +18,12 @@
   --color-gold-500: #b8860b;
   --color-gold-400: #d4af37;
   --color-gold-300: #ecd07f;
+  --color-gold-200: #f5df9a;
   --color-cream-100: #f7f2e5;
+  --color-panel-950: #090f0d;
+  --color-neon-400: #66efbd;
+  --color-neon-300: #b2ffe0;
+  --color-chip-red: #942f40;
 }
 
 html {
@@ -20,11 +34,22 @@ body {
   margin: 0;
   min-height: 100dvh;
   background-color: var(--color-felt-950);
-  background-image: radial-gradient(
-    120% 90% at 50% 0%,
-    var(--color-felt-800) 0%,
-    var(--color-felt-950) 65%
-  );
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 2px,
+      rgb(247 242 229 / 0.018) 2px 3px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 3px,
+      rgb(247 242 229 / 0.015) 3px 4px
+    ),
+    radial-gradient(
+      ellipse at 50% 0%,
+      var(--color-felt-700),
+      var(--color-felt-950) 75%
+    );
   color: var(--color-cream-100);
   font-family:
     system-ui,
@@ -32,6 +57,111 @@ body {
     'Segoe UI',
     sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* An offset dark moat keeps gold legible against both light and dark controls. */
+:focus-visible {
+  outline: 3px solid var(--color-gold-200);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px var(--color-panel-950);
+  /* Keyboard focus is immediate, including on transition-colors controls. */
+  transition: none;
+}
+
+.casino-frame {
+  background: linear-gradient(
+    145deg,
+    rgb(10 51 37 / 0.96),
+    rgb(6 35 26 / 0.98) 35%,
+    var(--color-felt-950)
+  );
+  box-shadow:
+    inset 0 0 0 5px rgb(3 19 12 / 0.7),
+    inset 0 0 0 6px rgb(212 175 55 / 0.12),
+    0 24px 80px rgb(0 0 0 / 0.45);
+}
+
+.casino-panel {
+  background-color: var(--color-panel-950);
+  box-shadow: inset 0 1px 0 rgb(247 242 229 / 0.035);
+}
+
+.casino-glow-gold {
+  box-shadow: 0 0 24px rgb(212 175 55 / 0.12);
+}
+
+.casino-glow-neon {
+  filter: drop-shadow(0 0 6px rgb(102 239 189 / 0.35));
+  animation: casino-glow 6s ease-in-out infinite;
+}
+
+/* The segmented rim is a conic gradient, with a raised concentric inset. */
+.casino-chip {
+  --chip-face: var(--color-gold-400);
+  --chip-ink: var(--color-felt-950);
+  display: inline-grid;
+  flex: none;
+  width: var(--chip-size);
+  height: var(--chip-size);
+  vertical-align: middle;
+  place-items: center;
+  border: 1px solid var(--chip-face);
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    var(--chip-face) 0deg 22deg,
+    var(--color-cream-100) 22deg 30deg
+  );
+  box-shadow:
+    0 3px 0 var(--chip-ink),
+    0 5px 12px rgb(0 0 0 / 0.3);
+}
+
+.casino-chip__center {
+  width: 70%;
+  height: 70%;
+  border: 1px solid var(--chip-ink);
+  border-radius: 50%;
+  background: var(--chip-face);
+  box-shadow:
+    0 0 0 2px var(--chip-face),
+    inset 0 0 0 3px var(--chip-face),
+    inset 0 0 0 4px var(--chip-ink);
+}
+
+.casino-chip--gold {
+  --chip-face: var(--color-gold-400);
+}
+
+.casino-chip--red {
+  --chip-face: var(--color-chip-red);
+  --chip-ink: var(--color-cream-100);
+}
+
+.casino-chip--black {
+  --chip-face: var(--color-panel-950);
+  --chip-ink: var(--color-gold-300);
+}
+
+.casino-chip--neon {
+  --chip-face: var(--color-neon-400);
+}
+
+.casino-chip--sm {
+  --chip-size: 1.25rem;
+}
+
+.casino-chip--md {
+  --chip-size: 2.25rem;
+}
+
+.casino-chip--lg {
+  --chip-size: 4.5rem;
+}
+
+@keyframes casino-glow {
+  50% {
+    filter: drop-shadow(0 0 10px rgb(102 239 189 / 0.5));
+  }
 }
 
 .shell-title {
@@ -63,5 +193,10 @@ body {
   .shell-title {
     animation: none;
     background-position: 0% 50%;
+  }
+
+  .casino-glow-neon {
+    animation: none;
+    filter: drop-shadow(0 0 6px rgb(102 239 189 / 0.35));
   }
 }

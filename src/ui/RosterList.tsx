@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PlayerView } from '../engine/selectors';
+import { Chip } from './Chip';
 
 interface RosterListProps {
   roster: readonly PlayerView[];
@@ -16,13 +17,13 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
   return (
     <section
       data-testid="roster-section"
-      className="rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+      className="casino-panel rounded-xl border border-gold-400/30 p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-lg text-gold-300">
           {t('lobby.rosterHeading')}
         </h2>
-        <span className="text-xs text-cream-100/60">
+        <span className="text-xs text-cream-100/70">
           {t('lobby.rosterCount', { count: connected })}
         </span>
       </div>
@@ -38,11 +39,11 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
             data-connected={player.connected}
             data-sound={player.soundUnlocked}
             data-participant={player.isParticipant}
-            className="flex flex-wrap items-center gap-2 rounded-lg border border-gold-400/15 bg-felt-950/60 px-3 py-2"
+            className="flex flex-wrap items-center gap-2 rounded-lg border border-gold-400/20 bg-felt-950 px-3 py-3"
           >
             <span
               data-testid="player-nickname"
-              className="min-w-0 flex-1 truncate text-sm text-cream-100"
+              className="min-w-0 flex-1 basis-full truncate text-sm text-cream-100 sm:basis-auto"
             >
               {player.nickname}
             </span>
@@ -57,8 +58,9 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
             {player.isHost && (
               <span
                 data-testid="player-host-badge"
-                className="rounded-full border border-gold-400/60 bg-gold-500/20 px-2 py-0.5 text-[0.65rem] text-gold-200 uppercase"
+                className="inline-flex items-center gap-1.5 text-[0.65rem] font-semibold text-gold-200 uppercase"
               >
+                <Chip tone="gold" size="sm" />
                 {t('lobby.hostBadge')}
               </span>
             )}

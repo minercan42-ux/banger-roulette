@@ -95,17 +95,21 @@ export function RoomView({
   }
 
   return (
-    <div data-testid="room-view" data-phase={room.phase} className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div
+      data-testid="room-view"
+      data-phase={room.phase}
+      className="min-w-0 space-y-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gold-400/15 pb-5">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
+          <h1 className="font-display text-3xl font-semibold text-gold-200 sm:text-4xl">
             {t('lobby.heading')}
           </h1>
           <p className="mt-1 text-sm text-cream-100/70">
             {t('lobby.roomCodeLabel')}:{' '}
             <span
               data-testid="room-code"
-              className="font-mono tracking-[0.3em] text-gold-200 uppercase"
+              className="ml-1 inline-block rounded border border-gold-400/30 bg-panel-950 px-2 py-1 font-mono tracking-[0.2em] text-gold-200 uppercase"
             >
               {room.roomCode}
             </span>
@@ -115,7 +119,7 @@ export function RoomView({
           type="button"
           data-testid="leave-room"
           onClick={onLeave}
-          className="rounded-md border border-rose-400/40 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15"
+          className="min-h-11 rounded-md border border-rose-300/50 bg-panel-950 px-3 py-2 text-sm text-rose-200 transition-colors hover:bg-rose-500/15"
         >
           {t('lobby.leave')}
         </button>
@@ -128,7 +132,7 @@ export function RoomView({
           onClick={() => {
             void copyLink();
           }}
-          className="rounded-md border border-gold-400/40 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/15"
+          className="min-h-11 rounded-md border border-gold-300/60 bg-panel-950 px-4 py-2 text-sm text-gold-200 transition-colors hover:bg-gold-500/15"
         >
           {t('lobby.copyLink')}
         </button>

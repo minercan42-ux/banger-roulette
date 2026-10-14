@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import genres from '../content/genres.json';
 import type { SessionError } from '../net/errors';
+import { Chip } from './Chip';
 import { normalizeRoomCode, ROOM_CODE_PATTERN } from './format';
 
 interface HomeViewProps {
@@ -66,12 +67,25 @@ export function HomeView({
   }
 
   return (
-    <div data-testid="home-view" className="space-y-5">
-      <div>
-        <h1 className="font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
-          {t('home.heading')}
-        </h1>
-        <p className="mt-2 text-sm text-cream-100/80">{t('home.intro')}</p>
+    <div data-testid="home-view" className="space-y-6">
+      <div className="flex items-center justify-between gap-4 py-2 sm:py-4">
+        <div className="min-w-0">
+          <h1 className="shell-title font-display text-3xl leading-tight font-semibold sm:text-5xl">
+            {t('home.heading')}
+          </h1>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-cream-100/80">
+            {t('home.intro')}
+          </p>
+        </div>
+        <div
+          aria-hidden="true"
+          className="relative hidden shrink-0 pr-2 pl-4 sm:block"
+        >
+          <Chip tone="gold" size="lg" />
+          <span className="casino-glow-neon absolute -right-1 -bottom-2 -rotate-12">
+            <Chip tone="neon" size="md" />
+          </span>
+        </div>
       </div>
 
       {joining && (
@@ -86,13 +100,13 @@ export function HomeView({
       {!joining && (
         <div
           data-testid={prefillCode ? 'route-join-view' : 'home-forms'}
-          className="space-y-5"
+          className="grid gap-5 sm:grid-cols-2"
         >
           {identityMissing && (
             <p
               data-testid="identity-missing"
               role="status"
-              className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+              className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 sm:col-span-2"
             >
               {t('home.identityMissing')}
             </p>
@@ -102,7 +116,7 @@ export function HomeView({
             <p
               data-testid="home-error"
               role="alert"
-              className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+              className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100 sm:col-span-2"
             >
               {t(errorKey)}
             </p>
@@ -114,9 +128,10 @@ export function HomeView({
               event.preventDefault();
               void submitCreate();
             }}
-            className="space-y-2 rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+            className="casino-panel flex flex-col gap-3 rounded-xl border border-gold-400/30 p-5"
           >
-            <h2 className="font-display text-lg text-gold-300">
+            <h2 className="flex items-center gap-2 font-display text-xl text-gold-300">
+              <Chip tone="gold" size="sm" />
               {t('home.createHeading')}
             </h2>
             <label className="flex flex-col gap-1 text-sm">
@@ -130,9 +145,9 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setNickname(event.target.value)}
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 text-cream-100"
+                className="min-h-11 min-w-0 rounded-md border border-gold-300/50 bg-felt-950 px-3 py-2 text-cream-100"
               />
-              <span className="text-xs text-cream-100/50">
+              <span className="text-xs leading-relaxed text-cream-100/70">
                 {t('home.nicknameHint')}
               </span>
             </label>
@@ -140,7 +155,7 @@ export function HomeView({
               type="submit"
               data-testid="create-room"
               disabled={busy}
-              className="rounded-md border border-gold-400/50 bg-gold-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:opacity-50"
+              className="casino-glow-gold mt-auto min-h-11 rounded-md border border-gold-300 bg-gold-300 px-4 py-2 text-sm font-semibold text-felt-950 transition-colors hover:bg-gold-200 disabled:opacity-50"
             >
               {t('home.createButton')}
             </button>
@@ -152,9 +167,10 @@ export function HomeView({
               event.preventDefault();
               void submitJoin();
             }}
-            className="space-y-2 rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+            className="casino-panel flex flex-col gap-3 rounded-xl border border-gold-400/30 p-5"
           >
-            <h2 className="font-display text-lg text-gold-300">
+            <h2 className="flex items-center gap-2 font-display text-xl text-gold-300">
+              <Chip tone="black" size="sm" />
               {t('home.joinHeading')}
             </h2>
             <label className="flex flex-col gap-1 text-sm">
@@ -171,9 +187,9 @@ export function HomeView({
                 onChange={(event) =>
                   setCode(normalizeRoomCode(event.target.value))
                 }
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
+                className="min-h-11 min-w-0 rounded-md border border-gold-300/50 bg-felt-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
               />
-              <span className="text-xs text-cream-100/50">
+              <span className="text-xs leading-relaxed text-cream-100/70">
                 {t('home.joinCodeHint')} {t('home.codeExample')}
               </span>
             </label>
@@ -188,14 +204,14 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setJoinNickname(event.target.value)}
-                className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 text-cream-100"
+                className="min-h-11 min-w-0 rounded-md border border-gold-300/50 bg-felt-950 px-3 py-2 text-cream-100"
               />
             </label>
             <button
               type="submit"
               data-testid="join-room"
               disabled={busy}
-              className="rounded-md border border-gold-400/50 bg-gold-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:opacity-50"
+              className="min-h-11 rounded-md border border-gold-300/70 bg-felt-800 px-4 py-2 text-sm font-semibold text-gold-200 transition-colors hover:bg-felt-700 disabled:opacity-50"
             >
               {t('home.joinButton')}
             </button>
@@ -203,7 +219,11 @@ export function HomeView({
         </div>
       )}
 
-      <p className="text-xs text-gold-300/80">
+      <p className="flex items-center gap-2 text-xs text-gold-300">
+        <span
+          aria-hidden="true"
+          className="casino-glow-neon h-1.5 w-1.5 rounded-full bg-neon-400"
+        />
         {t('home.genreCatalogue', { count: genres.length })}
       </p>
     </div>
