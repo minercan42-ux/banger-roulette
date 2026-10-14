@@ -427,6 +427,7 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
     expect(dup?.ownerIds).toHaveLength(2);
     const [aId, bId, cId] = await Promise.all(pages.map(playerId));
     expect(new Set(dup?.ownerIds)).toEqual(new Set([aId, bId]));
+    expect(dup?.ownerIds).not.toContain(cId);
 
     // Both owners neither see nor flag their shared song...
     for (const page of [host.page, bob.page]) {
@@ -439,7 +440,35 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
     await expect(poolItem(cara.page, DUP)).toHaveCount(1);
     await expect(flagItem(cara.page, DUP)).toHaveCount(1);
     await expect(flagItem(cara.page, OTHER)).toHaveCount(0);
-    expect(cId).not.toBe(aId);
+
+    // A pause keeps the songs visible read-only instead of "nothing to rank";
+    // a voter who already finished keeps the plain done view.
+    await bob.page.getByTestId('voting-finish').click();
+    await expect(bob.page.getByTestId('voting-done')).toBeVisible();
+    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
+    expect((await dispatch(host.page, { type: 'PAUSE' })).status).toBe(
+      'accepted',
+    );
+    await expect(cara.page.getByTestId('voting-paused')).toBeVisible();
+    await expect(cara.page.getByTestId('voting-no-songs')).toHaveCount(0);
+    await expect(poolItem(cara.page, DUP)).toHaveCount(1);
+    await expect(poolItem(cara.page, OTHER)).toHaveCount(0);
+    await expect(flagItem(cara.page, DUP)).toHaveCount(0);
+    await expect(
+      poolItem(cara.page, DUP).getByTestId('voting-song-add'),
+    ).toBeDisabled();
+    await expect(bob.page.getByTestId('voting-paused')).toHaveCount(0);
+    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
+    expect(
+      (
+        await dispatch(host.page, {
+          type: 'RESUME',
+          forceBelowMinimum: false,
+        })
+      ).status,
+    ).toBe('accepted');
+    await expect(cara.page.getByTestId('voting-paused')).toHaveCount(0);
+    await expect(flagItem(cara.page, DUP)).toHaveCount(1);
   } finally {
     await closeStages(stages);
   }
@@ -574,6 +603,12 @@ test('FR-41/FR-52: a voting flag retracts and a majority fails the song', async 
     expect(failed?.genreFailed).toBe(true);
     // borda 3 + penalty (-3) = 0 for the flagged owner.
     expect(failed?.points).toMatch(/(?:^|\D)0(?:\D|$)/);
+    // Two of the three non-owners flagged it; the count is rendered, not a placeholder.
+    const failNote = host.page
+      .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_D}"]`)
+      .getByTestId('reveal-entry-genre-fail');
+    await expect(failNote).toHaveText(/(?:^|\D)2(?:\D|$)/);
+    await expect(failNote).not.toContainText('{{');
 
     const result = (await stateOf(host.page))?.results[0];
     const scored = new Map(

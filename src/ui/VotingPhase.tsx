@@ -12,6 +12,7 @@ import {
   selectSongs,
   selectViewerChoices,
   selectViewerPermissions,
+  selectRoom,
   type PlayerView,
   type SongView,
 } from '../engine/selectors';
@@ -147,7 +148,15 @@ export function VotingPhase({
   const ranked = ranking
     .map((videoId) => allSongs.find((song) => song.videoId === videoId))
     .filter((song): song is SongView => song !== undefined);
-  const pool = eligible.filter((song) => !ranking.includes(song.videoId));
+  // A pause empties the write-target lists; keep showing an active voter the
+  // foreign songs read-only instead of claiming there is nothing to rank.
+  // Finished voters keep their unchanged read-only ballot view.
+  const paused = selectRoom(state).paused;
+  const unranked =
+    paused && choices.isParticipant && !choices.votingDone
+      ? allSongs.filter((song) => !song.ownedByViewer)
+      : eligible;
+  const pool = unranked.filter((song) => !ranking.includes(song.videoId));
   const participants = roster.filter((player) => player.isParticipant);
   const doneCount = participants.filter((player) => player.votingDone).length;
   const listenState =
@@ -501,8 +510,19 @@ export function VotingPhase({
         </p>
       )}
 
+      {choices.isParticipant && !choices.votingDone && paused && (
+        <p
+          data-testid="voting-paused"
+          role="status"
+          className="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+        >
+          {t('voting.paused')}
+        </p>
+      )}
+
       {choices.isParticipant &&
         !choices.votingDone &&
+        !paused &&
         eligible.length === 0 && (
           <p
             data-testid="voting-no-songs"

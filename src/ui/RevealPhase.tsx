@@ -175,7 +175,7 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                       className="mt-1 text-xs text-rose-200"
                     >
                       {t('reveal.genreFailed', {
-                        count: entry.flaggerIds.length,
+                        flags: entry.flaggerIds.length,
                       })}
                     </p>
                   )}

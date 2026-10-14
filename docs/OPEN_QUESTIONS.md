@@ -76,3 +76,11 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - Reveal order is "ascending placement": round winners always come last, other songs by ascending Borda. A genre-failed song with the highest Borda is revealed before the winner instead of looking like one.
 - Advancing out of VOTING and REVEAL stays deadline-driven or automatic (everyone finished). No host "skip" button was added; the engine's host `ADVANCE` remains available to tests.
 - The voting re-listen player and voting/reveal thumbnails reuse the per-tab embedding consent; without consent nothing is loaded from YouTube.
+- A quorum or host pause during VOTING empties the write-target lists. For voters who have not finished, the voting view now keeps the foreign songs visible read-only with a pause notice instead of "no foreign songs to rank"; finished voters keep their read-only ballot.
+
+## Live multiplayer evidence (2026-10-14, after the Supabase Realtime incident)
+
+- Supabase reported the Realtime latency incident as "monitoring". A standalone Presence probe on fresh topics succeeded 10/10 with 0 channel errors; the peer saw the tracked tuple 0.3–3.2 s after subscribing.
+- Four headless Chromium contexts played the public production deployment (main `7c953c4`, real Supabase, Vercel API, YouTube nocookie), 2 rounds, driven only through the UI. 4/4 full runs passed: AK-1 identical genre on all clients; AK-2 linked song shown once, both owners scored, neither could rank or flag it; AK-3 no owner names before REVEAL; AK-4 new host after 877/646/2721 ms with round data intact; AK-5 reload back in the room after 1515/2228/2368 ms with an unchanged score. Zero CSP violations and zero application console errors.
+- AK-7 remains unproven: all four clients ran on one VM (start skew −461…+1262 ms, max drift 175–620 ms). Acceptance still needs one client per device.
+- Open: the first create/join attempt failed in 3 of 6 attempts (`CONNECTION_FAILED` on create after 14 s, `ROOM_NOT_FOUND` on join after about 10 s when joining right after the host's lobby appeared); an immediate retry succeeded every time. Discovery currently waits 4 s for a live Presence tuple. Not changed yet; an internal retry would alter M2 discovery behaviour and needs a decision.

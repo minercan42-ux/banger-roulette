@@ -272,6 +272,7 @@
     "done": "Du hast abgestimmt. Warte auf die anderen.",
     "finish": "Abstimmen",
     "noSongs": "Du hast diese Runde keine fremden Songs zum Ranken.",
+    "paused": "Das Spiel ist pausiert. Du kannst weiter ranken, sobald es weitergeht.",
     "rankingHeading": "Deine Reihenfolge",
     "emptyRanking": "Noch nichts gereiht. Füge unten Songs hinzu.",
     "poolHeading": "Songs zum Ranken",
