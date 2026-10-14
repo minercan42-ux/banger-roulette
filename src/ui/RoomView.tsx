@@ -10,6 +10,7 @@ import {
 } from '../engine/selectors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
+import { Chip } from './Chip';
 import { useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
@@ -101,14 +102,15 @@ export function RoomView({
       <PhaseAnnouncer room={room} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
+          <h1 className="flex items-center gap-2 font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
+            <Chip tone="black" size="md" />
             {t('lobby.heading')}
           </h1>
-          <p className="mt-1 text-sm text-cream-100/70">
+          <p className="mt-2 text-sm text-cream-100/80">
             {t('lobby.roomCodeLabel')}:{' '}
             <span
               data-testid="room-code"
-              className="font-mono tracking-[0.3em] text-gold-200 uppercase"
+              className="inline-block rounded-md border border-neon-cyan/60 bg-ink-950 px-2 py-0.5 font-mono tracking-[0.3em] text-neon-cyan text-glow-neon uppercase shadow-glow-cyan"
             >
               {room.roomCode}
             </span>
@@ -118,7 +120,7 @@ export function RoomView({
           type="button"
           data-testid="leave-room"
           onClick={onLeave}
-          className="rounded-md border border-rose-400/40 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15"
+          className="rounded-md border border-rose-400/50 bg-ink-950/60 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15"
         >
           {t('lobby.leave')}
         </button>
@@ -131,7 +133,7 @@ export function RoomView({
           onClick={() => {
             void copyLink();
           }}
-          className="rounded-md border border-gold-400/40 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/15"
+          className="casino-ghost px-3 py-2 text-sm"
         >
           {t('lobby.copyLink')}
         </button>
@@ -151,7 +153,7 @@ export function RoomView({
               readOnly
               value={shareUrl}
               onFocus={(event) => event.target.select()}
-              className="min-w-0 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-1 text-cream-100"
+              className="min-w-0 casino-field rounded-md border bg-ink-950 px-2 py-1 text-cream-100"
             />
           </label>
         )}
@@ -303,7 +305,7 @@ export function RoomView({
         data-testid="lobby-readiness"
         data-ready={readiness.ready}
         data-connected={readiness.connectedPlayers}
-        className="rounded-xl border border-gold-400/20 bg-felt-800/50 p-4 text-sm"
+        className="felt-panel rounded-xl p-4 text-sm"
       >
         <p className="text-cream-100/80">
           {t('sound.playersConnected', {
@@ -312,7 +314,7 @@ export function RoomView({
             max: readiness.maxPlayers,
           })}
         </p>
-        <p className="mt-1 text-xs text-cream-100/60">
+        <p className="mt-1 text-xs text-cream-100/70">
           {readiness.soundLockedIds.length === 0
             ? t('sound.readinessReady')
             : t('sound.readinessWaiting', { min: readiness.minPlayers })}
