@@ -1,4 +1,5 @@
 import { motion } from 'motion/react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectStandings } from '../engine/selectors';
 import type { GameState } from '../shared/game';
@@ -14,6 +15,17 @@ export function Leaderboard({ state, viewerId }: LeaderboardProps) {
   const { t } = useTranslation();
   const reducedMotion = usePrefersReducedMotion();
   const standings = selectStandings(state, viewerId);
+  // Rows mount in the pre-round order and move to the new order one frame
+  // later, so `layout` animates every position change (none under reduced motion).
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const rows =
+    settled || reducedMotion
+      ? standings
+      : [...standings].sort((a, b) => a.previousRank - b.previousRank);
 
   return (
     <section
@@ -28,7 +40,7 @@ export function Leaderboard({ state, viewerId }: LeaderboardProps) {
         {t('leaderboard.heading')}
       </h2>
       <motion.ul layout={!reducedMotion} className="mt-3 space-y-2">
-        {standings.map((row) => {
+        {rows.map((row) => {
           const moved = row.previousRank - row.rank;
           return (
             <motion.li
