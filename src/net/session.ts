@@ -28,6 +28,13 @@ import type { RoomTransport, SendStatus, TransportFactory } from './transport';
 
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const MAX_CREATE_ATTEMPTS = 5;
+/**
+ * One automatic retry of the first create/join on a transient Realtime failure
+ * (a Presence tuple that is not live yet, or a thrown transport/presence
+ * error). Terminal failures and an exhausted code-collision loop are never
+ * retried; a newer create/join cancels a pending retry.
+ */
+const TRANSIENT_RETRY_LIMIT = 1;
 const DEFAULT_DISCOVERY_TIMEOUT_MS = 4000;
 const DEFAULT_MIGRATION_COLLECT_MS = 250;
 const DEFAULT_COMMAND_TIMEOUT_MS = 8000;
@@ -358,25 +365,59 @@ class NetworkGameSession implements GameSession {
     await this.closeTransport(this.teardownRoom());
     const generation = this.generation;
     this.setStatus('connecting');
-    try {
-      await this.syncClock();
+    for (let retry = 0; retry <= TRANSIENT_RETRY_LIMIT; retry += 1) {
+      try {
+        const outcome = await this.createAttempt(nickname, generation);
+        if (this.stale(generation) || outcome === 'settled') {
+          return;
+        }
+        // The MAX_CREATE_ATTEMPTS collision loop is exhausted. That is not a
+        // transient transport failure, so the retry budget does not apply.
+        this.fail('CONNECTION_FAILED');
+        return;
+      } catch (error) {
+        if (this.stale(generation)) {
+          return;
+        }
+        this.log('createRoom failed', error);
+      }
       if (this.stale(generation)) {
         return;
       }
-      for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt += 1) {
-        const roomCode = randomRoomCode(this.uuid);
-        const roomId = this.uuid();
-        const transport = this.openTransport(roomCode);
-        this.transport = transport;
+    }
+    this.fail('CONNECTION_FAILED');
+  }
+
+  /**
+   * One full create sequence: the MAX_CREATE_ATTEMPTS code-collision loop on
+   * its own fresh transport. Resolves `'settled'` once this tab claimed the
+   * room (or the attempt was superseded) and `'exhausted'` when every code
+   * collided. A thrown transport/presence failure closes that attempt's channel
+   * and propagates, so the caller can retry the whole sequence once.
+   */
+  private async createAttempt(
+    nickname: string,
+    generation: number,
+  ): Promise<'settled' | 'exhausted'> {
+    await this.syncClock();
+    if (this.stale(generation)) {
+      return 'settled';
+    }
+    for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt += 1) {
+      const roomCode = randomRoomCode(this.uuid);
+      const roomId = this.uuid();
+      const transport = this.openTransport(roomCode);
+      this.transport = transport;
+      try {
         await transport.connect();
         if (this.stale(generation)) {
           await this.abandon(transport);
-          return;
+          return 'settled';
         }
         await transport.awaitPresence();
         if (this.stale(generation)) {
           await this.abandon(transport);
-          return;
+          return 'settled';
         }
         if (this.foreignRoomIds(transport, roomId).length > 0) {
           await this.abandon(transport);
@@ -386,7 +427,7 @@ class NetworkGameSession implements GameSession {
         await transport.awaitPresence();
         if (this.stale(generation)) {
           await this.abandon(transport);
-          return;
+          return 'settled';
         }
         if (
           this.foreignRoomIds(transport, roomId).some(
@@ -397,16 +438,13 @@ class NetworkGameSession implements GameSession {
           continue;
         }
         this.claim(roomId, roomCode, nickname);
-        return;
+        return 'settled';
+      } catch (error) {
+        await this.abandon(transport);
+        throw error;
       }
-      this.fail('CONNECTION_FAILED');
-    } catch (error) {
-      if (this.stale(generation)) {
-        return;
-      }
-      this.log('createRoom failed', error);
-      this.fail('CONNECTION_FAILED');
     }
+    return 'exhausted';
   }
 
   async joinRoom(code: string, nickname: string): Promise<void> {
@@ -428,32 +466,79 @@ class NetworkGameSession implements GameSession {
     const generation = this.generation;
     this.roomCode = code;
     this.setStatus('connecting');
-    try {
-      await this.syncClock();
+    // The only retryable join failures are an empty discovery and a thrown
+    // transport/presence error; the last of those decides the terminal error.
+    let failure: SessionError = 'CONNECTION_FAILED';
+    for (let retry = 0; retry <= TRANSIENT_RETRY_LIMIT; retry += 1) {
+      try {
+        const outcome = await this.joinAttempt(code, nickname, generation);
+        if (this.stale(generation)) {
+          return;
+        }
+        if (outcome === 'settled') {
+          return;
+        }
+        failure = 'ROOM_NOT_FOUND';
+      } catch (error) {
+        if (this.stale(generation)) {
+          return;
+        }
+        this.log('joinRoom failed', error);
+        failure = 'CONNECTION_FAILED';
+      }
       if (this.stale(generation)) {
         return;
       }
-      const transport = this.openTransport(code);
-      this.transport = transport;
+    }
+    this.fail(failure);
+  }
+
+  /**
+   * One full join sequence on its own fresh transport. Resolves `'settled'`
+   * when the attempt reached an outcome the caller must keep (connected, a
+   * terminal error such as INVALID/ROOM_FULL, or a superseded generation) and
+   * `'not-found'` for an empty discovery, the only retryable non-throw outcome.
+   */
+  private async joinAttempt(
+    code: string,
+    nickname: string,
+    generation: number,
+  ): Promise<'settled' | 'not-found'> {
+    // A retry must not inherit a half-bound room from the failed attempt: only
+    // an unbound session may run discovery on the replacement transport, and a
+    // fresh channel must not carry half-assembled transfers from the dead one.
+    if (this.state !== null || this.mode !== 'idle' || this.roomId !== null) {
+      this.state = null;
+      this.mode = 'idle';
+      this.roomId = null;
+      this.markChanged();
+    }
+    this.reassembler.reset();
+    await this.syncClock();
+    if (this.stale(generation)) {
+      return 'settled';
+    }
+    const transport = this.openTransport(code);
+    this.transport = transport;
+    try {
       await transport.connect();
       if (this.stale(generation)) {
         await this.abandon(transport);
-        return;
+        return 'settled';
       }
       await transport.awaitPresence();
       if (this.stale(generation)) {
         await this.abandon(transport);
-        return;
+        return 'settled';
       }
       const discovered = await this.discover(transport);
       if (this.stale(generation)) {
         await this.abandon(transport);
-        return;
+        return 'settled';
       }
       if (discovered === null) {
-        this.fail('ROOM_NOT_FOUND');
         await this.abandon(transport);
-        return;
+        return 'not-found';
       }
       // An empty nickname is only valid for a rebinding/reconnecting retained
       // identity: the engine keeps the stored name, but the JOIN command must
@@ -464,8 +549,13 @@ class NetworkGameSession implements GameSession {
       if (effectiveNickname === undefined) {
         // A new identity must supply a nickname; never expose the foreign room.
         await this.abandon(transport);
+        if (this.stale(generation)) {
+          // A newer create/join owns this session now; its state must not be
+          // overwritten with this attempt's terminal error.
+          return 'settled';
+        }
         this.fail('INVALID');
-        return;
+        return 'settled';
       }
       this.roomId = discovered.roomId;
       this.mode = 'client';
@@ -474,7 +564,7 @@ class NetworkGameSession implements GameSession {
       await transport.awaitPresence();
       if (this.stale(generation)) {
         await this.abandon(transport);
-        return;
+        return 'settled';
       }
       this.markChanged();
       const result = await this.dispatch({
@@ -482,17 +572,17 @@ class NetworkGameSession implements GameSession {
         nickname: effectiveNickname,
       });
       if (this.stale(generation)) {
-        return;
+        return 'settled';
       }
       if (result.status === 'rejected') {
         this.fail(result.reason);
-        return;
+        return 'settled';
       }
       // The accepted result can arrive before the queued (chunked) snapshot, so
       // stay 'connecting' until the authoritative state shows our own binding.
       const converged = await this.waitForJoin(result.stateVersion);
       if (this.stale(generation)) {
-        return;
+        return 'settled';
       }
       if (converged) {
         this.setStatus('connected');
@@ -500,12 +590,10 @@ class NetworkGameSession implements GameSession {
       } else {
         this.requestResync();
       }
+      return 'settled';
     } catch (error) {
-      if (this.stale(generation)) {
-        return;
-      }
-      this.log('joinRoom failed', error);
-      this.fail('CONNECTION_FAILED');
+      await this.abandon(transport);
+      throw error;
     }
   }
 
@@ -724,11 +812,18 @@ class NetworkGameSession implements GameSession {
     return transport;
   }
 
+  /**
+   * Detaches the transport synchronously, then closes it. Detaching first means
+   * a close/`CLOSED` callback that fires while `disconnect()` is still pending
+   * can no longer mutate the session: an automatic retry keeps reading
+   * `connecting` and a newer create/join keeps owning the room. The identity
+   * guard still leaves a replacement transport attached.
+   */
   private async abandon(transport: RoomTransport): Promise<void> {
-    await transport.disconnect();
     if (this.transport === transport) {
       this.transport = null;
     }
+    await transport.disconnect();
   }
 
   private async closeTransport(transport: RoomTransport | null): Promise<void> {

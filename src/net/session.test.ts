@@ -7,6 +7,7 @@ import type { GameSession } from './session';
 import {
   ManualClock,
   createTestSession,
+  flush,
   settle,
   uuidFactory,
   type TestSessionConfig,
@@ -179,10 +180,19 @@ describe('game session', () => {
       await guest.joinRoom(code, `G${index}`);
       await settle(clock);
     }
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      return create(roomCode, identity);
+    };
     const overflow = makeSession(hub, clock, uuid, 50);
     await overflow.joinRoom(code, 'Overflow');
     await settle(clock);
+    // A rejected JOIN is terminal: the transient retry must not reopen a
+    // second transport for it.
     expect(overflow.getSnapshot().error).toBe('ROOM_FULL');
+    expect(opened).toBe(1);
   });
 
   it('rate limits a client per burst', async () => {
@@ -333,17 +343,29 @@ describe('game session', () => {
     expect(a.getSnapshot().state?.phase.type).toBe('SUBMISSION');
   });
 
-  it('reports ROOM_NOT_FOUND when no host answers discovery', async () => {
+  it('reports ROOM_NOT_FOUND after exactly two discovery attempts', async () => {
     const clock = new ManualClock(CLOCK_START);
     const hub = new InMemoryHub();
     const uuid = uuidFactory();
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      return create(roomCode, identity);
+    };
     const guest = makeSession(hub, clock, uuid, 1, { discoveryTimeoutMs: 100 });
+
     const pending = guest.joinRoom('ZZZZZZ', 'Nobody');
-    await settle(clock);
-    clock.advance(100);
+    await flush();
+    await settle(clock, 200);
+    await settle(clock, 200);
     await pending;
     await settle(clock);
+
     expect(guest.getSnapshot().error).toBe('ROOM_NOT_FOUND');
+    expect(guest.getSnapshot().status).toBe('error');
+    // One automatic retry, so a genuinely missing room costs two windows.
+    expect(opened).toBe(2);
   });
 
   it('rejects a malformed room code', async () => {
@@ -386,15 +408,15 @@ describe('game session', () => {
     const hub = new InMemoryHub();
     const uuid = uuidFactory();
     const session = makeSession(hub, clock, uuid, 1, {
-      discoveryTimeoutMs: 4000,
+      discoveryTimeoutMs: 100,
     });
 
     const first = session.joinRoom('ABCDEF', 'One');
-    await settle(clock, 100);
+    await flush();
     // A second join supersedes the first while its discovery is still open.
     const second = session.joinRoom('GHJKLM', 'Two');
-    await settle(clock);
-    clock.advance(5000);
+    await settle(clock, 200);
+    await settle(clock, 200);
     await settle(clock);
 
     await Promise.all([first, second]);
@@ -430,5 +452,263 @@ describe('game session', () => {
     });
     await settle(clock);
     expect(result.status).toBe('accepted');
+  });
+});
+
+describe('transient create/join retry', () => {
+  it('retries a join once when the first discovery is empty', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+    const code = host.getSnapshot().roomCode!;
+
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      const transport = create(roomCode, identity);
+      // Reproduce the reported flake: the first channel joined but never
+      // delivered the host's snapshot, so discovery found no live Presence
+      // tuple. Only that attempt is lossy; the retry's fresh channel is not.
+      hub.setLossy(identity.connectionId, opened === 1);
+      return transport;
+    };
+    const guest = makeSession(hub, clock, uuid, 1, {
+      discoveryTimeoutMs: 100,
+    });
+
+    const pending = guest.joinRoom(code, 'Guest');
+    await flush();
+    await settle(clock, 200);
+    await pending;
+    await settle(clock);
+
+    expect(guest.getSnapshot().status).toBe('connected');
+    expect(guest.getSnapshot().error).toBeNull();
+    expect(opened).toBe(2);
+    expect(
+      host.getSnapshot().state?.players[guest.getSnapshot().clientId]?.nickname,
+    ).toBe('Guest');
+  });
+
+  it('retries a join once when the transport throws', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+    const code = host.getSnapshot().roomCode!;
+
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      const transport = create(roomCode, identity);
+      if (opened === 1) {
+        // A presence sync that dies on the first channel: the whole join must
+        // be rerun on a fresh transport.
+        transport.awaitPresence = () =>
+          Promise.reject(new Error('transport failure'));
+      }
+      return transport;
+    };
+    const guest = makeSession(hub, clock, uuid, 1);
+
+    await guest.joinRoom(code, 'Guest');
+    await settle(clock);
+
+    expect(guest.getSnapshot().status).toBe('connected');
+    expect(guest.getSnapshot().error).toBeNull();
+    expect(opened).toBe(2);
+  });
+
+  it('retries a create once with a new room code when the first transport throws', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    let opened = 0;
+    const codes: string[] = [];
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      codes.push(roomCode);
+      const transport = create(roomCode, identity);
+      if (opened === 1) {
+        transport.track = () => Promise.reject(new Error('transport failure'));
+      }
+      return transport;
+    };
+    const uuid = scripted([uid(0), uid(1), uid(0x3f000000), uid(2), uid(3)]);
+    const host = makeSession(hub, clock, uuid, 0);
+
+    await host.createRoom('Host');
+    await settle(clock);
+
+    expect(host.getSnapshot().status).toBe('connected');
+    expect(opened).toBe(2);
+    expect(codes).toHaveLength(2);
+    expect(codes[0]).not.toBe(codes[1]);
+    expect(host.getSnapshot().roomCode).toBe(codes[1]);
+  });
+
+  it('does not retry a join that is rejected as INVALID', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      return create(roomCode, identity);
+    };
+    const guest = makeSession(hub, clock, uuid, 1);
+
+    // An unknown identity with an empty nickname is rejected, not retried.
+    await guest.joinRoom(host.getSnapshot().roomCode!, '');
+    await settle(clock);
+
+    expect(guest.getSnapshot().error).toBe('INVALID');
+    expect(opened).toBe(1);
+  });
+
+  it('lets a second join win while the first retry is pending', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+    const code = host.getSnapshot().roomCode!;
+
+    const guest = makeSession(hub, clock, uuid, 1, {
+      discoveryTimeoutMs: 100,
+    });
+    const first = guest.joinRoom('ZZZZZZ', 'One');
+    await flush();
+    await settle(clock, 200);
+    // The first join is now inside its retry window; a later join from the
+    // caller must win and leave neither a stale error nor a stale room behind.
+    const second = guest.joinRoom(code, 'Two');
+    await settle(clock, 500);
+    await Promise.all([first, second]);
+    await settle(clock);
+
+    const snapshot = guest.getSnapshot();
+    expect(snapshot.status).toBe('connected');
+    expect(snapshot.error).toBeNull();
+    expect(snapshot.roomCode).toBe(code);
+    expect(snapshot.state?.players[snapshot.clientId]?.nickname).toBe('Two');
+  });
+
+  it('does not fail a newer join while a superseded retry is abandoning', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+    const code = host.getSnapshot().roomCode!;
+
+    let opened = 0;
+    let retryClosing = false;
+    const closing = Promise.withResolvers<void>();
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      const transport = create(roomCode, identity);
+      if (opened === 1) {
+        // The first channel never delivers the host's snapshot, so the join
+        // starts its single retry.
+        hub.setLossy(identity.connectionId, true);
+      } else {
+        // The retry's channel hangs while abandoning, like a Realtime CLOSED.
+        transport.disconnect = () => {
+          retryClosing = true;
+          return closing.promise;
+        };
+      }
+      return transport;
+    };
+    const guest = makeSession(hub, clock, uuid, 1, {
+      discoveryTimeoutMs: 100,
+    });
+
+    // An unknown identity without a nickname: the retry discovers the room and
+    // must report INVALID, but only for its own superseded generation.
+    const stale = guest.joinRoom(code, '');
+    await flush();
+    await settle(clock, 200);
+    await flush();
+    expect(retryClosing).toBe(true);
+    expect(guest.getSnapshot().status).toBe('connecting');
+
+    const fresh = guest.joinRoom(code, 'Two');
+    await settle(clock, 500);
+    closing.resolve();
+    await flush();
+    await Promise.all([stale, fresh]);
+    await settle(clock);
+
+    const snapshot = guest.getSnapshot();
+    expect(snapshot.status).toBe('connected');
+    expect(snapshot.error).toBeNull();
+    expect(snapshot.roomCode).toBe(code);
+    expect(snapshot.state?.players[snapshot.clientId]?.nickname).toBe('Two');
+  });
+
+  it('keeps reading connecting when the failed attempt closes after binding', async () => {
+    const clock = new ManualClock(CLOCK_START);
+    const hub = new InMemoryHub();
+    const uuid = uuidFactory();
+    const host = makeSession(hub, clock, uuid, 0);
+    await host.createRoom('Host');
+    await settle(clock);
+    const code = host.getSnapshot().roomCode!;
+
+    let opened = 0;
+    const create = hub.create.bind(hub);
+    hub.create = (roomCode, identity) => {
+      opened += 1;
+      const transport = create(roomCode, identity);
+      if (opened === 1) {
+        // A presence failure after discovery already bound the room.
+        transport.track = () => Promise.reject(new Error('presence failure'));
+        // Supabase removes the channel and emits CLOSED while the abandoned
+        // transport is being torn down.
+        transport.disconnect = async () => {
+          hub.simulateDrop(identity.connectionId);
+        };
+      }
+      return transport;
+    };
+    const guest = makeSession(hub, clock, uuid, 1);
+
+    const statuses: string[] = [];
+    guest.subscribe(() => {
+      statuses.push(guest.getSnapshot().status);
+    });
+
+    await guest.joinRoom(code, 'Guest');
+    await settle(clock);
+
+    expect(guest.getSnapshot().status).toBe('connected');
+    expect(guest.getSnapshot().error).toBeNull();
+    expect(opened).toBe(2);
+    // The room teardown notifies `idle` first; from there the session must read
+    // `connecting` until it succeeds, never the `reconnecting` blip that the
+    // close callback would cause on an already-detached channel.
+    expect(statuses).not.toContain('reconnecting');
+    const observed = statuses.filter((status) => status !== 'idle');
+    const transitions = observed.filter(
+      (status, index) => index === 0 || status !== observed[index - 1],
+    );
+    expect(transitions).toEqual(['connecting', 'connected']);
   });
 });

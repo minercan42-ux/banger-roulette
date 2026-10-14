@@ -334,11 +334,13 @@ test('invalid, missing, duplicate and full-room joins stay consumer visible', as
     await missing.getByTestId('join-code').fill('ZZZZZZ');
     await missing.getByTestId('join-nickname').fill('Ghost');
     await missing.getByTestId('join-room').click();
+    // A genuinely missing room is reported after the automatic retry's second
+    // discovery window, so give the error more than the default 5 s.
     await expect(
       missing
         .getByTestId('home-error')
         .or(missing.getByTestId('session-error')),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20000 });
 
     // Duplicate nickname is refused.
     const duplicate = await openHarness(dupContext);

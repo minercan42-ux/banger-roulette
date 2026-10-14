@@ -143,6 +143,9 @@ describe('net security boundaries', () => {
     );
     await settle(clock);
     clock.advance(1000);
+    // The empty room is reported after the automatic retry's second window.
+    await settle(clock);
+    clock.advance(1000);
     await pending;
     await settle(clock);
     expect(guest.getSnapshot().error).toBe('ROOM_NOT_FOUND');
@@ -225,6 +228,9 @@ describe('net security boundaries', () => {
         },
       }),
     );
+    await settle(clock);
+    clock.advance(1000);
+    // The empty room is reported after the automatic retry's second window.
     await settle(clock);
     clock.advance(1000);
     await pending;
