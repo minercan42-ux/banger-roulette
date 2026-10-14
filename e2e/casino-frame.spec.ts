@@ -159,3 +159,90 @@ test('Frame: no horizontal overflow at 360 px on Home and in the Lobby', async (
     await closeStages([host, guest]);
   }
 });
+
+/** WCAG 1.4.11: field bounds need 3:1 against what surrounds them. */
+async function fieldBorderContrasts(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const parse = (value: string): [number, number, number, number] => {
+      const numbers = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return [
+        numbers[0] ?? 0,
+        numbers[1] ?? 0,
+        numbers[2] ?? 0,
+        numbers[3] ?? 1,
+      ];
+    };
+    const luminance = ([r, g, b]: number[]): number => {
+      const [lr, lg, lb] = [r, g, b].map((channel) => {
+        const c = (channel ?? 0) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * (lr ?? 0) + 0.7152 * (lg ?? 0) + 0.0722 * (lb ?? 0);
+    };
+    const ratio = (a: number[], b: number[]): number => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+    };
+    const surround = (element: Element): number[] => {
+      for (
+        let node = element.parentElement;
+        node !== null;
+        node = node.parentElement
+      ) {
+        const color = parse(getComputedStyle(node).backgroundColor);
+        if (color[3] === 1) {
+          return color;
+        }
+      }
+      return [0, 0, 0, 1];
+    };
+    return Array.from(
+      document.querySelectorAll(
+        'input[type="text"], input[type="number"], select',
+      ),
+    ).map((element) => {
+      const border = parse(getComputedStyle(element).borderTopColor);
+      return ratio(border, surround(element));
+    });
+  });
+}
+
+test('Home and Lobby field borders meet 3:1 non-text contrast', async ({
+  browser,
+}) => {
+  const host = await newStage(browser, { nickname: 'Ada' });
+  try {
+    const home = await fieldBorderContrasts(host.page);
+    expect(home).toHaveLength(4);
+    for (const ratio of home) {
+      expect(ratio).toBeGreaterThanOrEqual(3);
+    }
+    await createRoom(host.page, host.nickname);
+    const lobby = await fieldBorderContrasts(host.page);
+    expect(lobby.length).toBeGreaterThan(6);
+    for (const ratio of lobby) {
+      expect(ratio).toBeGreaterThanOrEqual(3);
+    }
+  } finally {
+    await closeStages([host]);
+  }
+});
+
+test('Page background keeps the woven felt hatch above the glow', async ({
+  browser,
+}) => {
+  const host = await newStage(browser, { nickname: 'Ada' });
+  try {
+    const layers = await host.page.evaluate(
+      () => getComputedStyle(document.body).backgroundImage,
+    );
+    expect(layers.indexOf('repeating-linear-gradient')).toBeGreaterThanOrEqual(
+      0,
+    );
+    expect(layers.indexOf('repeating-linear-gradient')).toBeLessThan(
+      layers.indexOf('radial-gradient'),
+    );
+  } finally {
+    await closeStages([host]);
+  }
+});

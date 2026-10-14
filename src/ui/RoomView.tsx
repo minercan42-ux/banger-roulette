@@ -153,7 +153,7 @@ export function RoomView({
               readOnly
               value={shareUrl}
               onFocus={(event) => event.target.select()}
-              className="min-w-0 rounded-md border border-gold-400/50 bg-ink-950 px-2 py-1 text-cream-100"
+              className="min-w-0 rounded-md border bg-ink-950 px-2 py-1 text-cream-100"
             />
           </label>
         )}

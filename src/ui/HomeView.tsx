@@ -132,7 +132,7 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setNickname(event.target.value)}
-                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 text-cream-100"
+                className="rounded-md border bg-ink-950 px-3 py-2 text-cream-100"
               />
               <span className="text-xs text-cream-100/70">
                 {t('home.nicknameHint')}
@@ -174,7 +174,7 @@ export function HomeView({
                 onChange={(event) =>
                   setCode(normalizeRoomCode(event.target.value))
                 }
-                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
+                className="rounded-md border bg-ink-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
               />
               <span className="text-xs text-cream-100/70">
                 {t('home.joinCodeHint')} {t('home.codeExample')}
@@ -191,7 +191,7 @@ export function HomeView({
                 maxLength={20}
                 autoComplete="off"
                 onChange={(event) => setJoinNickname(event.target.value)}
-                className="rounded-md border border-gold-400/50 bg-ink-950 px-3 py-2 text-cream-100"
+                className="rounded-md border bg-ink-950 px-3 py-2 text-cream-100"
               />
             </label>
             <button
