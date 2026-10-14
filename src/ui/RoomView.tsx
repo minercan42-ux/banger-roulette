@@ -14,7 +14,7 @@ import { useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
-import { PhaseSummary } from './PhaseSummary';
+import { PhaseAnnouncer, PhaseSummary } from './PhaseSummary';
 import { PlaybackPhase } from './PlaybackPhase';
 import {
   PlaybackControllerContext,
@@ -96,6 +96,9 @@ export function RoomView({
 
   return (
     <div data-testid="room-view" data-phase={room.phase} className="space-y-5">
+      {/* SPEC §6: the phase live region is mounted for the whole room lifecycle
+          (LOBBY included) so the lobby boundary is announced too. */}
+      <PhaseAnnouncer room={room} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-semibold text-cream-100 sm:text-3xl">

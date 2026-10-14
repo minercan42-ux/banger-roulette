@@ -2,6 +2,10 @@
   "app": {
     "title": "Banger Roulette"
   },
+  "a11y": {
+    "phaseAnnouncement": "{{phase}}, Runde {{number}} von {{total}}.",
+    "phaseAnnouncementNoRound": "{{phase}}."
+  },
   "language": {
     "label": "Sprache",
     "options": {

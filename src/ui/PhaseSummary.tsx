@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectPhaseTimer,
@@ -134,5 +134,50 @@ export function PhaseSummary({
         </p>
       )}
     </section>
+  );
+}
+
+interface PhaseAnnouncerProps {
+  room: RoomView;
+}
+
+/**
+ * SPEC §6 phase live region. It is mounted by `RoomView` for the whole room
+ * lifecycle, including LOBBY, so the lobby boundary itself is announced. It
+ * stays silent on its first mount (entering the room, a reload or reconnect is
+ * not a transition) and then announces the localized phase name plus the round
+ * on every observed change.
+ */
+export function PhaseAnnouncer({ room }: PhaseAnnouncerProps) {
+  const { t } = useTranslation();
+  const lastPhaseRef = useRef<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+
+  useEffect(() => {
+    const previousPhase = lastPhaseRef.current;
+    lastPhaseRef.current = room.phase;
+    if (previousPhase === null || previousPhase === room.phase) {
+      return;
+    }
+    const phase = t(`phase.${room.phase}`);
+    setAnnouncement(
+      room.roundNumber === null
+        ? t('a11y.phaseAnnouncementNoRound', { phase })
+        : t('a11y.phaseAnnouncement', {
+            phase,
+            number: room.roundNumber,
+            total: room.totalRounds,
+          }),
+    );
+  }, [room.phase, room.roundNumber, room.totalRounds, t]);
+
+  return (
+    <span
+      data-testid="phase-announcement"
+      aria-live="polite"
+      className="sr-only"
+    >
+      {announcement}
+    </span>
   );
 }
