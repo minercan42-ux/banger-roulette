@@ -72,11 +72,6 @@
     "genreCatalogue_other": "{{count}} Genres im Roulette-Katalog",
     "storageNotice": "Gespeichert wird nur eine lokale Spieler-ID, damit ein Reload dich wiedererkennt. Kein Login, kein Spielstand."
   },
-  "milestone": {
-    "title": "Meilenstein M5",
-    "body": "Das erste komplett spielbare Spiel: Genre-Roulette, Song-Auswahl, synchrone Wiedergabe, Voting, Reveal und Finale sind aktiv. Casino-Design, Sounds und Feinschliff folgen in M6.",
-    "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert)."
-  },
   "lobby": {
     "heading": "Lobby",
     "roomCodeLabel": "Raumcode",
@@ -97,6 +92,7 @@
     "leave": "Raum verlassen",
     "readOnly": "Dieser Tab ist schreibgeschützt. Nur eine aktive, für deinen Spieler freigegebene Verbindung darf Aktionen senden.",
     "waitingForHost": "Warte auf den Host …",
+    "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert).",
     "settingsHeading": "Spielregeln",
     "settingsHostOnly": "Nur der Host kann die Regeln ändern.",
     "backHome": "Zur Startseite"

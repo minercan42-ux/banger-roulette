@@ -14,7 +14,6 @@ import { useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
-import { MilestoneNotice } from './MilestoneNotice';
 import { PhaseSummary } from './PhaseSummary';
 import { PlaybackPhase } from './PlaybackPhase';
 import {
@@ -192,6 +191,15 @@ export function RoomView({
         readiness={readiness}
       />
 
+      {room.phase === 'LOBBY' && (
+        <p
+          data-testid="lobby-start-hint"
+          className="rounded-lg border border-gold-400/20 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
+        >
+          {t('lobby.startHint')}
+        </p>
+      )}
+
       <PlaybackControllerContext.Provider value={playback}>
         {room.phase !== 'LOBBY' && (
           <PhaseSummary
@@ -333,8 +341,6 @@ export function RoomView({
           canEdit={permissions.canEditSettings}
         />
       )}
-
-      <MilestoneNotice />
     </div>
   );
 }
