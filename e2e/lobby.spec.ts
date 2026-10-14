@@ -207,10 +207,13 @@ test('a late join after START_GAME becomes a spectator', async ({
     await unlockSound(host);
     await unlockSound(second);
     await unlockSound(third);
+    // The permanent start hint is part of the LOBBY, not of a running game.
+    await expect(host.getByTestId('lobby-start-hint')).toBeVisible();
     expect((await dispatch(host, { type: 'START_GAME' })).status).toBe(
       'accepted',
     );
     await waitForPhase(host, 'GENRE_SPIN');
+    await expect(host.getByTestId('lobby-start-hint')).toHaveCount(0);
 
     const late = await openHarness(lateContext, `/r/${code}`);
     await joinRoom(late, code, 'Late');
@@ -604,6 +607,9 @@ test('room view stays within 360px and switches language without reload', async 
 
     const select = page.getByTestId('language-switch');
     await expect(select).toHaveValue('de');
+    await expect(page.getByTestId('lobby-start-hint')).toHaveText(
+      'Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert).',
+    );
     const token = await page.evaluate(() => {
       const value = 'room-token';
       (window as unknown as Record<string, unknown>).__roomToken = value;
@@ -611,6 +617,9 @@ test('room view stays within 360px and switches language without reload', async 
     });
     await select.selectOption('en');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.getByTestId('lobby-start-hint')).toHaveText(
+      'The host starts the round once 3–10 players are ready (sound enabled).',
+    );
     const tokenAfter = await page.evaluate(
       () => (window as unknown as Record<string, unknown>).__roomToken,
     );

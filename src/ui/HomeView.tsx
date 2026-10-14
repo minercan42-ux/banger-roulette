@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import genres from '../content/genres.json';
 import type { SessionError } from '../net/errors';
 import { normalizeRoomCode, ROOM_CODE_PATTERN } from './format';
-import { MilestoneNotice } from './MilestoneNotice';
 
 interface HomeViewProps {
   prefillCode: string | null;
@@ -74,8 +73,6 @@ export function HomeView({
         </h1>
         <p className="mt-2 text-sm text-cream-100/80">{t('home.intro')}</p>
       </div>
-
-      <MilestoneNotice />
 
       {joining && (
         <p

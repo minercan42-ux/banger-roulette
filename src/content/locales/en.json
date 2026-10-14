@@ -72,11 +72,6 @@
     "genreCatalogue_other": "{{count}} genres in the roulette catalogue",
     "storageNotice": "Only a local player ID is stored so a reload recognizes you. No login, no saved game."
   },
-  "milestone": {
-    "title": "Milestone M5",
-    "body": "The first completely playable game: genre roulette, song submission, synchronised playback, voting, reveal and finale are live. Casino design, sounds and polish follow in M6.",
-    "startHint": "The host starts the round once 3–10 players are ready (sound enabled)."
-  },
   "lobby": {
     "heading": "Lobby",
     "roomCodeLabel": "Room code",
@@ -97,6 +92,7 @@
     "leave": "Leave room",
     "readOnly": "This tab is read-only. Only an active connection authorized for your player can send actions.",
     "waitingForHost": "Waiting for the host …",
+    "startHint": "The host starts the round once 3–10 players are ready (sound enabled).",
     "settingsHeading": "Game rules",
     "settingsHostOnly": "Only the host can change the rules.",
     "backHome": "Back to start"
