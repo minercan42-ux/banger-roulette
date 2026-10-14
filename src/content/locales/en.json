@@ -272,6 +272,7 @@
     "done": "You voted. Waiting for the others.",
     "finish": "Finish voting",
     "noSongs": "You have no foreign songs to rank this round.",
+    "paused": "The game is paused. You can keep ranking once it resumes.",
     "rankingHeading": "Your ranking",
     "emptyRanking": "Nothing ranked yet. Add songs from the list below.",
     "poolHeading": "Songs to rank",
