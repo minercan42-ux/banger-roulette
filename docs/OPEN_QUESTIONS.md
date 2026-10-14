@@ -76,7 +76,7 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - Reveal order is "ascending placement": round winners always come last, other songs by ascending Borda. A genre-failed song with the highest Borda is revealed before the winner instead of looking like one.
 - Advancing out of VOTING and REVEAL stays deadline-driven or automatic (everyone finished). No host "skip" button was added; the engine's host `ADVANCE` remains available to tests.
 - The voting re-listen player and voting/reveal thumbnails reuse the per-tab embedding consent; without consent nothing is loaded from YouTube.
-- A quorum pause during VOTING empties the write-target lists. The voting view now keeps the foreign songs visible read-only with a pause notice instead of "no foreign songs to rank".
+- A quorum or host pause during VOTING empties the write-target lists. For voters who have not finished, the voting view now keeps the foreign songs visible read-only with a pause notice instead of "no foreign songs to rank"; finished voters keep their read-only ballot.
 
 ## Live multiplayer evidence (2026-10-14, after the Supabase Realtime incident)
 
