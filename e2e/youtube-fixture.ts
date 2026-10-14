@@ -111,6 +111,14 @@ export interface YouTubeCall {
     | 'destroy';
   /** `performance.now()` at the call; monotonic, unaffected by wall clocks. */
   at: number;
+  /**
+   * The page's session-clock time (`GameSession.now()`) at the call, or `null`
+   * when the session does not exist yet. This is the *same clock the app
+   * compares against `startAt`*, so callers can compare it directly instead of
+   * reconstructing a historical wall time from `Date.now`/`performance.now`
+   * (which mixes clocks of different granularity and ignores wall-clock skew).
+   */
+  serverAt: number | null;
   videoId?: string;
   state?: number;
   seconds?: number;
@@ -144,8 +152,14 @@ const IFRAME_API_FIXTURE = `
   }
   function fixMap() { return window.__bangerYtFixture || {}; }
   var callLog = (window.__bangerYtCalls = window.__bangerYtCalls || []);
+  function serverNow() {
+    var banger = window.__banger;
+    if (!banger || !banger.session || typeof banger.session.now !== 'function') return null;
+    var value = banger.session.now();
+    return typeof value === 'number' && isFinite(value) ? value : null;
+  }
   function record(type, extra) {
-    var entry = { type: type, at: perfNow() };
+    var entry = { type: type, at: perfNow(), serverAt: serverNow() };
     if (extra) {
       for (var key in extra) {
         if (Object.prototype.hasOwnProperty.call(extra, key)) entry[key] = extra[key];

@@ -17,7 +17,9 @@ import {
 } from './m3-support';
 import {
   audibleCalls,
+  classifyAudibleCalls,
   consentToPlayback,
+  detectPreStartLeaks,
   enablePlaybackDebug,
   playbackStatus,
   playbackTiming,
@@ -25,6 +27,8 @@ import {
   readDiagnostics,
   waitForPlaybackIndex,
   waitForPlaybackState,
+  type AudibleCall,
+  type PreStartLeak,
 } from './m4-support';
 import {
   failIframeApi,
@@ -32,6 +36,7 @@ import {
   setFixtureVideo,
   watchYouTubeRequests,
   youTubeCalls,
+  type YouTubeCall,
   type YouTubeFixtureMap,
 } from './youtube-fixture';
 
@@ -745,4 +750,119 @@ test('a failed pre-warm is retried when the playback plan arrives', async ({
   } finally {
     await closeStages(stages);
   }
+});
+
+/**
+ * Deterministic controls for the audio-call helpers. Both helpers must date each
+ * call from the session-clock value the fixture recorded *at the call*
+ * (`YouTubeCall.serverAt`) — the same clock `playback.ts` compares against
+ * `startAt`. They must never reconstruct a timestamp from the page's `Date.now`
+ * / `performance.now`: mixing a 1 ms wall clock with a sub-millisecond monotonic
+ * clock, or ignoring the client's wall-clock skew, misdated a legitimate
+ * at-`startAt` unmute as a pre-start leak (the original m4-playback:705 flake).
+ */
+const DETECTOR_VIDEO = 'aaaaaaaaaaa';
+const DETECTOR_START_AT = 1_000;
+const DETECTOR_LOG: YouTubeCall[] = [
+  // Preview traffic (another video) and the plan-less pre-warm unmute all
+  // predate the playback cue and must not taint either walk.
+  { type: 'state', at: 1, serverAt: 10, videoId: 'previewonly', state: 1 },
+  { type: 'unmute', at: 2, serverAt: 11, videoId: 'previewonly' },
+  { type: 'volume', at: 3, serverAt: 20, value: 70 },
+  { type: 'unmute', at: 4, serverAt: 21 },
+  // The playback player: clip cue, muted prebuffer, then playing.
+  { type: 'cue', at: 5, serverAt: 100, videoId: DETECTOR_VIDEO },
+  { type: 'mute', at: 6, serverAt: 101, videoId: DETECTOR_VIDEO },
+  { type: 'volume', at: 7, serverAt: 102, value: 0, videoId: DETECTOR_VIDEO },
+  { type: 'play', at: 8, serverAt: 103, videoId: DETECTOR_VIDEO },
+  { type: 'state', at: 9, serverAt: 104, videoId: DETECTOR_VIDEO, state: 1 },
+  // The muted pre-start play/seek are silent: neither audible nor a leak.
+  { type: 'play', at: 10, serverAt: 105, videoId: DETECTOR_VIDEO },
+  { type: 'pause', at: 11, serverAt: 106, videoId: DETECTOR_VIDEO },
+  { type: 'seek', at: 12, serverAt: 107, seconds: 10, videoId: DETECTOR_VIDEO },
+  { type: 'state', at: 13, serverAt: 108, videoId: DETECTOR_VIDEO, state: 1 },
+  // Genuinely early: 100 ms before startAt, while the media is playing.
+  { type: 'volume', at: 14, serverAt: 900, value: 70, videoId: DETECTOR_VIDEO },
+  { type: 'unmute', at: 15, serverAt: 901, videoId: DETECTOR_VIDEO },
+  // Exactly at startAt: accepted (no tolerance band either side).
+  {
+    type: 'volume',
+    at: 16,
+    serverAt: 1_000,
+    value: 70,
+    videoId: DETECTOR_VIDEO,
+  },
+  { type: 'unmute', at: 17, serverAt: 1_000, videoId: DETECTOR_VIDEO },
+  // Audible from here on: a real start play and a drift-correction seek.
+  { type: 'play', at: 18, serverAt: 1_100, videoId: DETECTOR_VIDEO },
+  {
+    type: 'seek',
+    at: 19,
+    serverAt: 1_200,
+    seconds: 12,
+    videoId: DETECTOR_VIDEO,
+  },
+];
+
+const DETECTOR_EARLY_LEAKS = ['volume@900', 'unmute@901'];
+const DETECTOR_AUDIBLE_PLAY = ['play@1100'];
+const DETECTOR_AUDIBLE_SEEK = ['seek@1200'];
+
+function callKeys(calls: readonly (AudibleCall | PreStartLeak)[]): string[] {
+  return calls.map((entry) => `${entry.call.type}@${entry.serverAt}`);
+}
+
+test.describe('audio-call helpers', () => {
+  test('the leak detector rejects early calls and accepts calls exactly at startAt', () => {
+    expect(
+      callKeys(detectPreStartLeaks(DETECTOR_LOG, DETECTOR_START_AT)),
+    ).toEqual(DETECTOR_EARLY_LEAKS);
+    // One millisecond earlier is still a leak: the boundary is exact.
+    expect(
+      callKeys(detectPreStartLeaks(DETECTOR_LOG, DETECTOR_START_AT + 1)),
+    ).toEqual([...DETECTOR_EARLY_LEAKS, 'volume@1000', 'unmute@1000']);
+    // The audible walk reports the recorded session time, not a reconstruction.
+    expect(
+      callKeys(classifyAudibleCalls(DETECTOR_LOG, DETECTOR_VIDEO, 'play')),
+    ).toEqual(DETECTOR_AUDIBLE_PLAY);
+    expect(
+      callKeys(classifyAudibleCalls(DETECTOR_LOG, DETECTOR_VIDEO, 'seek')),
+    ).toEqual(DETECTOR_AUDIBLE_SEEK);
+  });
+
+  test('the call-log helpers ignore the client wall clock and its skew', async ({
+    browser,
+  }) => {
+    for (const wallClockOffsetMs of [3_000, -3_000]) {
+      const stage = await newStage(browser, {
+        nickname: 'Skew',
+        wallClockOffsetMs,
+      });
+      try {
+        await stage.page.evaluate((log) => {
+          window.__bangerYtCalls = log;
+        }, DETECTOR_LOG);
+        expect(
+          callKeys(await preStartAudioLeaks(stage.page, DETECTOR_START_AT)),
+        ).toEqual(DETECTOR_EARLY_LEAKS);
+        expect(
+          callKeys(await audibleCalls(stage.page, DETECTOR_VIDEO, 'play')),
+        ).toEqual(DETECTOR_AUDIBLE_PLAY);
+        // A wall-clock adjustment *after* the calls were recorded must not move
+        // any of them: each timestamp was captured at call time.
+        await stage.page.evaluate(() => {
+          const real = Date.now.bind(Date);
+          Date.now = () => real() + 4_321;
+        });
+        expect(
+          callKeys(await preStartAudioLeaks(stage.page, DETECTOR_START_AT)),
+        ).toEqual(DETECTOR_EARLY_LEAKS);
+        expect(
+          callKeys(await audibleCalls(stage.page, DETECTOR_VIDEO, 'seek')),
+        ).toEqual(DETECTOR_AUDIBLE_SEEK);
+      } finally {
+        await closeStages([stage]);
+      }
+    }
+  });
 });
