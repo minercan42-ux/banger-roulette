@@ -4,6 +4,7 @@ import type { ClientAction } from '../src/shared/actions';
 import type { CommandResult } from '../src/net/errors';
 import type { SessionSnapshot } from '../src/net/session';
 import type { GameState } from '../src/shared/game';
+import { harnessContext } from './m3-support';
 import { finishVoting, mediaFor, playToVoting } from './m5-support';
 
 /**
@@ -110,9 +111,9 @@ test('three contexts create, join by code and deep link with host-only rules', a
   browser,
 }) => {
   test.setTimeout(60_000);
-  const hostContext = await browser.newContext({ locale: 'de-DE' });
-  const codeContext = await browser.newContext({ locale: 'en-US' });
-  const linkContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'de-DE' });
+  const codeContext = await harnessContext(browser, { locale: 'en-US' });
+  const linkContext = await harnessContext(browser, { locale: 'en-US' });
   const errors: string[] = [];
   try {
     const host = await openHarness(hostContext, '/');
@@ -176,8 +177,8 @@ test('the genre-fail penalty switches off to 0 and back on to -3', async ({
   browser,
 }) => {
   test.setTimeout(60_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const memberContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const memberContext = await harnessContext(browser, { locale: 'en-US' });
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
@@ -256,10 +257,10 @@ test('a late join after START_GAME becomes a spectator', async ({
   browser,
 }) => {
   test.setTimeout(60_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const secondContext = await browser.newContext({ locale: 'en-US' });
-  const thirdContext = await browser.newContext({ locale: 'en-US' });
-  const lateContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const secondContext = await harnessContext(browser, { locale: 'en-US' });
+  const thirdContext = await harnessContext(browser, { locale: 'en-US' });
+  const lateContext = await harnessContext(browser, { locale: 'en-US' });
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
@@ -325,8 +326,8 @@ test('a host second tab rebinds identity: old tab read-only, new tab writes', as
   browser,
 }) => {
   test.setTimeout(60_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const memberContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const memberContext = await harnessContext(browser, { locale: 'en-US' });
   try {
     const firstTab = await openHarness(hostContext);
     const code = await createRoom(firstTab, 'Alice');
@@ -384,13 +385,15 @@ test('invalid, missing, duplicate and full-room joins stay consumer visible', as
   browser,
 }) => {
   test.setTimeout(120_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const dupContext = await browser.newContext({ locale: 'en-US' });
-  const invalidContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const dupContext = await harnessContext(browser, { locale: 'en-US' });
+  const invalidContext = await harnessContext(browser, { locale: 'en-US' });
   const joiners = await Promise.all(
-    Array.from({ length: 9 }, () => browser.newContext({ locale: 'en-US' })),
+    Array.from({ length: 9 }, () =>
+      harnessContext(browser, { locale: 'en-US' }),
+    ),
   );
-  const overflowContext = await browser.newContext({ locale: 'en-US' });
+  const overflowContext = await harnessContext(browser, { locale: 'en-US' });
   const allContexts = [
     hostContext,
     dupContext,
@@ -468,9 +471,9 @@ test('reload keeps the retained identity and score without game persistence', as
   browser,
 }) => {
   test.setTimeout(90_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const memberContext = await browser.newContext({ locale: 'en-US' });
-  const thirdContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const memberContext = await harnessContext(browser, { locale: 'en-US' });
+  const thirdContext = await harnessContext(browser, { locale: 'en-US' });
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
@@ -525,9 +528,9 @@ test('host disconnect during voting migrates and keeps every round datum', async
   browser,
 }) => {
   test.setTimeout(90_000);
-  const hostContext = await browser.newContext({ locale: 'en-US' });
-  const memberContext = await browser.newContext({ locale: 'en-US' });
-  const thirdContext = await browser.newContext({ locale: 'en-US' });
+  const hostContext = await harnessContext(browser, { locale: 'en-US' });
+  const memberContext = await harnessContext(browser, { locale: 'en-US' });
+  const thirdContext = await harnessContext(browser, { locale: 'en-US' });
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
@@ -642,7 +645,7 @@ test('host disconnect during voting migrates and keeps every round datum', async
 test('copy link falls back to manual sharing when the clipboard is denied', async ({
   browser,
 }) => {
-  const context = await browser.newContext({ locale: 'en-US' });
+  const context = await harnessContext(browser, { locale: 'en-US' });
   await context.addInitScript(() => {
     // Simulates a browser that refuses programmatic clipboard writes.
     Object.defineProperty(navigator, 'clipboard', {
@@ -671,7 +674,7 @@ test('copy link falls back to manual sharing when the clipboard is denied', asyn
 test('room view stays within 360px and switches language without reload', async ({
   browser,
 }) => {
-  const context = await browser.newContext({
+  const context = await harnessContext(browser, {
     locale: 'de-DE',
     viewport: { width: 360, height: 640 },
   });

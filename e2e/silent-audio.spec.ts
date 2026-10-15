@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
-import { closeStages, newStage } from './m3-support';
+import { closeStages, harnessContext, newStage } from './m3-support';
 import { NO_AUDIO_DEVICE } from './silent-audio';
 
 /**
@@ -48,6 +48,8 @@ async function loadHarness(
   shape: ResumeShape,
   mode?: string,
 ): Promise<Harness> {
+  // Opened directly instead of through `harnessContext`: these cases choose the
+  // mode themselves, including the ones that must run without it.
   const context = await browser.newContext();
   await context.addInitScript(
     (config) => {
@@ -223,17 +225,25 @@ test('selected: the real resume of this engine ends running', async ({
   }
 });
 
-test('the shared stage selects the no-device sink for Firefox only', async ({
+test('the harness factories select the no-device sink for Firefox only', async ({
   browser,
   browserName,
 }) => {
+  const expected = browserName === 'firefox' ? NO_AUDIO_DEVICE : null;
   const stage = await newStage(browser, { nickname: 'Ada' });
+  // Contexts a spec opens itself come from `harnessContext`; both roads have to
+  // carry the mode, because the FR-07 consent click is not rarer in one of them.
+  const context = await harnessContext(browser, { locale: 'en-US' });
   try {
-    const mode = await stage.page.evaluate(
-      () => window.__silentAudioMode ?? null,
-    );
-    expect(mode).toBe(browserName === 'firefox' ? NO_AUDIO_DEVICE : null);
+    const page = await context.newPage();
+    await page.goto('/');
+    await page.waitForFunction(() => window.__banger !== undefined);
+    const readMode = (target: Page) =>
+      target.evaluate(() => window.__silentAudioMode ?? null);
+    expect(await readMode(stage.page)).toBe(expected);
+    expect(await readMode(page)).toBe(expected);
   } finally {
     await closeStages([stage]);
+    await context.close();
   }
 });

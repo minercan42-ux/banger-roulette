@@ -5,6 +5,7 @@ import {
   assembleRoom,
   closeStages,
   enterSubmission,
+  harnessContext,
   joinRoom,
   newStage,
   setSettings,
@@ -592,7 +593,9 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
 
     // A genuinely new identity that joins mid-round is a spectator: it may not
     // flag. Check zero traffic before consent, then test the visible flag gate.
-    const spectatorContext = await browser.newContext({ locale: 'en-US' });
+    const spectatorContext = await harnessContext(browser, {
+      locale: 'en-US',
+    });
     await installYouTubeFixture(spectatorContext, {});
     const spectator = await spectatorContext.newPage();
     const spectatorRequests = watchYouTubeRequests(spectator);

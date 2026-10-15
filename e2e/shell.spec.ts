@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { harnessContext } from './m3-support';
 
 const TITLE = 'Banger Roulette';
 
@@ -53,9 +54,9 @@ test('three isolated contexts render the bilingual shell', async ({
   browser,
 }) => {
   const [de, en, fr] = await Promise.all([
-    browser.newContext({ locale: 'de-DE' }),
-    browser.newContext({ locale: 'en-US' }),
-    browser.newContext({ locale: 'fr-FR' }),
+    harnessContext(browser, { locale: 'de-DE' }),
+    harnessContext(browser, { locale: 'en-US' }),
+    harnessContext(browser, { locale: 'fr-FR' }),
   ]);
   try {
     const [dePage, enPage, frPage] = await Promise.all([
@@ -110,7 +111,7 @@ test('three isolated contexts render the bilingual shell', async ({
 test('language switch updates html lang and shell text without reload', async ({
   browser,
 }) => {
-  const context = await browser.newContext({ locale: 'de-DE' });
+  const context = await harnessContext(browser, { locale: 'de-DE' });
   const page = await context.newPage();
   const errors = trackErrors(page);
   try {
@@ -140,7 +141,7 @@ test('language switch updates html lang and shell text without reload', async ({
 });
 
 test('keyboard changes the language selection', async ({ browser }) => {
-  const context = await browser.newContext({ locale: 'de-DE' });
+  const context = await harnessContext(browser, { locale: 'de-DE' });
   const page = await context.newPage();
   const errors = trackErrors(page);
   try {
@@ -165,7 +166,7 @@ test('keyboard changes the language selection', async ({ browser }) => {
 test('deep link /r/ABCDEF loads the shell and survives a reload', async ({
   browser,
 }) => {
-  const context = await browser.newContext({ locale: 'en-US' });
+  const context = await harnessContext(browser, { locale: 'en-US' });
   const page = await context.newPage();
   const errors = trackErrors(page);
   try {
@@ -187,7 +188,7 @@ test('deep link /r/ABCDEF loads the shell and survives a reload', async ({
 });
 
 test('shell has no horizontal overflow at 360px', async ({ browser }) => {
-  const context = await browser.newContext({
+  const context = await harnessContext(browser, {
     locale: 'de-DE',
     viewport: { width: 360, height: 640 },
   });
@@ -212,7 +213,7 @@ test('shell has no horizontal overflow at 360px', async ({ browser }) => {
 });
 
 test('shell honours a reduced motion preference', async ({ browser }) => {
-  const context = await browser.newContext({
+  const context = await harnessContext(browser, {
     locale: 'de-DE',
     reducedMotion: 'reduce',
   });
@@ -287,7 +288,7 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 test('privacy notice shows on Home and in a room and switches language without reload', async ({
   browser,
 }) => {
-  const context = await browser.newContext({
+  const context = await harnessContext(browser, {
     locale: 'de-DE',
     viewport: { width: 360, height: 740 },
   });

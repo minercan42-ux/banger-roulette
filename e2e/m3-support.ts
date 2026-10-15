@@ -1,5 +1,10 @@
 import { expect } from '@playwright/test';
-import type { Browser, BrowserContext, Page } from '@playwright/test';
+import type {
+  Browser,
+  BrowserContext,
+  BrowserContextOptions,
+  Page,
+} from '@playwright/test';
 import type { ClientAction } from '../src/shared/actions';
 import type { CommandResult } from '../src/net/errors';
 import type { SessionSnapshot } from '../src/net/session';
@@ -39,25 +44,37 @@ export interface StageOptions {
   wallClockOffsetMs?: number;
 }
 
-export async function newStage(
+/**
+ * A browser context of the test harness. It carries the mode the engine needs:
+ * the Firefox project selects the test-only silent sink here, before any page
+ * script runs, and every other engine keeps its native `AudioContext`
+ * (see `e2e/silent-audio.ts`). A spec that creates its context directly has to
+ * go through this factory, or the FR-07 consent click of that engine never
+ * settles.
+ */
+export async function harnessContext(
   browser: Browser,
-  options: StageOptions,
-): Promise<Stage> {
-  const context = await browser.newContext({
-    locale: options.locale ?? 'en-US',
-    reducedMotion: options.reducedMotion,
-    viewport: options.viewport,
-  });
-  await installYouTubeFixture(context, options.videos ?? {});
-  // Firefox without an audio output device never settles `resume()`, so the
-  // FR-07 consent click would hang; only that engine selects the test-only
-  // silent sink, and the flag is set before any page script runs
-  // (see `e2e/silent-audio.ts`).
+  options: BrowserContextOptions = {},
+): Promise<BrowserContext> {
+  const context = await browser.newContext(options);
   if (browser.browserType().name() === 'firefox') {
     await context.addInitScript((mode) => {
       window.__silentAudioMode = mode;
     }, NO_AUDIO_DEVICE);
   }
+  return context;
+}
+
+export async function newStage(
+  browser: Browser,
+  options: StageOptions,
+): Promise<Stage> {
+  const context = await harnessContext(browser, {
+    locale: options.locale ?? 'en-US',
+    reducedMotion: options.reducedMotion,
+    viewport: options.viewport,
+  });
+  await installYouTubeFixture(context, options.videos ?? {});
   const skew = options.wallClockOffsetMs ?? 0;
   if (skew !== 0) {
     await context.addInitScript((offset) => {
