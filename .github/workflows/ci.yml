@@ -44,8 +44,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3]
-        shardTotal: [3]
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     env:
       PW_BLOB_REPORT: '1'
     steps:
@@ -113,7 +113,7 @@ jobs:
           merge-multiple: true
       # `list` prints every test once plus the total, which doubles as the
       # "each test ran exactly once" evidence in the log.
-      - run: pnpm exec playwright merge-reports --reporter=list,html ./all-blob-reports
+      - run: pnpm exec playwright merge-reports --config=playwright.merge.config.ts ./all-blob-reports
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
