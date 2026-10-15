@@ -15,7 +15,7 @@
     "build": "vite build",
     "size:check": "node scripts/bundle-check.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test && playwright test --config playwright.csp.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

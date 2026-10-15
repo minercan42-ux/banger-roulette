@@ -9,5 +9,12 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
   },
-  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+  projects: [
+    {
+      name: 'chromium',
+      // `e2e/csp` runs against the production preview, not this dev server.
+      testIgnore: '**/csp/**',
+      use: { browserName: 'chromium' },
+    },
+  ],
 });
