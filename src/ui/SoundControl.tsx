@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameSession } from '../net/session';
+import { releaseAudioContext, unlockAudioContext } from './audio-context';
 
 interface SoundControlProps {
   session: GameSession;
@@ -22,7 +23,6 @@ export function SoundControl({
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
   const [locallyUnlocked, setLocallyUnlocked] = useState(false);
   const resetInFlight = useRef(false);
   const soundReady = locallyUnlocked && unlocked;
@@ -40,15 +40,9 @@ export function SoundControl({
       });
   }, [canWrite, unlocked, locallyUnlocked, session]);
 
-  useEffect(
-    () => () => {
-      const context = contextRef.current;
-      if (context !== null && context.state !== 'closed') {
-        void context.close();
-      }
-    },
-    [],
-  );
+  // Leaving the room drops the shared context the sfx director plays on; a
+  // later consent click in the next room creates a fresh one.
+  useEffect(() => () => releaseAudioContext(), []);
 
   async function enable() {
     if (busy || !canWrite || soundReady) {
@@ -57,15 +51,7 @@ export function SoundControl({
     setBusy(true);
     setErrorKey(null);
     try {
-      if (!window.AudioContext) {
-        throw new Error('AudioContext unavailable');
-      }
-      const context = contextRef.current ?? new window.AudioContext();
-      contextRef.current = context;
-      await context.resume();
-      if (context.state !== 'running') {
-        throw new Error('AudioContext did not resume');
-      }
+      await unlockAudioContext();
       setLocallyUnlocked(true);
       const result = await session.dispatch({
         type: 'SOUND_STATUS',

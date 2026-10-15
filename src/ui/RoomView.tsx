@@ -25,6 +25,7 @@ import { RevealPhase } from './RevealPhase';
 import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
 import { SingleSongPhase } from './SingleSongPhase';
+import { SfxDirector } from './SfxDirector';
 import { SoundControl } from './SoundControl';
 import { SubmissionPanel } from './SubmissionPanel';
 import { VotingPhase } from './VotingPhase';
@@ -97,6 +98,9 @@ export function RoomView({
 
   return (
     <div data-testid="room-view" data-phase={room.phase} className="space-y-5">
+      {/* SPEC §6: one effect director for the room, driven by the shared state
+          instead of the phase components. */}
+      <SfxDirector session={session} state={state} />
       {/* SPEC §6: the phase live region is mounted for the whole room lifecycle
           (LOBBY included) so the lobby boundary is announced too. */}
       <PhaseAnnouncer room={room} />
