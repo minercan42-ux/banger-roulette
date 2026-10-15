@@ -16,7 +16,10 @@
     "size:check": "node scripts/bundle-check.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "test:e2e": "playwright test && playwright test --config playwright.csp.config.ts",
-    "test:e2e:live": "playwright test -c playwright.live.config.ts"
+    "test:e2e:live": "playwright test -c playwright.live.config.ts",
+    "lighthouse": "pnpm lighthouse:desktop && pnpm lighthouse:mobile",
+    "lighthouse:desktop": "lhci autorun --config=./lighthouserc.cjs",
+    "lighthouse:mobile": "LHCI_DEVICE=mobile lhci autorun --config=./lighthouserc.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",
@@ -30,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "1.64.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.19.2",

@@ -53,3 +53,32 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  lighthouse:
+    name: Lighthouse (desktop >= 90, mobile >= 80)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install the Chromium that Lighthouse drives
+        id: chrome
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          echo "path=$(pnpm exec node -e "console.log(require(require.resolve('playwright-core',{paths:[require.resolve('@playwright/test')]})).chromium.executablePath())")" >> "$GITHUB_OUTPUT"
+      - run: pnpm lighthouse
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.path }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: lhci/
+          retention-days: 7

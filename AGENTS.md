@@ -28,6 +28,7 @@ The product and architecture spec is `SPEC.md`. Read it before doing anything. I
 | `pnpm i18n:check` | Fails if any locale is missing keys (AK-9) |
 | `pnpm test:e2e` | Playwright E2E, multiple browser contexts |
 | `pnpm test:e2e:live` | Playwright live smoke against a deployed URL (not part of PR CI) |
+| `pnpm lighthouse` | Lighthouse CI: Performance desktop >= 90, mobile >= 80, median of 3 runs per URL (NFR-01); reports in `lhci/desktop` and `lhci/mobile` (`pnpm lighthouse:desktop` / `lighthouse:mobile` run one pass) |
 
 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` locally before every push.
 
