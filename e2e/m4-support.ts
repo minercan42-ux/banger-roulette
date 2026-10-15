@@ -1,7 +1,7 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { GameState } from '../src/shared/game';
-import type { YouTubeCall } from './youtube-fixture';
+import { youTubeCalls, type YouTubeCall } from './youtube-fixture';
 
 /**
  * M4 playback helpers. They drive the real UI/session and only read the
@@ -139,111 +139,135 @@ export async function waitForPlaybackState(
 
 export interface AudibleCall {
   call: YouTubeCall;
-  /** The call's server-time estimate on the shared timeline. */
+  /** The call's session-clock time, read at the call (the app's own timeline). */
   serverAt: number;
 }
 
 /**
- * Reads the recorded low-level calls for a video and classifies the `play`/`seek`
- * calls as audible (made while the player was unmuted). The call log is shared
- * with the submission *preview* player, so the walk only starts at the clip cue
- * (`playback.ts` is the only caller of `cueVideoById`); everything before it
- * belongs to the preview.
+ * Classifies the recorded `play`/`seek` calls of a video as audible (made while
+ * the player was unmuted). The call log is shared with the submission *preview*
+ * player, so the walk only starts at the clip cue (`playback.ts` is the only
+ * caller of `cueVideoById`); everything before it belongs to the preview.
  *
  * `playback.ts` mutes the player for its preroll prebuffer, so the muted
  * pre-start `play` and the rewind `seekTo` are silent, while the real start (and
- * any drift correction) is audible. Each call's server time is derived in-page
- * from `performance.now()` and the session clock, so it can be compared to the
- * absolute `startAt` without cross-clock assumptions.
+ * any drift correction) is audible. Every call carries the session-clock time
+ * the fixture read *at the call* (`YouTubeCall.serverAt`) — the same clock the
+ * app uses — so it is comparable to the absolute `startAt` directly, with no
+ * cross-clock reconstruction.
+ *
+ * Calls logged before the session exists (`serverAt === null`) are ignored; no
+ * player call can predate the session.
  */
-export function audibleCalls(
+export function classifyAudibleCalls(
+  calls: readonly YouTubeCall[],
+  videoId: string,
+  type: 'play' | 'seek',
+): AudibleCall[] {
+  let muted = false;
+  let inPlayback = false;
+  const audible: AudibleCall[] = [];
+  for (const call of calls) {
+    if (call.type === 'mute') {
+      muted = true;
+    } else if (call.type === 'unmute') {
+      muted = false;
+    } else if (call.type === 'cue' && call.videoId === videoId) {
+      inPlayback = true;
+    } else if (
+      inPlayback &&
+      call.type === type &&
+      call.videoId === videoId &&
+      !muted &&
+      call.serverAt !== null
+    ) {
+      audible.push({ call, serverAt: call.serverAt });
+    }
+  }
+  return audible;
+}
+
+/**
+ * Reads the recorded low-level calls for a video and returns its audible ones.
+ * See {@link classifyAudibleCalls} for the classification rules.
+ */
+export async function audibleCalls(
   page: Page,
   videoId: string,
   type: 'play' | 'seek',
 ): Promise<AudibleCall[]> {
-  return page.evaluate(
-    ([id, kind]) => {
-      const calls: YouTubeCall[] = window.__bangerYtCalls ?? [];
-      const perfNow = performance.now();
-      const serverNow = window.__banger!.session.now();
-      let muted = false;
-      let inPlayback = false;
-      const audible: { call: YouTubeCall; serverAt: number }[] = [];
-      for (const call of calls) {
-        if (call.type === 'mute') {
-          muted = true;
-        } else if (call.type === 'unmute') {
-          muted = false;
-        } else if (call.type === 'cue' && call.videoId === id) {
-          inPlayback = true;
-        } else if (
-          inPlayback &&
-          call.type === kind &&
-          call.videoId === id &&
-          !muted
-        ) {
-          audible.push({ call, serverAt: serverNow + (call.at - perfNow) });
-        }
-      }
-      return audible;
-    },
-    [videoId, type] as const,
-  );
+  return classifyAudibleCalls(await youTubeCalls(page), videoId, type);
 }
 
 export interface PreStartLeak {
   call: YouTubeCall;
-  /** The call's server-time estimate on the shared timeline. */
+  /** The call's session-clock time, read at the call (the app's own timeline). */
   serverAt: number;
 }
 
 /**
- * Detects a pre-start audio leak: an `unmute`, or a nonzero `volume`, applied
- * while the media is *playing* before `startAt`. The controller must keep the
- * player silent until the agreed start, even across a clip change while a muted
- * prebuffer is still in flight (where unmuting before the replacement cue would
- * make the old clip audible). Unlike `audibleCalls` this walks the raw
- * playing/mute state, so an "unmute while already playing" leak cannot hide
- * behind the mute/unmute bookkeeping.
+ * Finds pre-start audio leaks: an `unmute`, or a nonzero `volume`, applied while
+ * the media is *playing* before `startAt`. The player must stay silent until the
+ * agreed start, even across a clip change while a muted prebuffer is still in
+ * flight (unmuting before the replacement cue would make the old clip audible).
+ * Unlike {@link classifyAudibleCalls} this walks the raw playing/mute state, so
+ * an "unmute while already playing" leak cannot hide behind the mute/unmute
+ * bookkeeping.
+ *
+ * Every call is dated with the session-clock value the fixture recorded *at the
+ * call* (`YouTubeCall.serverAt`) — the same clock `playback.ts` compares against
+ * `startAt` — and the comparison is direct, so no timestamp is reconstructed
+ * from `Date.now`/`performance.now`. The normal audible-start paths
+ * (`attemptStart`, `handlePlaying`) restore audio only once that clock reaches
+ * `startAt`, so a legitimate start maps to `serverAt >= startAt` and only a
+ * genuine pre-start leak falls below it. The *un*gated restorations
+ * (`handleAutoplayBlocked` -> `abandonPrebuffer`, and the plan-less pre-warm
+ * `applyAudio`) happen while the media is not playing, so this playing-state
+ * walk already excludes them.
+ *
+ * Calls logged before the session exists (`serverAt === null`) are ignored; no
+ * player call can predate the session.
  */
-export function preStartAudioLeaks(
+export function detectPreStartLeaks(
+  calls: readonly YouTubeCall[],
+  startAt: number,
+): PreStartLeak[] {
+  let playing = false;
+  // `playback.ts` is the only caller of `cueVideoById`, so the first cue marks
+  // the long-lived playback player. Everything before it belongs to the
+  // transient submission preview and must not taint the walk.
+  let started = false;
+  const leaks: PreStartLeak[] = [];
+  for (const call of calls) {
+    if (!started) {
+      started = call.type === 'cue';
+      continue;
+    }
+    if (call.type === 'state') {
+      playing = call.state === 1;
+    } else if (call.type === 'pause' || call.type === 'cue') {
+      playing = false;
+    }
+    if (!playing || call.serverAt === null || call.serverAt >= startAt) {
+      continue;
+    }
+    if (
+      call.type === 'unmute' ||
+      (call.type === 'volume' && (call.value ?? 0) > 0)
+    ) {
+      leaks.push({ call, serverAt: call.serverAt });
+    }
+  }
+  return leaks;
+}
+
+/**
+ * Reads the page's recorded calls and returns the pre-start audio leaks. See
+ * {@link detectPreStartLeaks} for the detection rules.
+ */
+export async function preStartAudioLeaks(
   page: Page,
   startAt: number,
 ): Promise<PreStartLeak[]> {
-  return page.evaluate(
-    ([plannedStart]) => {
-      const calls: YouTubeCall[] = window.__bangerYtCalls ?? [];
-      const perfNow = performance.now();
-      const serverNow = window.__banger!.session.now();
-      let playing = false;
-      // `playback.ts` is the only caller of `cueVideoById`, so the first cue
-      // marks the long-lived playback player. Everything before it belongs to
-      // the transient submission preview and must not taint the walk.
-      let started = false;
-      const leaks: { call: YouTubeCall; serverAt: number }[] = [];
-      for (const call of calls) {
-        if (!started) {
-          started = call.type === 'cue';
-          continue;
-        }
-        if (call.type === 'state') {
-          playing = call.state === 1;
-        } else if (call.type === 'pause' || call.type === 'cue') {
-          playing = false;
-        }
-        const serverAt = serverNow + (call.at - perfNow);
-        if (serverAt >= plannedStart || !playing) {
-          continue;
-        }
-        if (
-          call.type === 'unmute' ||
-          (call.type === 'volume' && (call.value ?? 0) > 0)
-        ) {
-          leaks.push({ call, serverAt });
-        }
-      }
-      return leaks;
-    },
-    [startAt] as const,
-  );
+  return detectPreStartLeaks(await youTubeCalls(page), startAt);
 }
