@@ -34,6 +34,12 @@ Playback uses the host snapshot's absolute `startAt` and `deadlineAt`, with a th
 
 Append `?debug=1` to a room URL to inspect clock offset/RTT/synchronization, planned and observed start, start skew (content offset at the audible start), current drift and player status. Drift above 750 ms triggers a local seek; an independent deadline stops the clip because YouTube seeking invalidates its queued `endSeconds`. Cold first songs, heavy streams, ads and a loaded device can still miss AK-7's ±500 ms target. The overlay reports those misses rather than manufacturing successful timing; measure AK-7 with one client per device.
 
+## Supported browsers
+
+Chrome, Firefox, Edge (Chromium-based) and Safari are supported in their current versions (NFR-05); iOS Safari is checked manually on a real device and is not part of CI.
+
+`playwright.config.ts` defines the projects `chromium`, `firefox` and `webkit`. Pull requests stay Chromium-only because of the Actions minute budget; `main` and manual runs (`workflow_dispatch`) also run the `e2e-cross-browser` CI job for Firefox and WebKit. Locally: `pnpm exec playwright install firefox webkit` (never `--with-deps`, never sudo), then `pnpm test:e2e --project=firefox` or `--project=webkit`.
+
 ## Verification
 
 ```sh
@@ -43,7 +49,8 @@ pnpm test
 pnpm build
 pnpm i18n:check
 pnpm exec playwright install chromium
-pnpm test:e2e
+pnpm test:e2e --project=chromium
+pnpm test:e2e:csp
 ```
 
 `lint` checks ESLint boundaries and Prettier. UI may import only `src/engine/selectors.ts`, not engine internals; engine cannot import net/player/UI. `test` is Vitest with V8 coverage (production engine lines must reach 90%). `test:e2e` starts a test-only Vite/WebSocket bridge over the real in-memory transport and actual browser-hosted session/engine. Isolated contexts exercise lobby membership, settings, late joins, tab rebinding, reload/score recovery, migration during voting, sharing, DE/EN, keyboard, deep links, 360px and reduced motion. M3 covers common roulette results, duplicate submissions/first start/anonymity, denied embeds/consent, saved draft recovery, irreversible finish, deadlines, stale previews, pause and tab takeover. M4 adds different client wall clocks, observed PLAYING starts, drift thresholds, delayed cue/buffering, autoplay recovery, isolated errors, absolute deadlines, pause/resume/reload, consent and playback flag permissions. Only the external YouTube script/frame/thumbnail/oEmbed boundary is replaced; player, UI and session remain real. The harness and its debug API are not production build inputs. Synthetic timing is not evidence of live Supabase/YouTube timing.
