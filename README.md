@@ -2,7 +2,17 @@
 
 Browser party game: each round a genre is spun on a roulette wheel, every player submits a YouTube link to their biggest banger, everyone listens to the snippets in sync, ranks the others and scores points. No login, casino vibe, German and English UI.
 
-Status: M4 adds server-time-scheduled YouTube playback, drift correction, local audio controls and a `?debug=1` overlay to the M3 genre/submission flow and M2 realtime lobby. Production at [banger-roulette.vercel.app](https://banger-roulette.vercel.app/) follows separately approved squash merges to `main`; release evidence is recorded in each milestone PR. Voting, reveal and the finale follow in M5. This is not yet a complete playable game, and real-service timing acceptance remains a separate gate.
+Status: complete, playable MVP (M0–M6) in production at [banger-roulette.vercel.app](https://banger-roulette.vercel.app/): lobby, genre roulette, submission, synchronized playback, voting, reveal, finale and rematch work end to end ([M2](https://github.com/minercan42-ux/banger-roulette/pull/4), [M3](https://github.com/minercan42-ux/banger-roulette/pull/5), [M4](https://github.com/minercan42-ux/banger-roulette/pull/6), [M5](https://github.com/minercan42-ux/banger-roulette/pull/7)). Production follows separately approved squash merges to `main`. This is not yet the `v1.0.0` release: the M7 release gate ([#28](https://github.com/minercan42-ux/banger-roulette/issues/28)) and AK-7 acceptance on one client per device ([#21](https://github.com/minercan42-ux/banger-roulette/issues/21)) are open. The remaining casino styling of the phase screens ([#22](https://github.com/minercan42-ux/banger-roulette/issues/22) to [#26](https://github.com/minercan42-ux/banger-roulette/issues/26)) is paused until the owner has decided the Pixel-Filz redesign plan ([#45](https://github.com/minercan42-ux/banger-roulette/issues/45)); Pixel-Filz is a plan, not shipped.
+
+## Features
+
+- Rooms of 3–10 players by link, no login; reload and tab takeover keep your identity, the host migrates when the host leaves ([M2](https://github.com/minercan42-ux/banger-roulette/pull/4)). The first create or join retries once on a transient Realtime failure ([#36](https://github.com/minercan42-ux/banger-roulette/pull/36)).
+- Genre roulette (or fixed/custom genres), YouTube link submission with validated playback and a start point ([M3](https://github.com/minercan42-ux/banger-roulette/pull/5)), clock-synchronized playback with drift correction and a `?debug=1` overlay ([M4](https://github.com/minercan42-ux/banger-roulette/pull/6)).
+- Voting by ranking, anonymous reveal with a leaderboard, genre-fail flags with an explicit "off" penalty setting, finale and rematch ([M5](https://github.com/minercan42-ux/banger-roulette/pull/7), [#44](https://github.com/minercan42-ux/banger-roulette/pull/44)).
+- Synthesized casino sound effects (no audio files) with an on/off toggle in the header ([#52](https://github.com/minercan42-ux/banger-roulette/pull/52)); casino colour tokens, chips and a global focus ring on the frame ([#39](https://github.com/minercan42-ux/banger-roulette/pull/39)).
+- German and English UI, 360 px layout, reduced motion, keyboard operation and screen-reader phase announcements ([#40](https://github.com/minercan42-ux/banger-roulette/pull/40)).
+- Persistent privacy notice on every screen: YouTube is embedded from `youtube-nocookie.com` only after consent in the tab, no analytics, no cookies, only a random player ID in localStorage ([#55](https://github.com/minercan42-ux/banger-roulette/pull/55), NFR-04).
+- Gates in CI: 250 kB gzip initial-JS budget ([#47](https://github.com/minercan42-ux/banger-roulette/pull/47)), Lighthouse Performance desktop ≥ 90 and mobile ≥ 80, median of three runs ([#49](https://github.com/minercan42-ux/banger-roulette/pull/49)), and a strict-CSP regression with zod in jitless mode so no `eval` probe fires ([#48](https://github.com/minercan42-ux/banger-roulette/pull/48)).
 
 - Product and architecture spec: [SPEC.md](SPEC.md)
 - Rules for coding agents: [AGENTS.md](AGENTS.md)
@@ -38,7 +48,9 @@ Append `?debug=1` to a room URL to inspect clock offset/RTT/synchronization, pla
 
 Chrome, Firefox, Edge (Chromium-based) and Safari are supported in their current versions (NFR-05); iOS Safari is checked manually on a real device and is not part of CI.
 
-`playwright.config.ts` defines the projects `chromium`, `firefox` and `webkit`. Pull requests stay Chromium-only because of the Actions minute budget; `main` and manual runs (`workflow_dispatch`) also run the `e2e-cross-browser` CI job for Firefox and WebKit. Locally: `pnpm exec playwright install firefox webkit` (never `--with-deps`, never sudo), then `pnpm test:e2e --project=firefox` or `--project=webkit`.
+`playwright.config.ts` defines the projects `chromium`, `firefox` and `webkit` ([#50](https://github.com/minercan42-ux/banger-roulette/pull/50)). Pull requests stay Chromium-only because of the Actions minute budget; `main` and manual runs (`workflow_dispatch`) also run the `e2e-cross-browser` CI job for Firefox and WebKit. Locally: `pnpm exec playwright install firefox webkit` (never `--with-deps`, never sudo), then `pnpm test:e2e --project=firefox` or `--project=webkit`.
+
+Known Firefox issue: the submission preview iframe stays in the tab order and can trap Tab ([#57](https://github.com/minercan42-ux/banger-roulette/issues/57), one harness test is marked `fixme` for it).
 
 ## Verification
 
@@ -47,11 +59,14 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
+pnpm size:check
 pnpm i18n:check
 pnpm exec playwright install chromium
 pnpm test:e2e --project=chromium
 pnpm test:e2e:csp
 ```
+
+`size:check` fails when the initial JS exceeds 250 kB gzip (NFR-01). `pnpm lighthouse` runs the Lighthouse CI gate (desktop ≥ 90, mobile ≥ 80); CI runs it as its own job.
 
 `lint` checks ESLint boundaries and Prettier. UI may import only `src/engine/selectors.ts`, not engine internals; engine cannot import net/player/UI. `test` is Vitest with V8 coverage (production engine lines must reach 90%). `test:e2e` starts a test-only Vite/WebSocket bridge over the real in-memory transport and actual browser-hosted session/engine. Isolated contexts exercise lobby membership, settings, late joins, tab rebinding, reload/score recovery, migration during voting, sharing, DE/EN, keyboard, deep links, 360px and reduced motion. M3 covers common roulette results, duplicate submissions/first start/anonymity, denied embeds/consent, saved draft recovery, irreversible finish, deadlines, stale previews, pause and tab takeover. M4 adds different client wall clocks, observed PLAYING starts, drift thresholds, delayed cue/buffering, autoplay recovery, isolated errors, absolute deadlines, pause/resume/reload, consent and playback flag permissions. Only the external YouTube script/frame/thumbnail/oEmbed boundary is replaced; player, UI and session remain real. The harness and its debug API are not production build inputs. Synthetic timing is not evidence of live Supabase/YouTube timing.
 
@@ -59,7 +74,7 @@ pnpm test:e2e:csp
 
 ## Live smoke
 
-`pnpm test:e2e:live` runs `e2e-live/smoke.spec.ts` against a real deployment
+`pnpm test:e2e:live` ([#42](https://github.com/minercan42-ux/banger-roulette/pull/42)) runs `e2e-live/smoke.spec.ts` against a real deployment
 (`playwright.live.config.ts`, `LIVE_BASE_URL`, default
 `https://banger-roulette.vercel.app`). Four isolated browser contexts create,
 join and play two full rounds of a game plus the first round of the rematch
@@ -75,14 +90,14 @@ is started.
 
 It is deliberately **not** part of the PR `CI` workflow. `.github/workflows/live-smoke.yml`
 runs it on `workflow_dispatch` (input `base_url`, default the production alias)
-and always uploads the HTML report. There is no automatic trigger: a
+and always uploads the HTML report. There is no automatic trigger ([#54](https://github.com/minercan42-ux/banger-roulette/pull/54), issue [#51](https://github.com/minercan42-ux/banger-roulette/issues/51)): a
 GitHub-hosted runner cannot pass it, because a Vercel Production
 `deployment_status` carries a per-deployment URL that Deployment Protection
 answers with `302` to `vercel.com/sso-api`, and YouTube answers a runner's
 datacenter IP with `LOGIN_REQUIRED` ("Sign in to confirm you're not a bot"),
 which the player surfaces as `onError` 150 for every fixture video. Run the smoke
-from a network where YouTube serves playback, see
-`docs/OPEN_QUESTIONS.md`. It needs network access to the deployment, Supabase
+from a network where YouTube serves playback (a host run), see
+[`docs/OPEN_QUESTIONS.md`](docs/OPEN_QUESTIONS.md). It needs network access to the deployment, Supabase
 Realtime and YouTube, so expect a multi-minute runtime; AK-7's ±500 ms start
 criterion stays a separate per-device acceptance and is only measured, never
 asserted, here.
