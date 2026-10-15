@@ -16,7 +16,8 @@ interface FocusStop {
   outlineOffset: string;
 }
 
-const GOLD_300 = 'rgb(236, 208, 127)';
+/** Pixel-Filz `--color-focus` (= `--color-gold`, tokens.css). */
+const FOCUS_GOLD = 'rgb(245, 182, 48)';
 
 /**
  * Everything the document exposes to the Tab key, in DOM order: `tabindex="-1"`
@@ -131,8 +132,8 @@ function expectRing(stops: readonly FocusStop[]): void {
     expect(stop, `focus ring on ${stop.id}`).toMatchObject({
       outlineStyle: 'solid',
       outlineWidth: '3px',
-      outlineColor: GOLD_300,
-      outlineOffset: '2px',
+      outlineColor: FOCUS_GOLD,
+      outlineOffset: '3px',
     });
   }
 }
