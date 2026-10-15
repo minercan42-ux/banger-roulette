@@ -30,6 +30,7 @@ jobs:
       - run: pnpm i18n:check
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm size:check
 
   e2e:
     name: E2E (Playwright)

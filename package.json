@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "build": "vite build",
+    "size:check": "node scripts/bundle-check.mjs",
     "i18n:check": "node scripts/i18n-check.mjs",
     "test:e2e": "playwright test"
   },
