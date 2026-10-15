@@ -174,7 +174,10 @@ test('deep link /r/ABCDEF loads the shell and survives a reload', async ({
     await expectShell(page, 'en');
 
     const reloaded = await page.reload();
-    expect(reloaded?.status()).toBe(200);
+    // Firefox reports the 304 of the conditional reload (the dev server answers
+    // `If-None-Match` with `304 Not Modified`) while Chromium surfaces the
+    // cached 200 for the same reload. Both render the shell, the assertion below.
+    expect([200, 304]).toContain(reloaded?.status());
     await expectShell(page, 'en');
 
     expect(errors).toEqual([]);

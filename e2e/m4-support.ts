@@ -111,6 +111,25 @@ export async function playbackStatus(page: Page): Promise<PlaybackStatusView> {
   };
 }
 
+/**
+ * The player state together with the session clock from a single evaluation.
+ * "Nothing plays before `startAt`" may only judge the state against the clock as
+ * it was *then*: a clock read from before the (slow) fixture inspections would
+ * flag a start that already happened, which is exactly what Firefox and WebKit
+ * hit on a loaded runner.
+ */
+export async function playbackStateWithClock(
+  page: Page,
+): Promise<{ state: string | null; serverNow: number }> {
+  return page.evaluate(() => ({
+    state:
+      document
+        .querySelector('[data-testid="playback-status"]')
+        ?.getAttribute('data-state') ?? null,
+    serverNow: window.__banger!.session.now(),
+  }));
+}
+
 /** Waits until the playback view has reached a given engine song index. */
 export async function waitForPlaybackIndex(
   page: Page,

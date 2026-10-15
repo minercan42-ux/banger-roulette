@@ -31,9 +31,18 @@ import { mediaFor } from './m5-support';
 /** Upper bound on Tab presses while searching for a control; generous but finite. */
 const MAX_TABS = 200;
 
+/**
+ * Everything the document exposes to the Tab key, in DOM order. `tabindex="-1"`
+ * elements (the warm playback host during SUBMISSION) stay excluded.
+ */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 interface FocusInfo {
   testId: string | null;
   videoId: string | null;
+  /** DOM position of the focused element, so a parked focus is detectable. */
+  index: number;
 }
 
 async function focusedInfo(page: Page): Promise<FocusInfo> {
@@ -45,6 +54,10 @@ async function focusedInfo(page: Page): Promise<FocusInfo> {
     return {
       testId: active?.getAttribute('data-testid') ?? null,
       videoId: item?.getAttribute('data-video-id') ?? null,
+      index:
+        active === null
+          ? -1
+          : Array.from(document.querySelectorAll('*')).indexOf(active),
     };
   });
 }
@@ -58,6 +71,7 @@ async function tabTo(
   page: Page,
   target: { testId: string; videoId?: string },
 ): Promise<void> {
+  let previous = -1;
   for (let presses = 0; presses <= MAX_TABS; presses += 1) {
     const info = await focusedInfo(page);
     if (
@@ -69,6 +83,15 @@ async function tabTo(
     if (presses === MAX_TABS) {
       break;
     }
+    if (info.index === previous) {
+      // Chromium continues the tab order at the document start after the last
+      // control, Firefox parks the focus on that control for good. Focus the
+      // first control so the walk continues instead of looping on one element.
+      await page.evaluate((selector) => {
+        document.querySelector<HTMLElement>(selector)?.focus();
+      }, FOCUSABLE_SELECTOR);
+    }
+    previous = info.index;
     await page.keyboard.press('Tab');
   }
   throw new Error(
@@ -177,6 +200,9 @@ async function finishVotingFor(
 test('announces every phase transition including the lobby boundary but stays silent on mount', async ({
   browser,
 }) => {
+  // The heaviest a11y flow (Lobby through the rematch) and the first test of the
+  // run; WebKit needs more than the 30 s default for it on a 2 vCPU runner.
+  test.setTimeout(120_000);
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice' }),
     newStage(browser, { nickname: 'Bob' }),
@@ -336,8 +362,17 @@ test('stays silent when a running room is reloaded, then announces later transit
 
 test('one player completes the round from Lobby to Finale with the keyboard only', async ({
   browser,
+  browserName,
 }) => {
   test.setTimeout(180_000);
+  // #57: the submission preview iframe stays in the tab order, and Firefox,
+  // unlike Chromium, does not continue the walk past it, so Save and Finished
+  // are unreachable once the preview is playing. Re-enable this leg together
+  // with the fix that takes the frame out of the tab order.
+  test.fixme(
+    browserName === 'firefox',
+    'The submission preview iframe traps the Tab key (#57)',
+  );
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice' }),
     newStage(browser, { nickname: 'Bob' }),

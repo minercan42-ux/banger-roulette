@@ -22,6 +22,7 @@ const GOLD_300 = 'rgb(236, 208, 127)';
 async function tabThrough(page: Page): Promise<FocusStop[]> {
   const stops: FocusStop[] = [];
   let first: string | null = null;
+  let previous: string | null = null;
   for (let index = 0; index < 80; index += 1) {
     await page.keyboard.press('Tab');
     // Tailwind `transition` utilities animate outline-color; read the settled ring.
@@ -54,9 +55,13 @@ async function tabThrough(page: Page): Promise<FocusStop[]> {
     }
     if (first === null) {
       first = stop.id;
-    } else if (stop.id === first) {
+    } else if (stop.id === first || stop.id === previous) {
+      // Chromium moves the focus out of the document after the last control
+      // (the `null` above); Firefox leaves it on that control, so a repeated
+      // stop ends the tab order as well. Both paths stop at the same place.
       break;
     }
+    previous = stop.id;
     stops.push(stop);
   }
   return stops;

@@ -21,6 +21,7 @@ import {
   consentToPlayback,
   detectPreStartLeaks,
   enablePlaybackDebug,
+  playbackStateWithClock,
   playbackStatus,
   playbackTiming,
   preStartAudioLeaks,
@@ -141,11 +142,6 @@ test('four clients share one song order and start within ±500 ms across skewed 
     // FR-31: one absolute server `startAt`, independent of the wall clock.
     const timing = playbackTiming(await stateOf(stages[0]!.page));
     const firstVideoId = orders[0]![0]!;
-    const nows = await Promise.all(
-      stages.map((stage) =>
-        stage.page.evaluate(() => window.__banger!.session.now()),
-      ),
-    );
     for (let index = 0; index < stages.length; index += 1) {
       const stage = stages[index]!;
       const localTiming = playbackTiming(await stateOf(stage.page));
@@ -160,11 +156,14 @@ test('four clients share one song order and start within ±500 ms across skewed 
       // And nothing may be unmuted (or raised above zero) while the media is
       // still playing before the agreed start.
       expect(await preStartAudioLeaks(stage.page, timing.startAt)).toEqual([]);
-      // No playback before the agreed start, whenever the read lands early.
-      if (nows[index]! >= timing.startAt - 100) {
+      // No playback before the agreed start, whenever the read lands early. The
+      // state and the clock come from one evaluation: judging a state read after
+      // the fixture inspections above against an older clock read would flag a
+      // start that already happened.
+      const before = await playbackStateWithClock(stage.page);
+      if (before.serverNow >= timing.startAt - 100) {
         continue;
       }
-      const before = await playbackStatus(stage.page);
       expect(before.state).not.toBe('playing');
     }
 
