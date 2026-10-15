@@ -214,6 +214,7 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                     songs={[asSongView(entry)]}
                     showEmptyMarker={false}
                     elapsedMs={reference - entry.revealAt}
+                    paused={reveal.pausedAt !== null}
                   />
                 </div>
               )}
