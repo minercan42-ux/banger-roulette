@@ -15,6 +15,7 @@ import { LinkedAnimation } from './LinkedAnimation';
 import { usePrefersReducedMotion } from './motion';
 import { Badge } from './pf/Badge';
 import { cx } from './pf/cx';
+import { Jackpot, JackpotBadge, type JackpotWinner } from './pf/Jackpot';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
 import { useSessionNow } from './use-session-now';
@@ -75,6 +76,15 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
   // scored higher, so ties share it (FR-53).
   const order = selectSongs(state, viewerId);
 
+  const winners: JackpotWinner[] = reveal.entries
+    .filter((entry) => entry.winner)
+    .map((entry) => ({
+      videoId: entry.videoId,
+      revealAt: entry.revealAt,
+      roundPoints: entry.roundPoints,
+      names: entry.owners.map((owner) => owner.nickname),
+    }));
+
   return (
     <Panel
       as="section"
@@ -82,6 +92,12 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       data-reason={reveal.reason}
       className="br-reveal space-y-4"
     >
+      <Jackpot
+        key={reveal.roundNumber}
+        winners={winners}
+        now={reference}
+        paused={reveal.pausedAt !== null}
+      />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <PanelTitle>{t('reveal.heading')}</PanelTitle>
         <span className="br-label">
@@ -190,27 +206,14 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                     </p>
                   )}
                 </div>
-                {entry.winner && (
-                  <motion.div
-                    data-testid="reveal-jackpot"
-                    initial={reducedMotion ? false : { scale: 0.6, opacity: 0 }}
-                    animate={{
-                      scale: reducedMotion ? 1 : [0.6, 1.12, 1],
-                      opacity: 1,
-                      rotate: reducedMotion ? 0 : [0, -6, 6, 0],
-                    }}
-                    transition={{ duration: reducedMotion ? 0 : 0.7 }}
-                    className="flex-none rounded-full border border-gold-400/60 bg-gold-500/20 px-3 py-1 font-display text-xs text-gold-100 uppercase"
-                  >
-                    {t('reveal.jackpot')}
-                  </motion.div>
-                )}
+                {entry.winner && <JackpotBadge />}
               </div>
               {entry.linked && (
                 <div className="mt-3">
                   <LinkedAnimation
                     songs={[asSongView(entry)]}
                     showEmptyMarker={false}
+                    elapsedMs={reference - entry.revealAt}
                   />
                 </div>
               )}
