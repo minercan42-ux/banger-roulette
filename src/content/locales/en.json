@@ -316,6 +316,14 @@
     "removedAnnouncement": "{{title}} removed from the ranking.",
     "movedAnnouncement": "{{title}} is now at place {{place}} of {{total}}."
   },
+  "card": {
+    "faceDown": "Song, face down",
+    "faceUp": "Song {{number}}: {{title}}",
+    "genreFail": "Genre fail",
+    "handSubmission": "Songs submitted so far",
+    "handPlayback": "Songs of this round",
+    "ownSong": "Your song: {{title}}"
+  },
   "host": {
     "start": "Start game",
     "notReadyCount": "At least {{min}} active players are required.",

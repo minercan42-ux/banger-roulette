@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
   selectReveal,
+  selectSongs,
   type RevealEntryView,
   type SongView,
 } from '../engine/selectors';
@@ -12,6 +13,10 @@ import { genreName } from './format';
 import { Leaderboard } from './Leaderboard';
 import { LinkedAnimation } from './LinkedAnimation';
 import { usePrefersReducedMotion } from './motion';
+import { Badge } from './pf/Badge';
+import { cx } from './pf/cx';
+import { Panel, PanelTitle } from './pf/Panel';
+import { SongCard } from './pf/SongCard';
 import { useSessionNow } from './use-session-now';
 
 interface RevealPhaseProps {
@@ -66,17 +71,20 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       : reveal.entries[reveal.entries.length - 1].revealAt;
   const leaderboardVisible = reference >= lastRevealAt;
 
+  // Card numbers follow the playback order; the place counts the songs that
+  // scored higher, so ties share it (FR-53).
+  const order = selectSongs(state, viewerId);
+
   return (
-    <section
+    <Panel
+      as="section"
       data-testid="reveal-phase"
       data-reason={reveal.reason}
-      className="space-y-4 rounded-xl border border-gold-400/25 bg-felt-800/50 p-4"
+      className="br-reveal space-y-4"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('reveal.heading')}
-        </h2>
-        <span className="text-sm text-cream-100/70">
+        <PanelTitle>{t('reveal.heading')}</PanelTitle>
+        <span className="br-label">
           {t('reveal.round', {
             number: reveal.roundNumber,
             genre: genreName(reveal.genre, i18n.resolvedLanguage),
@@ -103,14 +111,11 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       </p>
 
       {reveal.entries.length === 0 ? (
-        <p
-          data-testid="reveal-no-songs"
-          className="rounded-lg border border-gold-400/20 bg-felt-950/60 px-3 py-3 text-sm text-cream-100/70"
-        >
+        <p data-testid="reveal-no-songs" className="br-notice">
           {t('reveal.noSongs')}
         </p>
       ) : (
-        <ol className="space-y-3">
+        <ol className="br-stack">
           {visible.map((entry) => (
             <motion.li
               key={entry.videoId}
@@ -122,36 +127,44 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
               data-video-id={entry.videoId}
               data-winner={entry.winner}
               data-genre-failed={entry.genreFailed}
-              className={
-                entry.winner
-                  ? 'rounded-xl border border-gold-400/60 bg-gold-500/10 p-3'
-                  : entry.genreFailed
-                    ? 'rounded-xl border border-rose-400/40 bg-rose-500/10 p-3'
-                    : 'rounded-xl border border-gold-400/20 bg-felt-950/60 p-3'
-              }
+              className={cx(
+                'br-panel br-panel--well br-reveal__entry',
+                entry.winner && 'is-winner',
+              )}
             >
-              <div className="flex flex-wrap items-start gap-3">
-                {consented && (
-                  // Thumbnails are YouTube content and only load after consent.
-                  <img
-                    src={entry.thumbnail}
-                    alt=""
-                    loading="lazy"
-                    width={96}
-                    height={54}
-                    className="h-14 w-24 flex-none rounded-md border border-gold-400/20 object-cover"
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-cream-100">
-                    {entry.title}
-                  </p>
-                  <p className="truncate text-xs text-cream-100/60">
-                    {entry.channel}
-                  </p>
+              <div className="flex flex-wrap items-start gap-4">
+                {/* The owner stamp is the one place a card may name a player
+                    (AK-3): only this phase passes `owner`. The row beside it
+                    carries the same names as text, so the card is decoration. */}
+                <SongCard
+                  winner={entry.winner}
+                  number={
+                    order.findIndex((song) => song.videoId === entry.videoId) +
+                    1
+                  }
+                  rank={
+                    1 +
+                    reveal.entries.filter(
+                      (other) => other.roundPoints > entry.roundPoints,
+                    ).length
+                  }
+                  song={entry}
+                  showThumbnail={consented}
+                  owner={entry.owners
+                    .map((owner) => owner.nickname)
+                    .join(' + ')}
+                  flag={
+                    entry.genreFailed ? (
+                      <Badge tone="red">{t('card.genreFail')}</Badge>
+                    ) : undefined
+                  }
+                />
+                <div className="br-stack br-reveal__body">
+                  <p className="br-reveal__title">{entry.title}</p>
+                  <p className="br-read">{entry.channel}</p>
                   <p
                     data-testid="reveal-entry-owners"
-                    className="mt-1 text-xs text-gold-200"
+                    className="br-read text-gold"
                   >
                     {t('reveal.owners', {
                       names: entry.owners
@@ -159,10 +172,7 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                         .join(', '),
                     })}
                   </p>
-                  <p
-                    data-testid="reveal-entry-points"
-                    className="mt-1 text-sm text-cream-100/80"
-                  >
+                  <p data-testid="reveal-entry-points" className="br-read">
                     {t('reveal.points', {
                       borda: entry.borda,
                       bonus: entry.bonus,
@@ -172,7 +182,7 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                   {entry.genreFailed && (
                     <p
                       data-testid="reveal-entry-genre-fail"
-                      className="mt-1 text-xs text-rose-200"
+                      className="br-read text-red-text"
                     >
                       {t('reveal.genreFailed', {
                         flags: entry.flaggerIds.length,
@@ -210,6 +220,6 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       )}
 
       {leaderboardVisible && <Leaderboard state={state} viewerId={viewerId} />}
-    </section>
+    </Panel>
   );
 }

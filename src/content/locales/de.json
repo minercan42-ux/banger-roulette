@@ -316,6 +316,14 @@
     "removedAnnouncement": "{{title}} aus der Reihenfolge entfernt.",
     "movedAnnouncement": "{{title}} ist jetzt auf Platz {{place}} von {{total}}."
   },
+  "card": {
+    "faceDown": "Song, verdeckt",
+    "faceUp": "Song {{number}}: {{title}}",
+    "genreFail": "Genre-Fail",
+    "handSubmission": "Bisher eingereichte Songs",
+    "handPlayback": "Songs dieser Runde",
+    "ownSong": "Dein Song: {{title}}"
+  },
   "host": {
     "start": "Spiel starten",
     "notReadyCount": "Mindestens {{min}} aktive Spieler nötig.",

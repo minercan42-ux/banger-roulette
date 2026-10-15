@@ -13,6 +13,10 @@ import { useEmbedConsent } from './embed-consent';
 import { formatDuration } from './format';
 import { LinkedAnimation } from './LinkedAnimation';
 import { usePlaybackControllerContext } from './playback-controller';
+import { Button } from './pf/Button';
+import { Hand } from './pf/Hand';
+import { Panel, PanelTitle } from './pf/Panel';
+import { SongCard } from './pf/SongCard';
 import { useSessionNow } from './use-session-now';
 
 interface PlaybackPhaseProps {
@@ -128,6 +132,17 @@ export function PlaybackPhase({
     controller.update(current);
   }, [consented, planKey, controller]);
 
+  // Cards flip one frame after they appear, so a new song's card turns over
+  // instead of showing up already face up (a 1 ms change under reduced motion).
+  const currentIndex = view?.index ?? -1;
+  const [flippedCount, setFlippedCount] = useState(0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() =>
+      setFlippedCount(currentIndex + 1),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [currentIndex]);
+
   if (view === null) {
     return null;
   }
@@ -181,24 +196,23 @@ export function PlaybackPhase({
   }
 
   return (
-    <section
+    <Panel
+      as="section"
       data-testid="playback-phase"
       data-preroll={preroll}
       data-index={view.index}
       data-song-count={view.songCount}
       data-consented={consented}
       data-status={status}
-      className="rounded-xl border border-gold-400/25 bg-felt-800/50 p-4"
+      className="br-stack"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('playback.heading')}
-        </h2>
+        <PanelTitle>{t('playback.heading')}</PanelTitle>
         <span
           data-testid="playback-song-count"
           data-index={view.index}
           data-count={view.songCount}
-          className="text-xs text-cream-100/60"
+          className="br-label"
         >
           {t('playback.songCount', {
             index: view.index + 1,
@@ -208,11 +222,8 @@ export function PlaybackPhase({
       </div>
 
       {preroll && (
-        <div className="mt-3">
-          <p
-            data-testid="playback-preroll"
-            className="text-sm text-cream-100/70"
-          >
+        <div className="br-stack">
+          <p data-testid="playback-preroll" className="br-read">
             {t('later.playbackPreroll')}
           </p>
           <LinkedAnimation songs={songs} showEmptyMarker />
@@ -220,74 +231,82 @@ export function PlaybackPhase({
       )}
 
       {!choices.isParticipant && (
-        <p
-          data-testid="playback-spectator"
-          role="status"
-          className="mt-3 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
-        >
+        <p data-testid="playback-spectator" role="status" className="br-notice">
           {t('playback.spectator')}
         </p>
       )}
 
       {boundTab && (
-        <p
-          data-testid="playback-bound-tab"
-          role="status"
-          className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"
-        >
+        <p data-testid="playback-bound-tab" role="status" className="br-notice">
           {t('playback.boundTab')}
         </p>
       )}
 
-      <div className="mt-3 flex gap-3">
-        {consented && view.song.thumbnail !== '' && (
-          <img
-            data-testid="playback-thumbnail"
-            src={view.song.thumbnail}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="h-20 w-32 shrink-0 rounded-md border border-gold-400/20 object-cover"
-          />
-        )}
-        <div className="min-w-0">
-          <p
-            data-testid="playback-title"
-            className="truncate font-semibold text-cream-100"
-          >
-            {view.song.title}
-          </p>
-          <p
-            data-testid="playback-channel"
-            className="text-xs text-cream-100/70"
-          >
-            {view.song.channel}
-          </p>
-          {ownersVisible ? (
-            <ul
-              data-testid="playback-owners"
-              data-visible="true"
-              className="mt-1 flex flex-wrap gap-x-3 text-xs text-gold-200"
-            >
-              {view.song.owners.map((owner) => (
-                <li
-                  key={owner.id}
-                  data-testid="playback-owner"
-                  data-owner-id={owner.id}
-                >
-                  {owner.nickname}
-                </li>
-              ))}
-            </ul>
+      {/* Songs up to the playing one are face up (the viewer has heard them);
+          the rest stay face down, so no title is shown ahead of its turn. */}
+      <Hand label={t('card.handPlayback')} data-testid="playback-hand">
+        {songs.map((song, position) =>
+          position <= view.index ? (
+            <SongCard
+              key={position}
+              data-testid="song-card"
+              data-face="up"
+              data-current={position === view.index}
+              index={position}
+              number={position + 1}
+              song={song}
+              flipped={position < flippedCount}
+              showThumbnail={consented}
+              thumbnailTestId={
+                position === view.index ? 'playback-thumbnail' : undefined
+              }
+              tooltip={song.title}
+              label={t('card.faceUp', {
+                number: position + 1,
+                title: song.title,
+              })}
+            />
           ) : (
-            <p
-              data-testid="playback-anonymous-note"
-              className="mt-1 text-xs text-cream-100/60"
-            >
-              {t('playback.ownersHidden')}
-            </p>
-          )}
-        </div>
+            <SongCard
+              key={position}
+              data-testid="song-card"
+              data-face="down"
+              index={position}
+              number={position + 1}
+              label={t('card.faceDown')}
+            />
+          ),
+        )}
+      </Hand>
+
+      <div className="br-stack br-playing">
+        <p data-testid="playback-title" className="br-playing__title">
+          {view.song.title}
+        </p>
+        <p data-testid="playback-channel" className="br-read">
+          {view.song.channel}
+        </p>
+        {ownersVisible ? (
+          <ul
+            data-testid="playback-owners"
+            data-visible="true"
+            className="br-read flex flex-wrap gap-x-3 text-gold"
+          >
+            {view.song.owners.map((owner) => (
+              <li
+                key={owner.id}
+                data-testid="playback-owner"
+                data-owner-id={owner.id}
+              >
+                {owner.nickname}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p data-testid="playback-anonymous-note" className="br-read">
+            {t('playback.ownersHidden')}
+          </p>
+        )}
       </div>
 
       <div
@@ -300,27 +319,24 @@ export function PlaybackPhase({
         data-elapsed-ms={Math.round(elapsedMs)}
         data-total-ms={Math.round(totalMs)}
         data-remaining-ms={Math.round(remainingMs)}
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-felt-950"
+        className="br-progress"
       >
         <div
-          className="h-full bg-gold-400"
+          className="br-progress__fill"
           style={{ width: `${progressPct}%` }}
         />
       </div>
-      <p className="mt-1 text-xs text-cream-100/60">
+      <p className="br-label">
         {t('playback.timeLeft', { time: formatDuration(remainingMs) })}
       </p>
 
-      <div className="mt-3 space-y-2">
+      <div className="br-stack">
         {!consented && (
-          <p
-            data-testid="playback-consent-required"
-            className="text-sm text-cream-100/70"
-          >
+          <p data-testid="playback-consent-required" className="br-read">
             {t('playback.consentRequired')}
           </p>
         )}
-        <label className="flex items-start gap-2 text-sm text-cream-100/80">
+        <label className="br-check">
           <input
             type="checkbox"
             data-testid="playback-consent"
@@ -328,68 +344,64 @@ export function PlaybackPhase({
             onChange={(event) => {
               setConsent(event.target.checked);
             }}
-            className="mt-1"
+            className="br-check__input"
           />
           <span>{t('playback.consentLabel')}</span>
         </label>
       </div>
 
       {consented && (
-        <div className="mt-3 space-y-3">
+        <div className="br-stack">
           <p
             data-testid="playback-status"
             data-state={status}
             data-error-code={errorCode ?? undefined}
             role="status"
-            className="text-xs text-cream-100/70"
+            className="br-read"
           >
             {t(statusKey(status))}
           </p>
 
           {status === 'buffering' && (
-            <p
-              data-testid="playback-buffering"
-              className="text-xs text-amber-200"
-            >
+            <p data-testid="playback-buffering" className="br-notice">
               {t('playback.bufferingHint')}
             </p>
           )}
           {status === 'skipped' && (
-            <p
-              data-testid="playback-skipped"
-              className="text-xs text-amber-200"
-            >
+            <p data-testid="playback-skipped" className="br-notice">
               {t('playback.skippedHint')}
             </p>
           )}
           {status === 'blocked' && (
-            <div className="space-y-2">
-              <p
-                data-testid="playback-blocked"
-                className="text-xs text-amber-200"
-              >
+            <div className="br-stack">
+              <p data-testid="playback-blocked" className="br-notice">
                 {t('playback.blockedHint')}
               </p>
-              <button
-                type="button"
-                data-testid="playback-recover"
-                onClick={() => {
-                  controller?.recover();
-                }}
-                className="rounded-md border border-gold-400/50 bg-gold-500/20 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30"
-              >
-                {t('playback.recover')}
-              </button>
+              <div>
+                <Button
+                  tone="blue"
+                  size="sm"
+                  data-testid="playback-recover"
+                  onClick={() => {
+                    controller?.recover();
+                  }}
+                >
+                  {t('playback.recover')}
+                </Button>
+              </div>
             </div>
           )}
           {errorCode !== null && (
-            <p data-testid="playback-error" className="text-xs text-rose-300">
+            <p
+              data-testid="playback-error"
+              className="br-notice br-notice--error"
+            >
               {t('playback.errorHint', { code: errorCode })}
             </p>
           )}
 
           <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-sm text-cream-100/80">
+            <label className="br-check">
               <span>{t('playback.volumeLabel')}</span>
               <input
                 type="range"
@@ -404,7 +416,7 @@ export function PlaybackPhase({
                 }}
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-cream-100/80">
+            <label className="br-check">
               <input
                 type="checkbox"
                 data-testid="playback-mute"
@@ -413,28 +425,29 @@ export function PlaybackPhase({
                 onChange={(event) => {
                   controller?.setMuted(event.target.checked);
                 }}
+                className="br-check__input"
               />
               <span>{t('playback.muteLabel')}</span>
             </label>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+          <div className="br-row">
+            <Button
+              tone="red"
+              size="sm"
               data-testid="playback-flag"
               data-flagged={view.flaggedByViewer}
               disabled={!view.canFlag || flagBusy}
               onClick={() => {
                 void flagGenreFail();
               }}
-              className="rounded-md border border-rose-400/40 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('playback.flag')}
-            </button>
+            </Button>
             {view.flaggedByViewer && (
               <span
                 data-testid="playback-flag-note"
-                className="text-xs text-rose-200"
+                className="br-read text-red-text"
               >
                 {t('playback.flagged')}
               </span>
@@ -445,7 +458,7 @@ export function PlaybackPhase({
             <p
               data-testid="playback-notice"
               role="status"
-              className="rounded-lg border border-gold-400/25 bg-felt-900/60 px-3 py-2 text-xs text-cream-100/80"
+              className="br-notice"
             >
               {t(noticeKey)}
             </p>
@@ -454,7 +467,9 @@ export function PlaybackPhase({
       )}
 
       {debug && (
-        <dl
+        <Panel
+          well
+          as="dl"
           data-testid="playback-debug"
           data-offset-ms={clock.offsetMs}
           data-rtt-ms={clock.rttMs ?? ''}
@@ -465,7 +480,7 @@ export function PlaybackPhase({
           data-start-skew-ms={startSkew ?? ''}
           data-drift-ms={drift ?? ''}
           data-status={status}
-          className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border border-gold-400/20 bg-felt-900/60 p-3 text-xs text-cream-100/70"
+          className="br-read grid grid-cols-2 gap-x-4 gap-y-1"
         >
           <dt>{t('playback.debugOffset')}</dt>
           <dd>{`${Math.round(clock.offsetMs)} ms`}</dd>
@@ -485,8 +500,8 @@ export function PlaybackPhase({
           <dd>{drift === null ? '–' : `${Math.round(drift)} ms`}</dd>
           <dt>{t('playback.debugStatus')}</dt>
           <dd>{t(statusKey(status))}</dd>
-        </dl>
+        </Panel>
       )}
-    </section>
+    </Panel>
   );
 }
