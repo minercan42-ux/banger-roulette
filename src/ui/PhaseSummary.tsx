@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  selectPhaseTimer,
-  type PlayerView,
-  type RoomView,
-} from '../engine/selectors';
+import type { PlayerView, RoomView } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
-import { formatDuration } from './format';
+import { PhaseTimer, Stat } from './pf/Stat';
 
 interface PhaseSummaryProps {
   session: GameSession;
@@ -27,23 +23,8 @@ export function PhaseSummary({
   self,
 }: PhaseSummaryProps) {
   const { t, i18n } = useTranslation();
-  const [now, setNow] = useState(() => session.now());
-  const timer = selectPhaseTimer(state, now);
-  const remaining = timer.remainingMs;
-
-  useEffect(() => {
-    if (timer.deadlineAt === null || timer.paused) {
-      return;
-    }
-    const id = window.setInterval(() => setNow(session.now()), 250);
-    return () => window.clearInterval(id);
-  }, [timer.deadlineAt, timer.paused, session]);
-
-  // Bounded polite announcement: the text only changes every ten seconds.
-  const announcement =
-    remaining === null
-      ? ''
-      : formatDuration(Math.floor(remaining / 10000) * 10000);
+  // Submission and voting carry their own timer in the panel header.
+  const showTimer = room.phase !== 'SUBMISSION' && room.phase !== 'VOTING';
 
   return (
     <section
@@ -63,17 +44,27 @@ export function PhaseSummary({
         </span>
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-cream-100/80">
+      <div className="mt-3 flex flex-wrap items-stretch gap-3">
         {room.roundNumber !== null && (
-          <span data-testid="phase-round">
-            {t('phase.roundLabel', {
-              number: room.roundNumber,
-              total: room.totalRounds,
-            })}
-          </span>
+          <Stat
+            data-testid="phase-round"
+            label={t('phase.roundStat')}
+            value={`${room.roundNumber}/${room.totalRounds}`}
+          />
+        )}
+        {showTimer && (
+          <PhaseTimer
+            session={session}
+            state={state}
+            label={t('phase.timerLabel')}
+            announce={(time) => t('phase.timerAnnounce', { time })}
+          />
         )}
         {room.genre && (
-          <span data-testid="phase-genre">
+          <span
+            data-testid="phase-genre"
+            className="self-center text-sm text-cream-100/80"
+          >
             {t('phase.genreLabel', {
               genre:
                 i18n.resolvedLanguage === 'en' ? room.genre.en : room.genre.de,
@@ -81,30 +72,6 @@ export function PhaseSummary({
           </span>
         )}
       </div>
-
-      {timer.deadlineAt !== null && (
-        <div className="mt-3">
-          <span className="text-xs text-cream-100/60">
-            {t('phase.timerLabel')}
-          </span>
-          <div
-            data-testid="phase-timer"
-            data-paused={timer.paused}
-            data-remaining-ms={remaining ?? 0}
-            aria-hidden="true"
-            className="font-display text-2xl text-gold-200"
-          >
-            {formatDuration(remaining ?? 0)}
-          </div>
-          <span
-            data-testid="phase-timer-live"
-            aria-live="polite"
-            className="sr-only"
-          >
-            {announcement}
-          </span>
-        </div>
-      )}
 
       {room.paused && (
         <p

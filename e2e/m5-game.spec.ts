@@ -240,6 +240,13 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     await assembleRoom(host, stages.slice(1));
     await setSettings(host.page, { rounds: 1 });
     await enterSubmission(all);
+    // The submission panel carries the countdown stat (NFR-02: client-side).
+    const submissionTimer = host.page
+      .getByTestId('submission-panel')
+      .getByTestId('phase-timer');
+    await expect(submissionTimer).toHaveAttribute('role', 'timer');
+    await expect(submissionTimer).toHaveText(/\d+:\d{2}/);
+    await expect(host.page.getByTestId('phase-timer')).toHaveCount(1);
 
     // Every player submits a distinct song through the visible submission flow.
     const urls = [SONG_A, SONG_B, SONG_C, SONG_D].map(
@@ -250,6 +257,14 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
       await page.getByTestId('finish-submission').click();
     }
     await waitForPhase(host.page, 'PLAYBACK');
+    await expect(host.page.getByTestId('playback-timer')).toHaveAttribute(
+      'role',
+      'timer',
+    );
+    await expect(host.page.getByTestId('playback-progress')).toHaveAttribute(
+      'role',
+      'progressbar',
+    );
 
     // Skip every clip; the reveal/leaderboard timing is asserted via ADVANCE.
     const songCount = (await stateOf(host.page))?.round?.songs.length ?? 0;
@@ -262,6 +277,10 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     await Promise.all(
       stages.map((stage) => waitForPhase(stage.page, 'VOTING')),
     );
+
+    await expect(
+      host.page.getByTestId('voting-phase').getByTestId('phase-timer'),
+    ).toHaveAttribute('role', 'timer');
 
     const owner = songsById(await stateOf(host.page));
     const [aId, bId, cId, dId] = await Promise.all(all.map(playerId));
@@ -329,6 +348,27 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     expect(byVideo[SONG_B]?.points).toMatch(/(?:^|\D)5(?:\D|$)/);
     expect(byVideo[SONG_D]?.points).toMatch(/(?:^|\D)3(?:\D|$)/);
     expect(entries.filter((entry) => entry.genreFailed)).toEqual([]);
+    // The counted-up combo settles on the engine's numbers (votes + bonus = score).
+    for (const [videoId, votes, bonus, total] of [
+      [SONG_D, 3, 0, 3],
+      [SONG_B, 5, 0, 5],
+      [SONG_A, 7, 0, 7],
+      [SONG_C, 9, 2, 11],
+    ] as const) {
+      const combo = host.page
+        .locator(`[data-testid="reveal-entry"][data-video-id="${videoId}"]`)
+        .getByTestId('score-combo');
+      await expect(combo.getByTestId('score-combo-votes')).toHaveText(
+        String(votes),
+        { timeout: 5_000 },
+      );
+      await expect(combo.getByTestId('score-combo-adjust')).toHaveText(
+        String(bonus),
+      );
+      await expect(combo.getByTestId('score-combo-total')).toHaveText(
+        String(total),
+      );
+    }
     await expect(host.page.getByTestId('reveal-jackpot')).toHaveCount(1);
     await expect(
       host.page
@@ -603,6 +643,15 @@ test('FR-41/FR-52: a voting flag retracts and a majority fails the song', async 
     expect(failed?.genreFailed).toBe(true);
     // borda 3 + penalty (-3) = 0 for the flagged owner.
     expect(failed?.points).toMatch(/(?:^|\D)0(?:\D|$)/);
+    // The combo shows the penalty as "3 - 3 = 0".
+    const failedCombo = host.page
+      .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_D}"]`)
+      .getByTestId('score-combo');
+    await expect(failedCombo.getByTestId('score-combo-total')).toHaveText('0', {
+      timeout: 5_000,
+    });
+    await expect(failedCombo.getByTestId('score-combo-adjust')).toHaveText('3');
+    await expect(failedCombo).toHaveAttribute('data-adjust', '-3');
     // Two of the three non-owners flagged it; the count is rendered, not a placeholder.
     const failNote = host.page
       .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_D}"]`)

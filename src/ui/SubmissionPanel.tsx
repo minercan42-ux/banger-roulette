@@ -30,6 +30,7 @@ import { Field } from './pf/Field';
 import { Hand } from './pf/Hand';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
+import { PhaseTimer } from './pf/Stat';
 
 /** Current preview lifecycle, extended with "nothing loaded yet" and "loading". */
 type PanelStatus = PreviewStatus | { type: 'idle' } | { type: 'loading' };
@@ -343,6 +344,14 @@ export function SubmissionPanel({
         )}
       </div>
       <p className="br-read">{t('submission.intro')}</p>
+      <div className="mt-3">
+        <PhaseTimer
+          session={session}
+          state={state}
+          label={t('phase.timerLabel')}
+          announce={(time) => t('phase.timerAnnounce', { time })}
+        />
+      </div>
 
       {!isParticipant && (
         <p

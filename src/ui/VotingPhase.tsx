@@ -28,6 +28,7 @@ import { useEmbedConsent } from './embed-consent';
 import { Button } from './pf/Button';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
+import { PhaseTimer } from './pf/Stat';
 import {
   appendToRanking,
   insertRanking,
@@ -435,6 +436,14 @@ export function VotingPhase({
         <span className="br-label">{t('voting.partialHint')}</span>
       </div>
       <p className="br-read">{t('voting.intro')}</p>
+      <div className="mt-3">
+        <PhaseTimer
+          session={session}
+          state={state}
+          label={t('phase.timerLabel')}
+          announce={(time) => t('phase.timerAnnounce', { time })}
+        />
+      </div>
 
       <p
         data-testid="voting-announcement"

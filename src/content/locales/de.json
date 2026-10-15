@@ -165,14 +165,15 @@
     "REVEAL": "Reveal",
     "FINAL": "Finale",
     "runningHeading": "Laufendes Spiel",
-    "roundLabel": "Runde {{number}} von {{total}}",
     "genreLabel": "Genre: {{genre}}",
     "timerLabel": "Restzeit",
     "paused": "Pausiert",
     "pauseQuorum": "Pausiert: weniger als 3 aktive Spieler.",
     "pauseHost": "Vom Host pausiert.",
     "spectator": "Du schaust zu und spielst ab der nächsten Runde mit.",
-    "ended": "Das Spiel ist beendet."
+    "ended": "Das Spiel ist beendet.",
+    "timerAnnounce": "Noch {{time}}",
+    "roundStat": "Runde"
   },
   "genre": {
     "heading": "Genre-Roulette",
@@ -271,7 +272,8 @@
     "debugObservedStart": "Beobachteter Start",
     "debugStartSkew": "Start-Abweichung",
     "debugDrift": "Drift",
-    "debugStatus": "Status"
+    "debugStatus": "Status",
+    "timeLabel": "Song-Zeit"
   },
   "voting": {
     "heading": "Voting",
@@ -370,5 +372,12 @@
   },
   "later": {
     "playbackPreroll": "Die Song-Ausschnitte starten gleich."
+  },
+  "score": {
+    "votes": "Stimmen",
+    "jackpot": "Jackpot",
+    "penalty": "Strafe",
+    "shared": "Geteilt",
+    "total": "Runde"
   }
 }

@@ -1966,3 +1966,31 @@ body {
     }
   }
 }
+
+@layer components {
+  /* ---------- Score combo, stat and progress in the game views (#66) ---------- */
+  .br-combo-block {
+    container-type: inline-size;
+    width: 100%;
+    max-width: 24rem;
+    min-width: 0;
+  }
+  /* The digits shrink with the room the combo gets, so it also fits next to a
+     song card on a 360 px screen. */
+  .br-combo-block .br-combo {
+    font-size: clamp(22px, 11cqi, 44px);
+    line-height: 1;
+    gap: var(--space-1);
+  }
+  .br-combo-block .br-combo__box {
+    min-width: 0;
+    padding: 6px var(--space-1);
+  }
+  .br-combo-block .br-combo__caption {
+    gap: var(--space-1);
+    text-align: center;
+  }
+  .br-stat {
+    min-width: 5.5rem;
+  }
+}
