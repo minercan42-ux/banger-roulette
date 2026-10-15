@@ -1,10 +1,13 @@
 /**
  * Rendered-output evidence for the SPEC §6 sound effects (issue #12). Each of
  * the seven real recipes is scheduled through the production `renderEvents` on
- * an `OfflineAudioContext` in Chromium and the buffer that would reach
+ * an `OfflineAudioContext` and the buffer that would reach
  * `AudioDestinationNode` is measured. This is rendered output, not a listening
  * check: it shows a non-silent signal per recipe and exact silence for the off
- * control, and that a mute mid-effect silences the notes still pending.
+ * control, and that a mute mid-effect silences the notes still pending. It runs
+ * in every project (#19); Firefox has no `OfflineAudioContext.suspend`, so the
+ * mute is applied before the render there instead of at `muteAt` - see
+ * `sfx-render-probe.ts` for the measured engine difference.
  */
 import { expect, test, type Page } from '@playwright/test';
 import type { SfxMeasurement } from './sfx-render-probe';

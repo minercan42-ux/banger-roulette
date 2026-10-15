@@ -33,7 +33,12 @@ export interface SfxRenderProbe {
   setEnabled(enabled: boolean): void;
   /** Render one batch with the toggle as it currently stands. */
   render(events: SfxEvent[]): Promise<SfxMeasurement>;
-  /** Render a batch and switch the toggle off `muteAt` seconds into the render. */
+  /**
+   * Render a batch with the toggle switched off `muteAt` seconds in, and
+   * measure the buffer before and after that switch. Engines without
+   * `OfflineAudioContext.suspend` mute right before the render starts instead;
+   * see the implementation for why the measured property is the same.
+   */
   renderWithMuteAt(
     events: SfxEvent[],
     muteAt: number,
@@ -88,23 +93,63 @@ async function render(events: SfxEvent[]): Promise<SfxMeasurement> {
   return measure(buffer.getChannelData(0), 0, WINDOW_SECONDS);
 }
 
+/** Flips the in-memory toggle exactly like the header button does. */
+function muteBus(): void {
+  useSfxStore.setState({ enabled: false });
+}
+
+/**
+ * Renders `events` with the toggle switched off `muteAt` seconds into the
+ * render and measures the buffer before and after that switch.
+ *
+ * `OfflineAudioContext.suspend()` is the only way to interleave the switch with
+ * a running render, and Firefox does not implement it
+ * (`typeof OfflineAudioContext.prototype.suspend === 'undefined'`, measured in
+ * Firefox 1555; bugzil.la/1265406 is still open, so MDN marks the method "not
+ * Baseline"). Firefox therefore switches the toggle off right after the batch
+ * was scheduled and before the render starts: the production fade - the very
+ * `silenceActiveBuses` the header button triggers - then runs from sample zero,
+ * and the measured "after" window still proves the property under test, that no
+ * tone of a muted bus ever reaches the destination, not even the notes this
+ * recipe schedules for later. The "before" window of that path comes from the
+ * same recipe rendered once with the toggle on, because a render that was muted
+ * from the start is already silent after its 10 ms fade.
+ */
 async function renderWithMuteAt(
   events: SfxEvent[],
   muteAt: number,
 ): Promise<{ before: SfxMeasurement; after: SfxMeasurement }> {
   const context = createContext();
   renderEvents(context, events);
-  const muted = context.suspend(muteAt).then(() => {
-    useSfxStore.setState({ enabled: false });
-    return context.resume();
-  });
-  const buffer = await context.startRendering();
-  await muted;
+  if (typeof context.suspend === 'function') {
+    const muted = context.suspend(muteAt).then(() => {
+      muteBus();
+      return context.resume();
+    });
+    const buffer = await context.startRendering();
+    await muted;
+    // The toggle is on again, so the next effect has to sound again.
+    useSfxStore.setState({ enabled: true });
+    const data = buffer.getChannelData(0);
+    return {
+      before: measure(data, 0, muteAt),
+      after: measure(data, muteAt + MUTE_SETTLE_SECONDS, WINDOW_SECONDS),
+    };
+  }
+
+  muteBus();
+  const mutedBuffer = await context.startRendering();
   useSfxStore.setState({ enabled: true });
-  const data = buffer.getChannelData(0);
+  const sounding = createContext();
+  renderEvents(sounding, events);
+  const soundingBuffer = await sounding.startRendering();
   return {
-    before: measure(data, 0, muteAt),
-    after: measure(data, muteAt + MUTE_SETTLE_SECONDS, WINDOW_SECONDS),
+    before: measure(soundingBuffer.getChannelData(0), 0, muteAt),
+    after: measure(
+      mutedBuffer.getChannelData(0),
+      muteAt + MUTE_SETTLE_SECONDS,
+      WINDOW_SECONDS,
+    ),
   };
 }
 
