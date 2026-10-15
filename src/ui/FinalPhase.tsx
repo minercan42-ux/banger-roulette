@@ -65,51 +65,44 @@ export function FinalPhase({
     <section
       data-testid="final-phase"
       data-reason={final?.reason ?? 'unknown'}
-      className="space-y-4 rounded-xl border border-gold-400/25 bg-felt-800/50 p-4"
+      className="space-y-4"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('final.heading')}
-        </h2>
-      </div>
+      <h2 className="br-panel__title">{t('final.heading')}</h2>
 
       {final?.reason === 'hostEnded' && (
         <p
           data-testid="final-host-ended"
-          className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+          className="br-panel br-panel--well br-read text-red-text"
         >
           {t('final.hostEnded')}
         </p>
       )}
 
-      <div>
-        <h3 className="font-display text-base text-gold-200">
-          {t('final.podiumHeading')}
-        </h3>
-        <ol className="mt-2 flex flex-wrap items-end gap-3">
+      <div className="space-y-2">
+        <h3 className="br-label">{t('final.podiumHeading')}</h3>
+        <ol className="br-podium">
           {topPodium.map((place) => (
             <li
               key={place.rank}
               data-testid="final-podium-place"
               data-rank={place.rank}
-              className="min-w-[8rem] flex-1 rounded-xl border border-gold-400/30 bg-felt-950/60 p-3 text-center"
+              className="br-podium__place"
             >
-              <p className="font-display text-sm text-gold-200">
+              <p className="br-podium__rank">
                 {t('final.place', { rank: place.rank })}
               </p>
-              <ul className="mt-1 space-y-1">
+              <ul className="br-podium__players">
                 {place.players.map((player) => (
-                  <li
-                    key={player.playerId}
-                    className="truncate text-sm text-cream-100"
-                  >
-                    {player.nickname}
-                    {player.isSelf && (
-                      <span className="ml-1 text-xs text-gold-300">
-                        {t('lobby.you')}
-                      </span>
-                    )}
-                    <span className="ml-1 text-xs text-cream-100/60">
+                  <li key={player.playerId}>
+                    <span className="br-podium__name">
+                      {player.nickname}
+                      {player.isSelf && (
+                        <span className="br-label ml-2 text-gold">
+                          {t('lobby.you')}
+                        </span>
+                      )}
+                    </span>
+                    <span className="br-podium__pts">
                       {t('leaderboard.score', { points: player.totalScore })}
                     </span>
                   </li>
@@ -120,11 +113,12 @@ export function FinalPhase({
         </ol>
       </div>
 
-      <div>
-        <h3 className="font-display text-base text-gold-200">
-          {t('final.standingsHeading')}
-        </h3>
-        <ul data-testid="final-standings" className="mt-2 space-y-1">
+      <div className="space-y-2">
+        <h3 className="br-label">{t('final.standingsHeading')}</h3>
+        <ol
+          data-testid="final-standings"
+          className="br-lb br-panel br-panel--well"
+        >
           {standings.map((row) => (
             <li
               key={row.playerId}
@@ -132,32 +126,31 @@ export function FinalPhase({
               data-player-id={row.playerId}
               data-rank={row.rank}
               data-self={row.isSelf}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gold-400/15 bg-felt-950/60 px-3 py-2 text-sm"
+              className={`br-lb__row${row.isSelf ? ' is-me' : ''}`}
             >
-              <span className="w-6 text-center font-display text-gold-200">
-                {row.rank}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-cream-100">
+              <span className="br-lb__pos">{row.rank}.</span>
+              <span className="min-w-0 truncate">
                 {row.nickname}
                 {row.isSelf && (
-                  <span className="ml-2 text-xs text-gold-300">
+                  <span className="br-label ml-2 text-gold">
                     {t('lobby.you')}
                   </span>
                 )}
               </span>
-              <span className="text-cream-100/80">
-                {t('leaderboard.score', { points: row.totalScore })}
+              <span className="br-lb__pts whitespace-nowrap">
+                <span aria-hidden="true">{row.totalScore}</span>
+                <span className="sr-only">
+                  {t('leaderboard.score', { points: row.totalScore })}
+                </span>
               </span>
             </li>
           ))}
-        </ul>
+        </ol>
       </div>
 
-      <div>
-        <h3 className="font-display text-base text-gold-200">
-          {t('final.bangersHeading')}
-        </h3>
-        <ol className="mt-2 space-y-3">
+      <div className="space-y-2">
+        <h3 className="br-label">{t('final.bangersHeading')}</h3>
+        <ol className="br-final__rounds">
           {results.map((result) => {
             const winners = result.entries.filter((entry) => entry.winner);
             return (
@@ -165,28 +158,27 @@ export function FinalPhase({
                 key={result.roundNumber}
                 data-testid="final-round"
                 data-round={result.roundNumber}
-                className="rounded-lg border border-gold-400/15 bg-felt-950/60 p-3"
+                className="br-panel br-panel--well"
               >
-                <p className="text-xs text-cream-100/60">
+                <p className="br-label">
                   {t('final.round', {
                     number: result.roundNumber,
                     genre: genreName(result.genre, i18n.resolvedLanguage),
                   })}
                 </p>
                 {winners.length > 0 ? (
-                  <ul className="mt-1 space-y-1">
+                  <ul className="br-final__winners">
                     {winners.map((entry) => (
                       <li
                         key={entry.videoId}
                         data-testid="final-round-winner"
                         data-video-id={entry.videoId}
-                        className="text-sm text-cream-100"
                       >
                         <a
                           href={entry.watchUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="underline decoration-gold-400/60 underline-offset-2 hover:text-gold-200"
+                          className="br-final__link"
                         >
                           {entry.title}
                         </a>
@@ -194,7 +186,7 @@ export function FinalPhase({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-1 text-sm text-cream-100/60">
+                  <p className="br-read mt-1">
                     {result.reason === 'noSongs'
                       ? t('final.roundNoSongs')
                       : result.reason === 'singleSong'
@@ -211,7 +203,7 @@ export function FinalPhase({
       {errorKey && (
         <p
           role="alert"
-          className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+          className="br-panel br-panel--well br-read text-red-text"
         >
           {t(errorKey)}
         </p>
@@ -225,14 +217,14 @@ export function FinalPhase({
             void rematch();
           }}
           disabled={busy}
-          className="rounded-md border border-gold-400/50 bg-gold-500/15 px-4 py-2 text-sm text-gold-100 transition hover:bg-gold-500/25 disabled:opacity-50"
+          className="br-btn"
         >
           {t('final.rematch')}
         </button>
       ) : (
         <p
           data-testid="final-waiting-host"
-          className="rounded-lg border border-gold-400/20 bg-felt-950/60 px-3 py-2 text-sm text-cream-100/70"
+          className="br-panel br-panel--well br-read"
         >
           {t('final.waitingHost')}
         </p>

@@ -339,9 +339,8 @@
   "leaderboard": {
     "heading": "Zwischenstand",
     "score": "{{points}} Punkte",
-    "deltaUp": "+{{points}}",
-    "deltaDown": "{{points}}",
-    "deltaNone": "±0"
+    "placesGained": "Plätze gewonnen: {{count}}",
+    "placesLost": "Plätze verloren: {{count}}"
   },
   "final": {
     "heading": "Finale",
