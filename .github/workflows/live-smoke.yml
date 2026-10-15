@@ -1,0 +1,51 @@
+name: Live smoke
+
+# M7 / issue #20: end-to-end smoke against a real deployment. Never part of the
+# PR `CI` workflow - it needs the deployed app, real Supabase Realtime and real
+# YouTube, so it runs on demand or after Vercel reports a successful Production
+# deployment. Vercel's GitHub app emits `deployment_status` events with
+# `environment: Production` and `state: success` (verified via the deployments
+# API), so the automatic trigger works; no secret is required.
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployment base URL to smoke
+        required: false
+        default: https://banger-roulette.vercel.app
+  deployment_status:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  live-smoke:
+    name: Live smoke against the deployment
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+      github.event.deployment_status.environment == 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:live
+        env:
+          LIVE_BASE_URL: ${{ inputs.base_url || github.event.deployment_status.environment_url || 'https://banger-roulette.vercel.app' }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: live-smoke-report
+          path: playwright-report/
+          retention-days: 7

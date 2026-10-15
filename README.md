@@ -50,6 +50,36 @@ pnpm test:e2e
 
 `i18n:check` compares nested locale keys and interpolation variables. To validate separate fixtures: `node scripts/i18n-check.mjs path/to/de.json path/to/en.json`. Missing keys or mismatched placeholders exit nonzero.
 
+## Live smoke
+
+`pnpm test:e2e:live` runs `e2e-live/smoke.spec.ts` against a real deployment
+(`playwright.live.config.ts`, `LIVE_BASE_URL`, default
+`https://banger-roulette.vercel.app`). Four isolated browser contexts create,
+join and play two full rounds of a game plus the first round of the rematch
+through the UI only, covering AK-1 (identical genre and wheel), AK-2 (linked
+song appears once, both owners score, neither can vote or flag it), AK-3 (no
+owner before REVEAL), AK-4 (host migration < 5 s), AK-5 (reload rejoin < 5 s
+with an unchanged total) and the rematch reset (every total is the new game's
+own round). The `?debug=1` context also records the AK-7 start-skew and drift
+values per song as Playwright annotations. It fails on any application console
+error, CSP violation or Realtime channel error. No secret is required: the
+publishable Supabase key is baked into the deployment, and no local `webServer`
+is started.
+
+It is deliberately **not** part of the PR `CI` workflow. `.github/workflows/live-smoke.yml`
+runs it on `workflow_dispatch` (input `base_url`) and automatically after a
+successful Vercel Production `deployment_status`, always uploading the HTML
+report. It needs network access to the deployment, Supabase Realtime and
+YouTube, so expect a multi-minute runtime; AK-7's ±500 ms start criterion stays a
+separate per-device acceptance and is only measured, never asserted, here.
+
+The collector and the `assertClean` assertion live in `e2e-live/csp-watch.ts` and
+are shared with the offline regression `e2e/csp/live-csp-collector.spec.ts`,
+which is part of `pnpm test:e2e`: it runs both on the production build under the
+exact `vercel.json` policy and against a routed same-origin script that performs
+a caught, non-empty `eval`. A reintroduced CSP exemption therefore fails PR CI
+instead of silently weakening the smoke.
+
 ## Supabase setup (user only)
 
 1. [Dashboard](https://supabase.com/dashboard) → **New project** → organisation → name and EU region → choose a database password locally in your password manager → **Create project**. No table is required.
