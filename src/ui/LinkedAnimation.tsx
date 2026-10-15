@@ -83,6 +83,14 @@ export function LinkedAnimation({
       return;
     }
     for (const animation of root.getAnimations({ subtree: true })) {
+      // An effect already past its end stays at its settled frame: seeking
+      // and `play()` would rewind it to zero (MDN Animation.play()), so the
+      // cards would fly in again after a resume.
+      const endTime = animation.effect?.getComputedTiming().endTime;
+      if (typeof endTime === 'number' && endTime <= latestElapsed.current) {
+        animation.finish();
+        continue;
+      }
       animation.currentTime = latestElapsed.current;
       if (paused) {
         animation.pause();
