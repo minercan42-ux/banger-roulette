@@ -55,14 +55,16 @@ pnpm test:e2e
 `pnpm test:e2e:live` runs `e2e-live/smoke.spec.ts` against a real deployment
 (`playwright.live.config.ts`, `LIVE_BASE_URL`, default
 `https://banger-roulette.vercel.app`). Four isolated browser contexts create,
-join and play two full rounds through the UI only, covering AK-1 (identical
-genre and wheel), AK-2 (linked song appears once, both owners score, neither can
-vote or flag it), AK-3 (no owner before REVEAL), AK-4 (host migration < 5 s) and
-AK-5 (reload rejoin < 5 s with an unchanged total). The `?debug=1` context also
-records the AK-7 start-skew and drift values per song as Playwright annotations.
-It fails on any application console error, CSP violation or Realtime channel
-error. No secret is required: the publishable Supabase key is baked into the
-deployment, and no local `webServer` is started.
+join and play two full rounds of a game plus the first round of the rematch
+through the UI only, covering AK-1 (identical genre and wheel), AK-2 (linked
+song appears once, both owners score, neither can vote or flag it), AK-3 (no
+owner before REVEAL), AK-4 (host migration < 5 s), AK-5 (reload rejoin < 5 s
+with an unchanged total) and the rematch reset (every total is the new game's
+own round). The `?debug=1` context also records the AK-7 start-skew and drift
+values per song as Playwright annotations. It fails on any application console
+error, CSP violation or Realtime channel error. No secret is required: the
+publishable Supabase key is baked into the deployment, and no local `webServer`
+is started.
 
 It is deliberately **not** part of the PR `CI` workflow. `.github/workflows/live-smoke.yml`
 runs it on `workflow_dispatch` (input `base_url`) and automatically after a

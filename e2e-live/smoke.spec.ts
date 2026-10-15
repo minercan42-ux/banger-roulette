@@ -59,10 +59,8 @@ interface CspViolation {
 interface Watcher {
   label: string;
   errors: string[];
-  /** Real CSP violations: any one of these fails the smoke. */
+  /** CSP violations: any one of these fails the smoke. */
   csp: string[];
-  /** Benign third-party eval capability probes (see `newPlayer`). */
-  cspProbes: string[];
 }
 
 interface Player {
@@ -139,32 +137,16 @@ async function newPlayer(
     });
   });
   const page = await context.newPage();
-  const watcher: Watcher = { label, errors: [], csp: [], cspProbes: [] };
+  const watcher: Watcher = { label, errors: [], csp: [] };
   page.on('console', (message) => {
     const text = message.text();
     if (text.startsWith(CSP_PREFIX)) {
       const violation = parseCspViolation(text.slice(CSP_PREFIX.length));
-      if (violation === null) {
-        watcher.csp.push(`[${label}] unparseable report: ${text}`);
-        return;
-      }
-      const record = `[${label}] ${JSON.stringify(violation)}`;
-      // zod v4's `allowsEval()` capability probe calls `new Function("")`
-      // behind a try/catch on every page load; a `script-src` without
-      // 'unsafe-eval' reports the swallowed throw as a blocked eval with an
-      // empty `sample` (zod documents exactly this and ships `jitless` to skip
-      // the probe). It blocks no resource and changes no behaviour, so it is
-      // recorded, never failed on. Any other violation - including an eval with
-      // a non-empty sample - stays a hard failure.
-      if (
-        violation.directive === 'script-src' &&
-        violation.blockedURI === 'eval' &&
-        violation.sample === ''
-      ) {
-        watcher.cspProbes.push(record);
-      } else {
-        watcher.csp.push(record);
-      }
+      watcher.csp.push(
+        violation === null
+          ? `[${label}] unparseable report: ${text}`
+          : `[${label}] ${JSON.stringify(violation)}`,
+      );
       return;
     }
     if (message.type() !== 'error') {
@@ -181,20 +163,16 @@ async function newPlayer(
   return { page, watcher };
 }
 
-let cspProbesAnnotated = false;
-
-/** Fails the test on any application console error or real CSP violation. */
+/**
+ * Fails the test on any application console error or CSP violation. There is no
+ * exemption: the deployment's `script-src` has no `'unsafe-eval'` and no
+ * `'report-sample'`, so an empty `sample` cannot distinguish zod's
+ * `allowsEval()` probe from a real application `eval` - issue #43 removes that
+ * probe at the source instead.
+ */
 function assertClean(players: readonly Player[]): void {
   const errors = players.flatMap((player) => player.watcher.errors);
   const csp = players.flatMap((player) => player.watcher.csp);
-  const probes = players.flatMap((player) => player.watcher.cspProbes);
-  if (!cspProbesAnnotated && probes.length > 0) {
-    cspProbesAnnotated = true;
-    test.info().annotations.push({
-      type: 'csp-eval-probe-exempt',
-      description: `${probes.length} zod allowsEval probe block(s); first: ${probes[0]}`,
-    });
-  }
   expect(errors, 'application console/page errors').toEqual([]);
   expect(csp, 'Content-Security-Policy violations').toEqual([]);
 }
@@ -425,6 +403,39 @@ async function readScores(
     scores.set(id, match ? Number(match[0]) : Number.NaN);
   }
   return scores;
+}
+
+/**
+ * The round score is the last integer of a reveal entry's label in both
+ * locales ("... round score 4" / "... Rundenpunkte 4"), so the trailing number
+ * is read without parsing the surrounding copy.
+ */
+function lastNumber(text: string): number | null {
+  const match = text.match(/-?\d+(?!.*\d)/);
+  return match ? Number(match[0]) : null;
+}
+
+/**
+ * Reads one reveal entry's round score from the UI. That is the points the
+ * engine awards *per owner* of the entry (`ownerDeltas`), so it is also the
+ * exact share every owner must find in their own leaderboard total.
+ */
+async function readEntryRoundPoints(
+  page: Page,
+  videoId: string,
+): Promise<number> {
+  const entry = page.locator(
+    `[data-testid="reveal-entry"][data-video-id="${videoId}"]`,
+  );
+  await expect(entry).toBeVisible({ timeout: 30_000 });
+  const text =
+    (await entry.getByTestId('reveal-entry-points').textContent()) ?? '';
+  const points = lastNumber(text);
+  expect(
+    points,
+    `reveal entry ${videoId} exposes a round score`,
+  ).not.toBeNull();
+  return points as number;
 }
 
 async function selfPlayerId(page: Page): Promise<string> {
@@ -732,11 +743,36 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   });
   const round1Scores = await readScores(host.page, 'leaderboard-row');
   expect(round1Scores.size, 'leaderboard lists every player').toBe(4);
+  // Alice's id is reused by the AK-4 measurement below, which needs it right
+  // before closing her page; the identity never changes, so both read the same
+  // roster row.
+  const hostId = await selfPlayerId(host.page);
+  const bobId = await selfPlayerId(bob.page);
   const caraId = await selfPlayerId(cara.page);
   const round1Cara = round1Scores.get(caraId) ?? 0;
   expect(round1Cara, 'AK-5 baseline: Cara scored in round 1').toBeGreaterThan(
     0,
   );
+
+  // AK-2 continued: naming both owners is not enough, both must be *scored*.
+  // The reveal shows the round score the engine awards each owner of the entry
+  // (`linkedPoints` defaults to `full`, so it is the unchanged song score), and
+  // the linked song is Alice's and Bob's only source of points this round, so
+  // their round-1 totals must equal it exactly. A zero share - which the old
+  // names-plus-Cara-score check would have passed - fails here.
+  const linkedRoundPoints = await readEntryRoundPoints(host.page, LINKED_ID);
+  expect(
+    linkedRoundPoints,
+    'AK-2: a completed linked song must score above zero',
+  ).toBeGreaterThan(0);
+  expect(
+    round1Scores.get(hostId),
+    `AK-2: Alice's round-1 total equals her share of ${LINKED_ID}`,
+  ).toBe(linkedRoundPoints);
+  expect(
+    round1Scores.get(bobId),
+    `AK-2: Bob's round-1 total equals his share of ${LINKED_ID}`,
+  ).toBe(linkedRoundPoints);
 
   // --- Round 2 --------------------------------------------------------------
   await Promise.all(
@@ -770,12 +806,12 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   }
 
   // AK-4: the host closes the tab during VOTING; another player takes over.
-  const hostPlayerId = await selfPlayerId(host.page);
+  // `hostId`, captured at the round-1 reveal, is the id that must lose the badge.
   const ak4Start = Date.now();
   await host.page.close();
   const migrationMs = await Promise.all(
     [bob, cara, dana].map((player) =>
-      waitForNewHost(player.page, hostPlayerId, 5_000),
+      waitForNewHost(player.page, hostId, 5_000),
     ),
   );
   const ak4Ms = Math.max(...migrationMs, Date.now() - ak4Start);
@@ -807,18 +843,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   );
 
   // AK-5 continued: Cara's total after the reload equals round 1 plus round 2.
-  const caraEntry = bob.page.locator(
-    `[data-testid="reveal-entry"][data-video-id="${CARA_ID}"]`,
-  );
-  await expect(caraEntry).toBeVisible({ timeout: 30_000 });
-  const caraPointsText =
-    (await caraEntry.getByTestId('reveal-entry-points').textContent()) ?? '';
-  const caraPointsMatch = caraPointsText.match(/-?\d+(?!.*\d)/);
-  expect(
-    caraPointsMatch,
-    'Cara round-2 round score is readable',
-  ).not.toBeNull();
-  const caraRound2 = Number(caraPointsMatch![0]);
+  const caraRound2 = await readEntryRoundPoints(bob.page, CARA_ID);
 
   await Promise.all(
     [bob, cara, dana].map((player) => waitPhase(player.page, 'FINAL', 90_000)),
@@ -842,6 +867,14 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     caraFinal,
     'AK-5: reload did not lose Cara points (round 1 + round 2)',
   ).toBe(round1Cara + caraRound2);
+  // Baselines for the rematch reset check below: all three remaining players
+  // scored above zero in this game, so a carried-over total would be larger
+  // than the rematch round alone and cannot be mistaken for a reset.
+  const danaId = await selfPlayerId(dana.page);
+  const bobFinal = reference.get(bobId) ?? Number.NaN;
+  const danaFinal = reference.get(danaId) ?? Number.NaN;
+  expect(bobFinal, 'Bob scored in the first game').toBeGreaterThan(0);
+  expect(danaFinal, 'Dana scored in the first game').toBeGreaterThan(0);
 
   // Rematch returns to the LOBBY with the settings preserved.
   await expect(bob.page.getByTestId('final-rematch')).toBeVisible({
@@ -852,6 +885,85 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     await waitPhase(player.page, 'LOBBY', 30_000);
     await expect(player.page.getByTestId('settings-rounds')).toHaveValue('2');
   }
+  assertClean(players);
+
+  // --- Rematch reset (finding 3) --------------------------------------------
+  // LOBBY exposes no score at all: the leaderboard only renders in REVEAL and
+  // the roster shows names and badges only. The reset is therefore observable
+  // at the rematch's first scoreboard: with round 1 of the new game revealed,
+  // every total must equal exactly the points that player's own entry earned
+  // in that round - none of the previous game's totals may survive. The new
+  // host is Bob (he held `final-rematch`), and Alice stays away, so the game
+  // runs with three players and three songs.
+  // The reloaded tab lost its audio permission: `SoundControl` re-asserts
+  // `unlocked: false` for a retained actor on every page load, so Cara has to
+  // consent again. Without it the lobby stays "1 player without sound" and the
+  // host's start button never enables. Bob and Dana are already unlocked, so
+  // their click is skipped by the helper.
+  await Promise.all(
+    [bob, cara, dana].map((player) => unlockSound(player.page)),
+  );
+  await expect(bob.page.getByTestId('lobby-readiness')).toHaveAttribute(
+    'data-ready',
+    'true',
+    { timeout: 30_000 },
+  );
+  await bob.page.getByTestId('start-game').click();
+  await Promise.all(
+    [bob, cara, dana].map((player) => waitPhase(player.page, 'SUBMISSION')),
+  );
+  await Promise.all([
+    submitSong(bob.page, SUBMISSIONS.bob),
+    submitSong(cara.page, SUBMISSIONS.cara),
+    submitSong(dana.page, SUBMISSIONS.dana),
+  ]);
+  await Promise.all(
+    [bob, cara, dana].map((player) =>
+      waitPhase(player.page, 'PLAYBACK', 150_000),
+    ),
+  );
+  await Promise.all(
+    [bob, cara, dana].map((player) =>
+      waitPhase(player.page, 'VOTING', 150_000),
+    ),
+  );
+  for (const player of [bob, cara, dana]) {
+    await assertNoOwnerLeak(player.page);
+  }
+  await Promise.all(
+    [bob, cara, dana].map((player) => rankAndFinish(player.page)),
+  );
+  await Promise.all(
+    [bob, cara, dana].map((player) => waitPhase(player.page, 'REVEAL', 60_000)),
+  );
+  await expect(bob.page.getByTestId('leaderboard')).toBeVisible({
+    timeout: 60_000,
+  });
+  const rematchScores = await readScores(bob.page, 'leaderboard-row');
+  const rematchOwners = [
+    { label: 'Bob', playerId: bobId, videoId: LINKED_ID, previous: bobFinal },
+    { label: 'Cara', playerId: caraId, videoId: CARA_ID, previous: caraFinal },
+    { label: 'Dana', playerId: danaId, videoId: DANA_ID, previous: danaFinal },
+  ];
+  const rematchTotals: string[] = [];
+  for (const owner of rematchOwners) {
+    const roundPoints = await readEntryRoundPoints(bob.page, owner.videoId);
+    expect(
+      roundPoints,
+      `rematch: ${owner.label}'s entry scores above zero`,
+    ).toBeGreaterThan(0);
+    const total = rematchScores.get(owner.playerId) ?? Number.NaN;
+    expect(
+      total,
+      `rematch reset: ${owner.label}'s total is only the new round's points` +
+        ` (previous game: ${owner.previous})`,
+    ).toBe(roundPoints);
+    rematchTotals.push(`${owner.label}=${total}`);
+  }
+  test.info().annotations.push({
+    type: 'rematch-reset-totals',
+    description: rematchTotals.join(', '),
+  });
   assertClean(players);
 
   const runtimeSeconds = Math.round((Date.now() - startedAt) / 1000);
