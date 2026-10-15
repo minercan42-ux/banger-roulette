@@ -307,8 +307,17 @@ export function Shell({ session }: { session: GameSession }) {
           )}
         </div>
 
-        <footer className="mt-6 border-t border-gold-400/25 pt-4 text-xs text-cream-100/70">
-          {t('home.storageNotice')}
+        <footer
+          data-testid="privacy-notice"
+          aria-label={t('privacy.title')}
+          className="mt-6 border-t border-gold-400/25 pt-4 text-xs text-cream-100/70"
+        >
+          <p className="font-semibold text-gold-200">{t('privacy.title')}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-4 break-words">
+            <li>{t('privacy.embed')}</li>
+            <li>{t('privacy.noTracking')}</li>
+            <li>{t('privacy.storage')}</li>
+          </ul>
         </footer>
       </div>
     </div>

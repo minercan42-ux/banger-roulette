@@ -241,3 +241,85 @@ test('shell honours a reduced motion preference', async ({ browser }) => {
     await context.close();
   }
 });
+
+const PRIVACY = {
+  de: {
+    title: 'Datenschutz',
+    embed: 'youtube-nocookie.com eingebettet',
+    noTracking: 'keine Analyse-Tools und setzt keine Cookies',
+    storage: 'zufällige Spieler-ID im localStorage',
+  },
+  en: {
+    title: 'Privacy',
+    embed: 'embedded from youtube-nocookie.com',
+    noTracking: 'no analytics and sets no cookies',
+    storage: 'random player ID in your browser',
+  },
+} as const;
+
+async function expectPrivacyNotice(
+  page: Page,
+  lang: keyof typeof PRIVACY,
+): Promise<void> {
+  const notice = page.getByTestId('privacy-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText(PRIVACY[lang].title);
+  await expect(notice).toContainText(PRIVACY[lang].embed);
+  await expect(notice).toContainText(PRIVACY[lang].noTracking);
+  await expect(notice).toContainText(PRIVACY[lang].storage);
+}
+
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  const widths = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    documentScrollWidth: document.documentElement.scrollWidth,
+    noticeRight: document
+      .querySelector('[data-testid="privacy-notice"]')!
+      .getBoundingClientRect().right,
+  }));
+  expect(widths.documentScrollWidth).toBeLessThanOrEqual(widths.innerWidth);
+  expect(widths.noticeRight).toBeLessThanOrEqual(widths.innerWidth);
+}
+
+test('privacy notice shows on Home and in a room and switches language without reload', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'de-DE',
+    viewport: { width: 360, height: 740 },
+  });
+  const page = await context.newPage();
+  const errors = trackErrors(page);
+  try {
+    await page.goto('/');
+    await page.waitForFunction(() => window.__banger !== undefined);
+
+    // Home, German by default.
+    await expectPrivacyNotice(page, 'de');
+    await expectNoHorizontalOverflow(page);
+
+    // The footer follows the language switch without a reload.
+    const token = await writeDocumentToken(page);
+    await page.getByTestId('language-switch').selectOption('en');
+    await expectPrivacyNotice(page, 'en');
+    expect(await readDocumentToken(page)).toBe(token);
+    await expectNoHorizontalOverflow(page);
+
+    // In a room the same footer stays on screen.
+    await page.getByTestId('create-nickname').fill('Alice');
+    await page.getByTestId('create-room').click();
+    await expect(page.getByTestId('room-view')).toBeVisible();
+    await expect(page.getByTestId('privacy-notice')).toHaveCount(1);
+    await expectPrivacyNotice(page, 'en');
+    await expectNoHorizontalOverflow(page);
+
+    await page.getByTestId('language-switch').selectOption('de');
+    await expectPrivacyNotice(page, 'de');
+    expect(await readDocumentToken(page)).toBe(token);
+    await expectNoHorizontalOverflow(page);
+
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
