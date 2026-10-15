@@ -1,11 +1,27 @@
 name: Live smoke
 
-# M7 / issue #20: end-to-end smoke against a real deployment. Never part of the
-# PR `CI` workflow - it needs the deployed app, real Supabase Realtime and real
-# YouTube, so it runs on demand or after Vercel reports a successful Production
-# deployment. Vercel's GitHub app emits `deployment_status` events with
-# `environment: Production` and `state: success` (verified via the deployments
-# API), so the automatic trigger works; no secret is required.
+# M7 / issue #20: end-to-end smoke against a real deployment. It is never part of
+# the PR `CI` workflow - it needs the deployed app, real Supabase Realtime and
+# real YouTube - so it stays a manual gate: `pnpm test:e2e:live` on a host, or
+# this workflow via `workflow_dispatch`. No secret is required.
+#
+# There is deliberately no automatic trigger (issue #51). Both failures of the
+# former Vercel Production `deployment_status` trigger are recorded in
+# `docs/OPEN_QUESTIONS.md`:
+#   1. `github.event.deployment_status.environment_url` is a per-deployment URL
+#      and Vercel Deployment Protection answers it with `302` to
+#      `vercel.com/sso-api`, so the smoke only saw the SSO login. Deployment
+#      Protection is a project setting, not something this workflow may bypass;
+#      the production alias is the deployment that is actually public.
+#   2. GitHub-hosted runners egress from datacenter IPs and YouTube answers the
+#      embed's player request with `LOGIN_REQUIRED` ("Sign in to confirm you're
+#      not a bot") for every fixture video, which the official player surfaces as
+#      `onError` 150. Playback-dependent acceptance (submission preview, AK-4,
+#      AK-5) can therefore not pass on a GitHub-hosted runner, and a permanently
+#      red automatic run would mask real regressions.
+# A `workflow_dispatch` on `ubuntu-latest` is expected to fail at the preview
+# step for the same reason; run the smoke from a network where YouTube serves
+# playback (the host command above), or point this job at a self-hosted runner.
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +29,6 @@ on:
         description: Deployment base URL to smoke
         required: false
         default: https://banger-roulette.vercel.app
-  deployment_status:
 
 permissions:
   contents: read
@@ -22,17 +37,31 @@ concurrency:
   group: live-smoke-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  LIVE_BASE_URL: ${{ inputs.base_url || 'https://banger-roulette.vercel.app' }}
+
 jobs:
   live-smoke:
     name: Live smoke against the deployment
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.deployment_status.state == 'success' &&
-      github.event.deployment_status.environment == 'Production')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # Cheap guard for the first failure above: a per-deployment URL answers the
+      # browser with the Vercel SSO login, which would otherwise surface as an
+      # opaque 30 s `home-forms` timeout inside the suite.
+      - name: Preflight the base URL
+        run: |
+          read -r status location <<<"$(curl -sS --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' -I "$LIVE_BASE_URL")"
+          echo "$LIVE_BASE_URL -> ${status}${location:+ (redirect: $location)}"
+          if [[ "$location" == *"vercel.com/sso-api"* ]]; then
+            echo "::error title=Vercel Deployment Protection::$LIVE_BASE_URL redirects to the SSO endpoint, so the smoke would only see the login page. Use the public production alias (https://banger-roulette.vercel.app) instead of a per-deployment URL."
+            exit 1
+          fi
+          if [[ ! "$status" =~ ^2 ]]; then
+            echo "::error title=Base URL unreachable::$LIVE_BASE_URL answered HTTP $status."
+            exit 1
+          fi
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -41,8 +70,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e:live
-        env:
-          LIVE_BASE_URL: ${{ inputs.base_url || github.event.deployment_status.environment_url || 'https://banger-roulette.vercel.app' }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:
