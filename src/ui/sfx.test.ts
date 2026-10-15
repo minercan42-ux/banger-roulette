@@ -17,18 +17,32 @@ const ALL_EVENTS: SfxEvent[] = [
   'final',
 ];
 
+interface ParamCall {
+  method: string;
+  value?: number;
+  time: number;
+}
+
 class FakeParam {
   value = 0;
-  setValueAtTime(value: number) {
+  readonly calls: ParamCall[] = [];
+  setValueAtTime(value: number, time: number) {
     this.value = value;
+    this.calls.push({ method: 'setValueAtTime', value, time });
     return this;
   }
-  linearRampToValueAtTime(value: number) {
+  linearRampToValueAtTime(value: number, time: number) {
     this.value = value;
+    this.calls.push({ method: 'linearRampToValueAtTime', value, time });
     return this;
   }
-  exponentialRampToValueAtTime(value: number) {
+  exponentialRampToValueAtTime(value: number, time: number) {
     this.value = value;
+    this.calls.push({ method: 'exponentialRampToValueAtTime', value, time });
+    return this;
+  }
+  cancelScheduledValues(time: number) {
+    this.calls.push({ method: 'cancelScheduledValues', time });
     return this;
   }
 }
@@ -37,6 +51,7 @@ class FakeGain {
   gain = new FakeParam();
   readonly targets: unknown[] = [];
   disconnected = false;
+  constructor(readonly context: FakeAudioContext) {}
   connect(target: unknown) {
     this.targets.push(target);
   }
@@ -50,8 +65,12 @@ class FakeOscillator {
   frequency = new FakeParam();
   onended: (() => void) | null = null;
   readonly targets: unknown[] = [];
+  /** Every `stop(when)` the scheduler issued, so mutes stay observable. */
+  readonly stops: number[] = [];
   start() {}
-  stop() {}
+  stop(when: number) {
+    this.stops.push(when);
+  }
   connect(target: unknown) {
     this.targets.push(target);
   }
@@ -77,7 +96,7 @@ class FakeAudioContext {
     this.state = 'closed';
   }
   createGain() {
-    const node = new FakeGain();
+    const node = new FakeGain(this);
     this.gains.push(node);
     return node;
   }
@@ -96,7 +115,25 @@ function lastContext(): FakeAudioContext {
   return context;
 }
 
+/** Every effect bus on a context: one master per effect, plus tone envelopes. */
+function masterGains(context: FakeAudioContext): FakeGain[] {
+  return context.gains.filter((gain) =>
+    gain.targets.includes(context.destination),
+  );
+}
+
+function soleMasterGain(context: FakeAudioContext): FakeGain {
+  const masters = masterGains(context);
+  if (masters.length !== 1) {
+    throw new Error(`expected one effect bus, found ${masters.length}`);
+  }
+  return masters[0];
+}
+
 beforeEach(() => {
+  // The module registry survives across tests in one process, so drop the buses
+  // a previous test left sounding through the public toggle before starting.
+  useSfxStore.setState({ enabled: false });
   releaseAudioContext();
   created.length = 0;
   useSfxStore.setState({ enabled: true });
@@ -108,7 +145,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('every recipe schedules audible nodes on the unlocked context', async () => {
+test('every recipe schedules its tones on the unlocked context', async () => {
   await unlockAudioContext();
   const context = lastContext();
   for (const event of ALL_EVENTS) {
@@ -153,6 +190,49 @@ test('switching the toggle back on schedules again', async () => {
   useSfxStore.setState({ enabled: true });
   playEvents(['jackpot']);
   expect(lastContext().oscillators).toHaveLength(4);
+});
+
+test('switching the toggle off fades an effect that is still sounding', async () => {
+  await unlockAudioContext();
+  playEvents(['final']);
+  const context = lastContext();
+  const master = soleMasterGain(context);
+  expect(master.gain.value).toBe(MASTER_GAIN);
+  useSfxStore.setState({ enabled: false });
+  expect(master.gain.calls.map((call) => call.method)).toEqual([
+    'setValueAtTime',
+    'cancelScheduledValues',
+    'setValueAtTime',
+    'linearRampToValueAtTime',
+  ]);
+  expect(master.gain.calls[2]).toMatchObject({
+    value: MASTER_GAIN,
+    time: context.currentTime,
+  });
+  const ramp = master.gain.calls[3];
+  expect(ramp).toMatchObject({ value: 0 });
+  expect(ramp.time).toBeGreaterThan(0);
+  expect(ramp.time).toBeLessThanOrEqual(0.05);
+  expect(master.gain.value).toBe(0);
+  // The shared context survives the mute: switching back on plays on it again.
+  expect(context.state).toBe('running');
+});
+
+test('the notes a muted fanfare had pending stay silent', async () => {
+  await unlockAudioContext();
+  playEvents(['final']);
+  const context = lastContext();
+  const master = soleMasterGain(context);
+  // The fanfare's last tone is scheduled at +0.45 s, so muting the bus at 0 s
+  // has to silence notes that have not started yet.
+  useSfxStore.setState({ enabled: false });
+  expect(master.gain.value).toBe(0);
+  useSfxStore.setState({ enabled: true });
+  playEvents(['final']);
+  const masters = masterGains(context);
+  expect(masters).toHaveLength(2);
+  expect(masters[1].gain.value).toBe(MASTER_GAIN);
+  expect(context.oscillators).toHaveLength(8);
 });
 
 test('nothing plays before a context exists', () => {

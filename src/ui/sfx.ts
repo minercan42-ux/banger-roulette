@@ -24,6 +24,8 @@ export const MASTER_GAIN = 0.2;
 const ATTACK_SECONDS = 0.008;
 /** Exponential ramps cannot reach zero; this is the fade-out floor. */
 const SILENCE = 0.0001;
+/** Fade applied when the toggle silences an effect that is still sounding. */
+const MUTE_FADE_SECONDS = 0.01;
 
 interface Tone {
   frequency: number;
@@ -111,13 +113,54 @@ const RECIPES: Record<SfxEvent, Tone[]> = {
   final: FINAL,
 };
 
-/** Schedule one recipe on one already-running context. */
-function schedule(context: AudioContext, tones: Tone[]): void {
+/**
+ * One effect bus: the master gain of a single effect plus every oscillator
+ * feeding it. A bus is registered while it sounds, so the toggle can silence it
+ * after the fact; the last tone's `onended` unregisters it again.
+ */
+interface EffectBus {
+  master: GainNode;
+  sources: OscillatorNode[];
+}
+
+/** Buses that are sounding right now. */
+const activeBuses = new Set<EffectBus>();
+
+/**
+ * SPEC §6 "abschaltbar": switching the toggle off silences what is already
+ * playing, not only the next call. Every active bus is faded to zero, so tones
+ * scheduled for later in a multi-note effect cannot start after the button says
+ * "off". The shared context is untouched: switching back on plays on the same
+ * unlocked context.
+ *
+ * A bus master never leaves MASTER_GAIN before its mute (the envelopes live on
+ * the per-tone gains), so each ramp restarts from that known value instead of
+ * reading a running automation.
+ */
+function silenceActiveBuses(): void {
+  const buses = [...activeBuses];
+  activeBuses.clear();
+  for (const bus of buses) {
+    const now = bus.master.context.currentTime;
+    bus.master.gain.cancelScheduledValues(now);
+    bus.master.gain.setValueAtTime(MASTER_GAIN, now);
+    bus.master.gain.linearRampToValueAtTime(0, now + MUTE_FADE_SECONDS);
+  }
+}
+
+useSfxStore.subscribe((state, previous) => {
+  if (previous.enabled && !state.enabled) {
+    silenceActiveBuses();
+  }
+});
+
+/** Schedule one recipe into a fresh bus on `context` and return that bus. */
+function scheduleBus(context: BaseAudioContext, tones: Tone[]): EffectBus {
   const start = context.currentTime;
   const master = context.createGain();
   master.gain.setValueAtTime(MASTER_GAIN, start);
   master.connect(context.destination);
-  let last: OscillatorNode | null = null;
+  const sources: OscillatorNode[] = [];
   for (const tone of tones) {
     const begin = start + tone.at;
     const oscillator = context.createOscillator();
@@ -140,14 +183,28 @@ function schedule(context: AudioContext, tones: Tone[]): void {
     envelope.connect(master);
     oscillator.start(begin);
     oscillator.stop(begin + tone.duration + 0.02);
-    last = oscillator;
+    sources.push(oscillator);
   }
+  const bus: EffectBus = { master, sources };
+  const last = sources[sources.length - 1];
   // The bus is per effect, so it is dropped with its last tone instead of
   // piling up gain nodes on the shared context.
-  if (last !== null) {
+  if (last !== undefined) {
     last.onended = () => {
+      activeBuses.delete(bus);
       master.disconnect();
     };
+  }
+  return bus;
+}
+
+/** The one gate every path shares: nothing is scheduled while the toggle is off. */
+function playOn(context: BaseAudioContext, events: SfxEvent[]): void {
+  if (events.length === 0 || !useSfxStore.getState().enabled) {
+    return;
+  }
+  for (const event of events) {
+    activeBuses.add(scheduleBus(context, RECIPES[event]));
   }
 }
 
@@ -158,13 +215,21 @@ function schedule(context: AudioContext, tones: Tone[]): void {
  */
 export function playEvents(events: SfxEvent[]): void {
   const context = runningAudioContext();
-  if (events.length === 0 || context === null) {
+  if (context === null) {
     return;
   }
-  if (!useSfxStore.getState().enabled) {
-    return;
-  }
-  for (const event of events) {
-    schedule(context, RECIPES[event]);
-  }
+  playOn(context, events);
+}
+
+/**
+ * Schedule a batch on an arbitrary context through exactly the production path
+ * (`playOn`, toggle included). Split out so the rendered-output evidence
+ * (`e2e/sfx-render.spec.ts`) can measure the real recipes on an
+ * `OfflineAudioContext`; the app itself only ever reaches `playEvents`.
+ */
+export function renderEvents(
+  context: BaseAudioContext,
+  events: SfxEvent[],
+): void {
+  playOn(context, events);
 }
