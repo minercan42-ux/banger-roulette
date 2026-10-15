@@ -73,6 +73,13 @@ report. It needs network access to the deployment, Supabase Realtime and
 YouTube, so expect a multi-minute runtime; AK-7's ±500 ms start criterion stays a
 separate per-device acceptance and is only measured, never asserted, here.
 
+The collector and the `assertClean` assertion live in `e2e-live/csp-watch.ts` and
+are shared with the offline regression `e2e/csp/live-csp-collector.spec.ts`,
+which is part of `pnpm test:e2e`: it runs both on the production build under the
+exact `vercel.json` policy and against a routed same-origin script that performs
+a caught, non-empty `eval`. A reintroduced CSP exemption therefore fails PR CI
+instead of silently weakening the smoke.
+
 ## Supabase setup (user only)
 
 1. [Dashboard](https://supabase.com/dashboard) → **New project** → organisation → name and EU region → choose a database password locally in your password manager → **Create project**. No table is required.

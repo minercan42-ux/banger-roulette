@@ -1,5 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import {
+  openUnderProductionCsp,
+  PRODUCTION_CSP,
+  routeWithProductionCsp,
+} from './csp-policy';
 
 /**
  * Regression test for #43.
@@ -18,20 +23,6 @@ import { expect, test, type Page } from '@playwright/test';
  * by the live smoke suite (#20).
  */
 
-interface HeaderEntry {
-  key: string;
-  value: string;
-}
-
-interface HeaderBlock {
-  source: string;
-  headers: HeaderEntry[];
-}
-
-interface VercelConfig {
-  headers: HeaderBlock[];
-}
-
 interface Violation {
   blockedURI: string;
   violatedDirective: string;
@@ -49,29 +40,11 @@ declare global {
   }
 }
 
-/** The policy from the committed `vercel.json`, so the test cannot drift from it. */
-function cspFromVercelJson(): string {
-  const config = JSON.parse(
-    readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'),
-  ) as VercelConfig;
-  for (const block of config.headers) {
-    for (const header of block.headers) {
-      if (header.key === 'Content-Security-Policy') {
-        return header.value;
-      }
-    }
-  }
-  throw new Error('vercel.json has no Content-Security-Policy header');
-}
-
-const CSP = cspFromVercelJson();
-
 /**
- * Watches the page from before its first script runs, and makes every response
- * carry the production policy (`vite preview` serves the build without it).
- * `addInitScript` is the only way to catch a violation raised while the app
- * bundle is still being evaluated; a listener installed with `page.evaluate`
- * would always come too late.
+ * Watches the page from before its first script runs, and serves every response
+ * under the production policy (`csp-policy.ts`). `addInitScript` is the only way
+ * to catch a violation raised while the app bundle is still being evaluated; a
+ * listener installed with `page.evaluate` would always come too late.
  */
 async function watchProductionCsp(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -87,20 +60,7 @@ async function watchProductionCsp(page: Page): Promise<void> {
       });
     });
   });
-  await page.route('**/*', async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      headers: { ...response.headers(), 'content-security-policy': CSP },
-    });
-  });
-}
-
-/** Navigates and proves the response really carried the policy under test. */
-async function openUnderProductionCsp(page: Page, path: string): Promise<void> {
-  const response = await page.goto(path);
-  expect(response, `no document response for ${path}`).not.toBeNull();
-  expect(await response!.headerValue('content-security-policy')).toBe(CSP);
+  await routeWithProductionCsp(page);
 }
 
 test('the production build raises no CSP violation on Home', async ({
@@ -134,7 +94,7 @@ test('the watcher catches a violation the production policy blocks', async ({
   // Guard for the assertions above: the policy must stay strict, and the
   // `addInitScript` listener must report what it is meant to catch. Without this
   // test a silently absent listener would make the two tests above vacuous.
-  expect(CSP).not.toContain("'unsafe-eval'");
+  expect(PRODUCTION_CSP).not.toContain("'unsafe-eval'");
   await page.evaluate(() => {
     const script = document.createElement('script');
     script.textContent = 'window.__inlineScriptRan = true;';

@@ -1,4 +1,10 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import {
+  assertClean,
+  installViolationReporter,
+  watchPage,
+  type WatchedPage,
+} from './csp-watch';
 
 /**
  * M7 / issue #20: the committed live smoke suite. It drives the *deployed* app
@@ -26,9 +32,6 @@ const BASE_URL =
   process.env.LIVE_BASE_URL ?? 'https://banger-roulette.vercel.app';
 const ORIGIN = new URL(BASE_URL).origin;
 
-/** Console marker the in-page CSP listener reports violations with. */
-const CSP_PREFIX = 'banger-csp-violation ';
-
 /** Official YouTube sample, Big Buck Bunny and "Me at the zoo" - all embeddable. */
 const LINKED_ID = 'M7lc1UVf-VE';
 const CARA_ID = 'aqz-KE-bpKQ';
@@ -48,70 +51,16 @@ const SUBMISSIONS = {
 
 const NICKNAMES = [HOST_NICK, BOB_NICK, CARA_NICK, DANA_NICK];
 
-interface CspViolation {
-  directive: string;
-  blockedURI: string;
-  sourceFile: string;
-  lineNumber: number;
-  sample: string;
-}
-
-interface Watcher {
-  label: string;
-  errors: string[];
-  /** CSP violations: any one of these fails the smoke. */
-  csp: string[];
-}
-
 interface Player {
   page: Page;
-  watcher: Watcher;
-}
-
-/** Runtime check of the JSON the in-page CSP listener reports. */
-function parseCspViolation(text: string): CspViolation | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    if (value === null || typeof value !== 'object') {
-      return null;
-    }
-    return {
-      directive:
-        'directive' in value && typeof value.directive === 'string'
-          ? value.directive
-          : '',
-      blockedURI:
-        'blockedURI' in value && typeof value.blockedURI === 'string'
-          ? value.blockedURI
-          : '',
-      sourceFile:
-        'sourceFile' in value && typeof value.sourceFile === 'string'
-          ? value.sourceFile
-          : '',
-      lineNumber:
-        'lineNumber' in value && typeof value.lineNumber === 'number'
-          ? value.lineNumber
-          : 0,
-      sample:
-        'sample' in value && typeof value.sample === 'string'
-          ? value.sample
-          : '',
-    };
-  } catch {
-    return null;
-  }
+  watcher: WatchedPage;
 }
 
 /**
- * Creates one isolated browser context per player, with a locale, a CSP
- * violation collector and a console/page-error collector. Only console errors
- * that originate from the app origin count: YouTube iframe chatter from
- * `youtube-nocookie.com` is not application noise and must not fail the smoke.
- *
- * The in-page listener reports violations through `console.warn` instead of a
- * `window` array, because reading such an array would need `page.evaluate`,
- * whose Playwright-internal `eval` is itself blocked by the deployment's strict
- * `script-src` and would show up as a fake app violation.
+ * Creates one isolated browser context per player, with a locale, and attaches
+ * the shared CSP violation collector and console/page-error collector (see
+ * `csp-watch.ts`, which the offline regression `e2e/csp/live-csp-collector.spec.ts`
+ * exercises as well).
  */
 async function newPlayer(
   browser: Browser,
@@ -122,59 +71,9 @@ async function newPlayer(
     locale,
     viewport: { width: 1280, height: 800 },
   });
-  await context.addInitScript(() => {
-    window.addEventListener('securitypolicyviolation', (event) => {
-      console.warn(
-        'banger-csp-violation ' +
-          JSON.stringify({
-            directive: event.effectiveDirective,
-            blockedURI: event.blockedURI,
-            sourceFile: event.sourceFile,
-            lineNumber: event.lineNumber,
-            sample: event.sample,
-          }),
-      );
-    });
-  });
+  await installViolationReporter(context);
   const page = await context.newPage();
-  const watcher: Watcher = { label, errors: [], csp: [] };
-  page.on('console', (message) => {
-    const text = message.text();
-    if (text.startsWith(CSP_PREFIX)) {
-      const violation = parseCspViolation(text.slice(CSP_PREFIX.length));
-      watcher.csp.push(
-        violation === null
-          ? `[${label}] unparseable report: ${text}`
-          : `[${label}] ${JSON.stringify(violation)}`,
-      );
-      return;
-    }
-    if (message.type() !== 'error') {
-      return;
-    }
-    const url = message.location().url;
-    if (url === '' || url.startsWith(ORIGIN)) {
-      watcher.errors.push(`[${label}] console: ${text}`);
-    }
-  });
-  page.on('pageerror', (error) => {
-    watcher.errors.push(`[${label}] pageerror: ${error.message}`);
-  });
-  return { page, watcher };
-}
-
-/**
- * Fails the test on any application console error or CSP violation. There is no
- * exemption: the deployment's `script-src` has no `'unsafe-eval'` and no
- * `'report-sample'`, so an empty `sample` cannot distinguish zod's
- * `allowsEval()` probe from a real application `eval` - issue #43 removes that
- * probe at the source instead.
- */
-function assertClean(players: readonly Player[]): void {
-  const errors = players.flatMap((player) => player.watcher.errors);
-  const csp = players.flatMap((player) => player.watcher.csp);
-  expect(errors, 'application console/page errors').toEqual([]);
-  expect(csp, 'Content-Security-Policy violations').toEqual([]);
+  return { page, watcher: watchPage(page, label, ORIGIN) };
 }
 
 /**
@@ -593,6 +492,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   const cara = await newPlayer(browser, 'de-DE', 'C-de');
   const dana = await newPlayer(browser, 'en-US', 'D-debug-en');
   const players = [host, bob, cara, dana];
+  const watched = players.map((player) => player.watcher);
   const debugPage = dana.page;
 
   // --- Lobby: create, join by code and by deep link, sound, settings ---------
@@ -612,7 +512,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     'true',
     { timeout: 30_000 },
   );
-  assertClean(players);
+  assertClean(watched);
 
   // --- Round 1 --------------------------------------------------------------
   await host.page.getByTestId('start-game').click();
@@ -885,7 +785,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     await waitPhase(player.page, 'LOBBY', 30_000);
     await expect(player.page.getByTestId('settings-rounds')).toHaveValue('2');
   }
-  assertClean(players);
+  assertClean(watched);
 
   // --- Rematch reset (finding 3) --------------------------------------------
   // LOBBY exposes no score at all: the leaderboard only renders in REVEAL and
@@ -964,7 +864,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     type: 'rematch-reset-totals',
     description: rematchTotals.join(', '),
   });
-  assertClean(players);
+  assertClean(watched);
 
   const runtimeSeconds = Math.round((Date.now() - startedAt) / 1000);
   test.info().annotations.push({
