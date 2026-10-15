@@ -1993,4 +1993,9 @@ body {
   .br-stat {
     min-width: 5.5rem;
   }
+  /* The once-per-second tick grows the number from its left edge, so it never
+     leaves the well. */
+  .br-stat__value {
+    transform-origin: left center;
+  }
 }

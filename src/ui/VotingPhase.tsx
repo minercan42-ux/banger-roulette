@@ -436,7 +436,7 @@ export function VotingPhase({
         <span className="br-label">{t('voting.partialHint')}</span>
       </div>
       <p className="br-read">{t('voting.intro')}</p>
-      <div className="mt-3">
+      <div className="mt-3 flex">
         <PhaseTimer
           session={session}
           state={state}

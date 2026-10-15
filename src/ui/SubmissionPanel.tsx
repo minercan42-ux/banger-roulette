@@ -344,7 +344,7 @@ export function SubmissionPanel({
         )}
       </div>
       <p className="br-read">{t('submission.intro')}</p>
-      <div className="mt-3">
+      <div className="mt-3 flex">
         <PhaseTimer
           session={session}
           state={state}
