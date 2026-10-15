@@ -67,11 +67,18 @@ publishable Supabase key is baked into the deployment, and no local `webServer`
 is started.
 
 It is deliberately **not** part of the PR `CI` workflow. `.github/workflows/live-smoke.yml`
-runs it on `workflow_dispatch` (input `base_url`) and automatically after a
-successful Vercel Production `deployment_status`, always uploading the HTML
-report. It needs network access to the deployment, Supabase Realtime and
-YouTube, so expect a multi-minute runtime; AK-7's ±500 ms start criterion stays a
-separate per-device acceptance and is only measured, never asserted, here.
+runs it on `workflow_dispatch` (input `base_url`, default the production alias)
+and always uploads the HTML report. There is no automatic trigger: a
+GitHub-hosted runner cannot pass it, because a Vercel Production
+`deployment_status` carries a per-deployment URL that Deployment Protection
+answers with `302` to `vercel.com/sso-api`, and YouTube answers a runner's
+datacenter IP with `LOGIN_REQUIRED` ("Sign in to confirm you're not a bot"),
+which the player surfaces as `onError` 150 for every fixture video. Run the smoke
+from a network where YouTube serves playback, see
+`docs/OPEN_QUESTIONS.md`. It needs network access to the deployment, Supabase
+Realtime and YouTube, so expect a multi-minute runtime; AK-7's ±500 ms start
+criterion stays a separate per-device acceptance and is only measured, never
+asserted, here.
 
 The collector and the `assertClean` assertion live in `e2e-live/csp-watch.ts` and
 are shared with the offline regression `e2e/csp/live-csp-collector.spec.ts`,
