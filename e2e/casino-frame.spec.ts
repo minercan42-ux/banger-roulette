@@ -18,13 +18,51 @@ interface FocusStop {
 
 const GOLD_300 = 'rgb(236, 208, 127)';
 
-/** Tabs through the whole page once and records the ring of every stop. */
+/**
+ * Everything the document exposes to the Tab key, in DOM order: `tabindex="-1"`
+ * elements and unrendered ones stay excluded, so the list is what the tab order
+ * can reach.
+ */
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** The stop id of every focusable element, in the order Tab reaches them. */
+async function tabOrder(page: Page): Promise<string[]> {
+  return page.evaluate((selector) => {
+    const all = Array.from(document.querySelectorAll('*'));
+    return Array.from(document.querySelectorAll<HTMLElement>(selector))
+      .filter((element) => element.getClientRects().length > 0)
+      .map(
+        (element) =>
+          `${element.getAttribute('data-testid') ?? element.tagName}#${all.indexOf(element)}`,
+      );
+  }, FOCUSABLE_SELECTOR);
+}
+
+/**
+ * Tabs through the whole tab order and records the ring of every stop.
+ *
+ * The walk can start in the middle of the order (Chromium remembers the control
+ * the last click removed), so it covers the ring in two directions: forward to
+ * the end and then backwards from there. Chromium continues at the first
+ * control after the last one by moving the focus through the document root;
+ * Firefox parks the focus on the last control, which is why the walk switches
+ * to `Shift+Tab` at that boundary. All of it is real keyboard input, a press
+ * that moves the focus nowhere except those two boundaries fails the run, and
+ * the recorded stops have to cover the whole tab order, so a ring that was cut
+ * short cannot pass as a complete one.
+ */
 async function tabThrough(page: Page): Promise<FocusStop[]> {
+  const order = await tabOrder(page);
+  const first = order[0];
+  const last = order[order.length - 1];
   const stops: FocusStop[] = [];
-  let first: string | null = null;
+  const visited = new Set<string>();
+  let backwards = false;
   let previous: string | null = null;
-  for (let index = 0; index < 80; index += 1) {
-    await page.keyboard.press('Tab');
+  let leftDocument = false;
+  for (let index = 0; index < 80 && visited.size < order.length; index += 1) {
+    await page.keyboard.press(backwards ? 'Shift+Tab' : 'Tab');
     // Tailwind `transition` utilities animate outline-color; read the settled ring.
     await page.evaluate(() =>
       Promise.all(
@@ -51,19 +89,40 @@ async function tabThrough(page: Page): Promise<FocusStop[]> {
       };
     });
     if (stop === null) {
-      break;
+      // Chromium moves the focus to the document root after the last control and
+      // enters the order again at the first one; a second time in a row means
+      // the focus really left the page.
+      if (leftDocument) {
+        break;
+      }
+      leftDocument = true;
+      continue;
     }
-    if (first === null) {
-      first = stop.id;
-    } else if (stop.id === first || stop.id === previous) {
-      // Chromium moves the focus out of the document after the last control
-      // (the `null` above); Firefox leaves it on that control, so a repeated
-      // stop ends the tab order as well. Both paths stop at the same place.
-      break;
+    leftDocument = false;
+    if (stop.id === previous) {
+      // The press did not move the focus: Firefox parks it on the last control,
+      // so the rest of the ring is walked backwards from that boundary. Anywhere
+      // else the control swallowed the key.
+      if (!backwards && stop.id === last) {
+        backwards = true;
+      } else if (backwards && stop.id === first) {
+        break;
+      } else {
+        throw new Error(
+          `The tab order stalls on ${stop.id} before the ring is complete`,
+        );
+      }
+      continue;
     }
     previous = stop.id;
-    stops.push(stop);
+    if (!visited.has(stop.id)) {
+      visited.add(stop.id);
+      stops.push(stop);
+    }
   }
+  expect([...visited].sort(), 'the walk covers the whole tab order').toEqual(
+    [...order].sort(),
+  );
   return stops;
 }
 

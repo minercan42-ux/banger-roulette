@@ -23,8 +23,9 @@ import { Shell } from '../src/ui/Shell';
 import { createBridgeTransportFactory } from './harness-transport';
 import { installSilentAudioSink } from './silent-audio';
 
-// Firefox cannot start an AudioContext without an audio output device; give the
-// harness the silent sink Chromium and WebKit already have (see silent-audio.ts).
+// Firefox cannot start an AudioContext without an audio output device. A stage
+// that carries the harness mode selects the silent sink for that engine alone
+// (`newStage` sets the flag; see silent-audio.ts); the others stay native.
 installSilentAudioSink();
 
 async function fetchServerTime(): Promise<number> {

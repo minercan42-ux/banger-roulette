@@ -26,7 +26,7 @@ import {
  * script, not the console-forwarding collector or a caught `eval`, so it would
  * keep passing with the exemption restored.
  *
- * Runs with `pnpm test:e2e` (`playwright.csp.config.ts`, `vite preview` of
+ * Runs with `pnpm test:e2e:csp` (`playwright.csp.config.ts`, `vite preview` of
  * `pnpm build`). The production smoke stays outside PR CI.
  */
 

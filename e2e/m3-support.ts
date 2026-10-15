@@ -5,6 +5,7 @@ import type { CommandResult } from '../src/net/errors';
 import type { SessionSnapshot } from '../src/net/session';
 import type { GameState } from '../src/shared/game';
 import type { Settings } from '../src/shared/settings';
+import { NO_AUDIO_DEVICE } from './silent-audio';
 import {
   installYouTubeFixture,
   watchYouTubeRequests,
@@ -48,6 +49,15 @@ export async function newStage(
     viewport: options.viewport,
   });
   await installYouTubeFixture(context, options.videos ?? {});
+  // Firefox without an audio output device never settles `resume()`, so the
+  // FR-07 consent click would hang; only that engine selects the test-only
+  // silent sink, and the flag is set before any page script runs
+  // (see `e2e/silent-audio.ts`).
+  if (browser.browserType().name() === 'firefox') {
+    await context.addInitScript((mode) => {
+      window.__silentAudioMode = mode;
+    }, NO_AUDIO_DEVICE);
+  }
   const skew = options.wallClockOffsetMs ?? 0;
   if (skew !== 0) {
     await context.addInitScript((offset) => {

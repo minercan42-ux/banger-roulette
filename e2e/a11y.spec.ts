@@ -32,8 +32,9 @@ import { mediaFor } from './m5-support';
 const MAX_TABS = 200;
 
 /**
- * Everything the document exposes to the Tab key, in DOM order. `tabindex="-1"`
- * elements (the warm playback host during SUBMISSION) stay excluded.
+ * Everything the document exposes to the Tab key, in DOM order: `tabindex="-1"`
+ * elements (the warm playback host during SUBMISSION) and unrendered ones stay
+ * excluded, so the list is what the tab order can actually reach.
  */
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -43,14 +44,20 @@ interface FocusInfo {
   videoId: string | null;
   /** DOM position of the focused element, so a parked focus is detectable. */
   index: number;
+  /** Whether the focused element ends or opens the document's tab order. */
+  atEnd: boolean;
+  atStart: boolean;
 }
 
 async function focusedInfo(page: Page): Promise<FocusInfo> {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const active = document.activeElement as HTMLElement | null;
     const item = active?.closest(
       '[data-testid="voting-rank-item"]',
     ) as HTMLElement | null;
+    const focusable = Array.from(
+      document.querySelectorAll<HTMLElement>(selector),
+    ).filter((element) => element.getClientRects().length > 0);
     return {
       testId: active?.getAttribute('data-testid') ?? null,
       videoId: item?.getAttribute('data-video-id') ?? null,
@@ -58,20 +65,30 @@ async function focusedInfo(page: Page): Promise<FocusInfo> {
         active === null
           ? -1
           : Array.from(document.querySelectorAll('*')).indexOf(active),
+      atEnd: focusable[focusable.length - 1] === active,
+      atStart: focusable[0] === active,
     };
-  });
+  }, FOCUSABLE_SELECTOR);
 }
 
 /**
- * Moves focus to a control using only the Tab key. Returns early when the
+ * Moves focus to a control using the Tab key only. Returns early when the
  * control already holds focus (React keeps the node across reorders), so a
  * caller never overshoots the target.
+ *
+ * Chromium continues the tab order at the document start after the last control
+ * (through the document root), so the walk wraps on its own. Firefox parks the
+ * focus on that last control instead; the audited player's navigation has to
+ * stay keyboard-only, so the rest of the ring is then walked backwards with
+ * Shift+Tab rather than by focusing a control from script. A control that
+ * swallows Tab anywhere else is a real keyboard trap and fails the run.
  */
 async function tabTo(
   page: Page,
   target: { testId: string; videoId?: string },
 ): Promise<void> {
-  let previous = -1;
+  let backwards = false;
+  let previous: number | null = null;
   for (let presses = 0; presses <= MAX_TABS; presses += 1) {
     const info = await focusedInfo(page);
     if (
@@ -84,15 +101,21 @@ async function tabTo(
       break;
     }
     if (info.index === previous) {
-      // Chromium continues the tab order at the document start after the last
-      // control, Firefox parks the focus on that control for good. Focus the
-      // first control so the walk continues instead of looping on one element.
-      await page.evaluate((selector) => {
-        document.querySelector<HTMLElement>(selector)?.focus();
-      }, FOCUSABLE_SELECTOR);
+      // The press before this one did not move the focus.
+      if (!backwards && info.atEnd) {
+        backwards = true;
+      } else if (backwards && info.atStart) {
+        throw new Error(
+          `Keyboard pass walked the whole tab order without reaching ${JSON.stringify(target)}`,
+        );
+      } else {
+        throw new Error(
+          `Focus stuck on ${info.testId ?? `element #${info.index}`} while looking for ${JSON.stringify(target)}`,
+        );
+      }
     }
     previous = info.index;
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(backwards ? 'Shift+Tab' : 'Tab');
   }
   throw new Error(
     `Keyboard pass could not reach ${JSON.stringify(target)} within ${MAX_TABS} Tab presses`,
