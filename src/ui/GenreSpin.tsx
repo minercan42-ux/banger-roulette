@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectGenrePool,
@@ -269,16 +269,15 @@ export function GenreSpin({ session, state }: GenreSpinProps) {
   const { t, i18n } = useTranslation();
   const reducedMotion = usePrefersReducedMotion();
   const room = selectRoom(state);
-  const pool = selectGenrePool(state);
+  const genrePool = state.genrePool;
+  // The selector clones the pool; key the copy on the pool identity so the
+  // memoised wheel face only rebuilds when the pool itself changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- genrePool is the identity of `state`'s pool
+  const pool = useMemo(() => selectGenrePool(state), [genrePool]);
   const genre = room.genre;
   const spinMode = selectSettings(state).genreMode !== 'fixed';
   const now = useSessionNow(session, spinMode && !reducedMotion, FRAME_MS);
   const timer = selectPhaseTimer(state, now);
-
-  if (!genre) {
-    return null;
-  }
-  const label = genreName(genre, i18n.resolvedLanguage);
 
   const totalMs = timer.totalMs ?? 0;
   const elapsed =
@@ -286,10 +285,33 @@ export function GenreSpin({ session, state }: GenreSpinProps) {
       ? timer.totalMs - timer.remainingMs
       : Number.POSITIVE_INFINITY;
   const { spinMs, shakeMs } = wheelTimeline(totalMs);
+  const stopped = !spinMode || reducedMotion || elapsed >= spinMs;
+
+  // The polite live region mounts empty and receives the result in a later
+  // task, so it is an update (announced) even when the wheel is already
+  // stopped on the first render (fixed mode, reduced motion). Only `stopped`
+  // and the text are dependencies: clock frames and pause/resume re-render
+  // without changing them, so the text is published once per result.
+  const announcementText = genre
+    ? t('genre.announcement', {
+        genre: genreName(genre, i18n.resolvedLanguage),
+      })
+    : '';
+  const [announced, setAnnounced] = useState('');
+  useEffect(() => {
+    if (!stopped) {
+      return undefined;
+    }
+    const handle = setTimeout(() => setAnnounced(announcementText), 0);
+    return () => clearTimeout(handle);
+  }, [stopped, announcementText]);
+
+  if (!genre) {
+    return null;
+  }
+  const label = genreName(genre, i18n.resolvedLanguage);
   const index = pool.findIndex((candidate) => candidate.id === genre.id);
   const targetAngle = genreTargetAngle(index, pool.length);
-
-  const stopped = !spinMode || reducedMotion || elapsed >= spinMs;
   const rotation = reducedMotion
     ? targetAngle
     : wheelAngle(elapsed, spinMs, targetAngle);
@@ -371,7 +393,7 @@ export function GenreSpin({ session, state }: GenreSpinProps) {
         aria-live="polite"
         className="sr-only"
       >
-        {stopped ? t('genre.announcement', { genre: label }) : ''}
+        {stopped && announced === announcementText ? announced : ''}
       </span>
     </section>
   );
