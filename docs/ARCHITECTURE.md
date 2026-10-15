@@ -52,7 +52,7 @@ Frames <=192KiB go directly; larger snapshot/handoff/replica events use 48KiB UT
 
 ## M3 genre and submission
 
-`GenreSpin` derives its common target angle from the active pool and the already-drawn genre. Its rotation follows normalized elapsed phase time from selectors; pause freezes the same point, late mounting does not start a new draw, fixed mode shows a brief notice and reduced motion jumps to the target. `HostControls` exposes ready-lobby start and running-room pause/resume/end.
+`GenreSpin` derives its common target angle from the active pool and the already-drawn genre. Its rotation is a pure function of elapsed phase time from selectors: `ease-wheel` over 2580 ms (the launch is flattened so the speed never increases), a 140 ms pointer flick per passed segment, then a 420 ms shake at the stop with the `GenrePlate` popping in. Spin plus shake always end by the phase deadline (`SPIN_MS` stays 3000; if they do not fit, the shake shrinks first). Pause freezes the same point, late mounting does not start a new draw, fixed mode shows the plate directly and reduced motion jumps to the target with a fade. `HostControls` exposes ready-lobby start and running-room pause/resume/end.
 
 `SubmissionPanel` owns only the local editor and external-player lifecycle. Own accepted media/progress/permissions come from selectors; writes use the exact local connection binding. Changing links, leaving, finishing, pausing or losing the binding aborts metadata and destroys the player, with generation checks suppressing obsolete callbacks. Accepted media survives reload in the host snapshot; no local song persistence or consent persistence is introduced.
 
