@@ -57,7 +57,7 @@
   --dur-reveal: 600ms;
   --dur-count: 900ms;
   --dur-wobble: 3s;
-  --dur-spin: 5200ms;
+  --dur-spin: 2580ms;
   --dur-jackpot: 2400ms;
   --dur-swirl: 40s;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
