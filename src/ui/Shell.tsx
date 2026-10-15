@@ -9,6 +9,7 @@ import { Chip } from './Chip';
 import { HomeView } from './HomeView';
 import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
+import { Backdrop } from './pf/Backdrop';
 import { RoomView } from './RoomView';
 import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
 import { useSfxStore } from './sfx-store';
@@ -196,9 +197,10 @@ export function Shell({ session }: { session: GameSession }) {
   return (
     <div
       data-testid="app-shell"
-      className="flex min-h-dvh justify-center px-4 py-10 sm:px-6"
+      className="relative flex min-h-dvh justify-center px-4 py-10 sm:px-6"
     >
-      <div className="panel-black w-full max-w-2xl rounded-2xl p-5 sm:p-8">
+      <Backdrop />
+      <div className="br-panel relative w-full max-w-2xl p-5 sm:p-8">
         <header className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3">
             <span aria-hidden="true" className="flex -space-x-2">
@@ -208,7 +210,7 @@ export function Shell({ session }: { session: GameSession }) {
             </span>
             <span
               data-testid="app-title"
-              className="font-display text-sm tracking-[0.3em] text-gold-300 uppercase"
+              className="br-logo shell-logo uppercase"
             >
               {t('app.title')}
             </span>
@@ -221,14 +223,11 @@ export function Shell({ session }: { session: GameSession }) {
               onClick={() => {
                 setSfxEnabled(!sfxEnabled);
               }}
-              className="casino-ghost px-2 py-1 text-sm"
+              className={`br-btn br-btn--sm br-btn--slate${sfxEnabled ? ' is-on' : ''}`}
             >
               {sfxEnabled ? t('sfx.on') : t('sfx.off')}
             </button>
-            <label
-              htmlFor="language-switch"
-              className="text-xs text-gold-300/80"
-            >
+            <label htmlFor="language-switch" className="br-label">
               {t('language.label')}
             </label>
             <select
@@ -239,7 +238,7 @@ export function Shell({ session }: { session: GameSession }) {
               onChange={(event) => {
                 setLanguage(event.target.value as Language);
               }}
-              className="casino-field rounded-md border bg-ink-950 px-2 py-1 text-sm text-cream-100"
+              className="br-field__input px-2 py-1 text-[20px] leading-[22px]"
             >
               {SUPPORTED_LANGUAGES.map((code) => (
                 <option key={code} value={code}>
@@ -249,7 +248,7 @@ export function Shell({ session }: { session: GameSession }) {
             </select>
           </div>
         </header>
-        <div aria-hidden="true" className="neon-rule" />
+        <div aria-hidden="true" className="h-[3px] rounded-full bg-edge" />
 
         <div className="space-y-4 pt-6">
           {showStatus && (
@@ -324,9 +323,9 @@ export function Shell({ session }: { session: GameSession }) {
         <footer
           data-testid="privacy-notice"
           aria-label={t('privacy.title')}
-          className="mt-6 border-t border-gold-400/25 pt-4 text-xs text-cream-100/70"
+          className="mt-6 border-t-[3px] border-edge pt-4 font-text text-[13px] leading-[18px] text-cream-muted"
         >
-          <p className="font-semibold text-gold-200">{t('privacy.title')}</p>
+          <p className="br-label">{t('privacy.title')}</p>
           <ul className="mt-2 list-disc space-y-1 pl-4 break-words">
             <li>{t('privacy.embed')}</li>
             <li>{t('privacy.noTracking')}</li>

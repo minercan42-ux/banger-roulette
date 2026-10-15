@@ -108,3 +108,55 @@ test('the watcher catches a violation the production policy blocks', async ({
     false,
   );
 });
+
+/**
+ * Pixel-Filz fonts (#62): the woff2 files ship in `public/fonts/` and are
+ * covered by `default-src 'self'` (no `font-src` in `vercel.json`). Loading
+ * every face under the production policy proves both the 200 and the absence of
+ * a CSP block, and the OFL texts must stay next to the binaries.
+ */
+const FONT_FILES = [
+  'Jersey10-Regular.woff2',
+  'Silkscreen-Regular.woff2',
+  'Silkscreen-Bold.woff2',
+];
+const FONT_LICENSES = ['OFL-Jersey10.txt', 'OFL-Silkscreen.txt'];
+
+test('the Pixel-Filz fonts load from /fonts/ under the production CSP', async ({
+  page,
+}) => {
+  await watchProductionCsp(page);
+  const statuses = new Map<string, number>();
+  page.on('response', (response) => {
+    const { pathname } = new URL(response.url());
+    if (pathname.startsWith('/fonts/')) {
+      statuses.set(pathname.slice('/fonts/'.length), response.status());
+    }
+  });
+  await openUnderProductionCsp(page, '/');
+  await expect(page.getByTestId('home-view')).toBeVisible();
+  // `font-display: swap` plus lazy loading: ask for each face explicitly.
+  const loaded = await page.evaluate(async () => {
+    await Promise.all([
+      document.fonts.load("400 22px 'Jersey 10'"),
+      document.fonts.load('400 16px Silkscreen'),
+      document.fonts.load('700 16px Silkscreen'),
+    ]);
+    return Array.from(document.fonts)
+      .filter((face) => face.status === 'loaded')
+      .map((face) => `${face.family.replace(/["']/g, '')}:${face.weight}`)
+      .sort();
+  });
+  expect(loaded).toEqual(
+    ['Jersey 10:400', 'Silkscreen:400', 'Silkscreen:700'].sort(),
+  );
+  expect(Object.fromEntries(statuses)).toEqual(
+    Object.fromEntries(FONT_FILES.map((file) => [file, 200])),
+  );
+  for (const license of FONT_LICENSES) {
+    const response = await page.request.get(`/fonts/${license}`);
+    expect(response.status(), license).toBe(200);
+    expect(await response.text()).toContain('SIL OPEN FONT LICENSE');
+  }
+  expect(await page.evaluate(() => window.__cspViolations ?? [])).toEqual([]);
+});
