@@ -226,6 +226,7 @@
   },
   "linked": {
     "heading": "Spiritually Linked",
+    "banner": "Spiritually Linked!",
     "body_one": "{{count}} Spieler hat dasselbe Video eingereicht.",
     "body_other": "{{count}} Spieler haben dasselbe Video eingereicht.",
     "names": "Eingereicht von: {{names}}",
@@ -342,6 +343,8 @@
     "points": "{{borda}} Borda-Punkte · Bonus {{bonus}} · Rundenpunkte {{points}}",
     "genreFailed": "Genre-Fail ({{flags}} Markierungen)",
     "jackpot": "Jackpot",
+    "jackpotWord": "JACKPOT!",
+    "jackpotSub": "+{{points}} für {{names}}",
     "announceEntry": "{{title}}: {{points}} Punkte.",
     "announceWinner": "Gewinner: {{title}} mit {{points}} Punkten."
   },

@@ -226,6 +226,7 @@
   },
   "linked": {
     "heading": "Spiritually Linked",
+    "banner": "Spiritually Linked!",
     "body_one": "{{count}} player submitted the same video.",
     "body_other": "{{count}} players submitted the same video.",
     "names": "Submitted by: {{names}}",
@@ -342,6 +343,8 @@
     "points": "{{borda}} Borda points · bonus {{bonus}} · round score {{points}}",
     "genreFailed": "Genre fail ({{flags}} flags)",
     "jackpot": "Jackpot",
+    "jackpotWord": "JACKPOT!",
+    "jackpotSub": "+{{points}} for {{names}}",
     "announceEntry": "{{title}}: {{points}} points.",
     "announceWinner": "Winner: {{title}} with {{points}} points."
   },
