@@ -88,7 +88,6 @@ jobs:
   e2e-cross-browser:
     name: E2E cross-browser (${{ matrix.browser }})
     # NFR-05: pull requests stay Chromium-only (Actions minute budget).
-    if: github.event_name != 'pull_request'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
