@@ -25,6 +25,11 @@ import {
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
 import { formatDuration, genreName } from './format';
+import { Button } from './pf/Button';
+import { Field } from './pf/Field';
+import { Hand } from './pf/Hand';
+import { Panel, PanelTitle } from './pf/Panel';
+import { SongCard } from './pf/SongCard';
 
 /** Current preview lifecycle, extended with "nothing loaded yet" and "loading". */
 type PanelStatus = PreviewStatus | { type: 'idle' } | { type: 'loading' };
@@ -318,57 +323,60 @@ export function SubmissionPanel({
     (player) => player.submissionDone,
   ).length;
 
+  // The hand shows the viewer's own song face up and one anonymous face-down
+  // card per other finished player (AK-3: a count, never a name or an order).
+  const othersDone = participants.filter(
+    (player) => player.submissionDone && !player.isSelf,
+  ).length;
+  const ownCard = isParticipant ? savedMedia : null;
+
   return (
-    <section
-      data-testid="submission-panel"
-      className="rounded-xl border border-gold-400/25 bg-felt-800/50 p-4"
-    >
+    <Panel as="section" data-testid="submission-panel" className="br-stack">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('submission.heading')}
-        </h2>
+        <PanelTitle>{t('submission.heading')}</PanelTitle>
         {room.genre && (
-          <span className="text-xs text-cream-100/60">
+          <span className="br-label">
             {t('phase.genreLabel', {
               genre: genreName(room.genre, i18n.resolvedLanguage),
             })}
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-cream-100/70">{t('submission.intro')}</p>
+      <p className="br-read">{t('submission.intro')}</p>
 
       {!isParticipant && (
         <p
           data-testid="submission-spectator"
           role="status"
-          className="mt-3 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
+          className="br-notice"
         >
           {t('submission.spectatorOnly')}
         </p>
       )}
 
-      <div
+      <Panel
+        well
         data-testid="submission-progress"
         data-count={doneCount}
         data-total={participants.length}
-        className="mt-4 rounded-lg border border-gold-400/20 bg-felt-900/50 px-3 py-2"
+        className="br-stack"
       >
-        <p className="text-sm text-cream-100/80">
+        <p className="br-read">
           {t('submission.progress', {
             done: doneCount,
             total: participants.length,
           })}
         </p>
-        <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1">
           {participants.map((player) => (
             <li
               key={player.id}
               data-testid="submission-progress-player"
               data-player-id={player.id}
               data-done={player.submissionDone}
-              className={
-                player.submissionDone ? 'text-emerald-200' : 'text-cream-100/60'
-              }
+              className={`br-read ${
+                player.submissionDone ? 'text-green' : 'text-cream-muted'
+              }`}
             >
               {player.nickname}
               {player.isSelf ? ` (${t('lobby.you')})` : ''}:{' '}
@@ -378,28 +386,52 @@ export function SubmissionPanel({
             </li>
           ))}
         </ul>
-      </div>
+      </Panel>
+
+      {(ownCard !== null || othersDone > 0) && (
+        <Hand label={t('card.handSubmission')} data-testid="submission-hand">
+          {ownCard !== null && (
+            <SongCard
+              data-testid="song-card"
+              data-face="up"
+              index={0}
+              number={1}
+              song={ownCard}
+              showThumbnail={consent}
+              tooltip={ownCard.title}
+              label={t('card.ownSong', { title: ownCard.title })}
+            />
+          )}
+          {Array.from({ length: othersDone }, (_, slot) => (
+            <SongCard
+              key={slot}
+              data-testid="song-card"
+              data-face="down"
+              index={slot + 1}
+              number={slot + 2}
+              label={t('card.faceDown')}
+            />
+          ))}
+        </Hand>
+      )}
 
       {isParticipant && choices.submissionDone && (
         <p
           data-testid="submission-finished"
           role="status"
-          className="mt-4 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"
+          className="br-notice"
         >
           {t('submission.finished')}
         </p>
       )}
 
       {isParticipant && !choices.submissionDone && (
-        <div className="mt-4 space-y-3">
+        <div className="br-stack">
           {savedMedia && (
-            <div
-              data-testid="submission-saved"
-              className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"
-            >
+            <div data-testid="submission-saved" className="br-notice">
               <p className="font-semibold">{t('submission.savedHeading')}</p>
               <p data-testid="submission-saved-title">{savedMedia.title}</p>
-              <p className="text-xs text-emerald-100/80">
+              <p className="br-read">
                 {savedMedia.channel} ·{' '}
                 {t('submission.savedStart', {
                   start: formatDuration(savedMedia.startSeconds * 1000),
@@ -408,43 +440,37 @@ export function SubmissionPanel({
             </div>
           )}
 
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-cream-100/80">
-              {t('submission.linkLabel')}
-            </span>
-            <input
-              type="text"
-              data-testid="song-link"
-              value={linkText}
-              disabled={!editable}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                const nextLink = event.target.value;
-                teardown();
-                setStatus({ type: 'idle' });
-                setMetadata(null);
-                setNoticeKey(null);
-                setLinkText(nextLink);
-                setStartSeconds(parseYouTubeLink(nextLink)?.startSeconds ?? 0);
-              }}
-              className="rounded-md border border-gold-400/40 bg-felt-950 px-3 py-2 text-cream-100 disabled:opacity-50"
-            />
-            <span className="text-xs text-cream-100/50">
-              {t('submission.linkHint')}
-            </span>
-          </label>
+          <Field
+            label={t('submission.linkLabel')}
+            hint={t('submission.linkHint')}
+            invalid={linkText.trim() !== '' && parsed === null}
+            type="text"
+            data-testid="song-link"
+            value={linkText}
+            disabled={!editable}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => {
+              const nextLink = event.target.value;
+              teardown();
+              setStatus({ type: 'idle' });
+              setMetadata(null);
+              setNoticeKey(null);
+              setLinkText(nextLink);
+              setStartSeconds(parseYouTubeLink(nextLink)?.startSeconds ?? 0);
+            }}
+          />
 
           {linkText.trim() !== '' && parsed === null && (
             <p
               data-testid="song-link-invalid"
-              className="text-xs text-rose-300"
+              className="br-notice br-notice--error"
             >
               {t('submission.linkInvalid')}
             </p>
           )}
 
-          <label className="flex items-start gap-2 text-sm text-cream-100/80">
+          <label className="br-check">
             <input
               type="checkbox"
               data-testid="youtube-consent"
@@ -459,25 +485,24 @@ export function SubmissionPanel({
                   setMetadata(null);
                 }
               }}
-              className="mt-1"
+              className="br-check__input"
             />
             <span>{t('submission.consentLabel')}</span>
           </label>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
+          <div className="br-row">
+            <Button
+              tone="blue"
               data-testid="load-preview"
               onClick={() => {
                 void loadPreview();
               }}
               disabled={!editable || parsed === null}
-              className="rounded-md border border-gold-400/50 bg-gold-500/20 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.loadPreview')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              tone="slate"
               data-testid="preview-play"
               onClick={() => {
                 stateRef.current.player?.play();
@@ -486,10 +511,9 @@ export function SubmissionPanel({
                 !editable ||
                 !(status.type === 'ready' || status.type === 'autoplayBlocked')
               }
-              className="rounded-md border border-gold-400/50 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.previewPlay')}
-            </button>
+            </Button>
             <span
               data-testid="preview-status"
               data-state={status.type}
@@ -497,23 +521,24 @@ export function SubmissionPanel({
                 status.type === 'error' ? status.code : undefined
               }
               role="status"
-              className="text-xs text-cream-100/70"
+              className="br-read"
             >
               {t(statusKey(status))}
             </span>
           </div>
 
           {status.type === 'error' && (
-            <p data-testid="preview-error" className="text-xs text-rose-300">
+            <p
+              data-testid="preview-error"
+              className="br-notice br-notice--error"
+            >
               {isBlockingPreviewError(status.code)
                 ? t('submission.embeddingBlocked', { code: status.code })
                 : t('submission.previewUnavailable', { code: status.code })}
             </p>
           )}
           {status.type === 'autoplayBlocked' && (
-            <p className="text-xs text-amber-200">
-              {t('submission.autoplayBlocked')}
-            </p>
+            <p className="br-notice">{t('submission.autoplayBlocked')}</p>
           )}
 
           {consent && metadata !== null && (
@@ -523,7 +548,7 @@ export function SubmissionPanel({
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
-              className="h-24 w-40 rounded-md border border-gold-400/20 object-cover"
+              className="h-24 w-40 rounded-md object-cover"
             />
           )}
 
@@ -532,31 +557,28 @@ export function SubmissionPanel({
               stateRef.current.host = node;
             }}
             data-testid="preview-host"
-            className="overflow-hidden rounded-lg border border-gold-400/20 bg-black/60"
+            className="overflow-hidden rounded-md bg-black/60"
             style={{ minHeight: '1px' }}
           />
 
           <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-cream-100/80">
-                {t('submission.startLabel')}
-              </span>
-              <input
-                type="number"
-                data-testid="start-seconds"
-                min={0}
-                step={1}
-                value={startSeconds}
-                disabled={!editable || !previewValid}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  setStartSeconds(clampStart(next, duration));
-                }}
-                className="w-24 rounded-md border border-gold-400/40 bg-felt-950 px-2 py-2 text-cream-100 disabled:opacity-50"
-              />
-            </label>
-            <button
-              type="button"
+            <Field
+              label={t('submission.startLabel')}
+              className="w-28"
+              type="number"
+              data-testid="start-seconds"
+              min={0}
+              step={1}
+              value={startSeconds}
+              disabled={!editable || !previewValid}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setStartSeconds(clampStart(next, duration));
+              }}
+            />
+            <Button
+              tone="slate"
+              size="sm"
               data-testid="set-start"
               onClick={() => {
                 const player = stateRef.current.player;
@@ -566,10 +588,9 @@ export function SubmissionPanel({
                 setStartSeconds(clampStart(player.currentTime(), duration));
               }}
               disabled={!editable || !previewValid}
-              className="rounded-md border border-gold-400/50 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.setStart')}
-            </button>
+            </Button>
             {(
               [
                 ['start-minus-5', -5, 'submission.minus5'],
@@ -578,9 +599,10 @@ export function SubmissionPanel({
                 ['start-plus-5', 5, 'submission.plus5'],
               ] as const
             ).map(([testId, delta, key]) => (
-              <button
+              <Button
                 key={testId}
-                type="button"
+                tone="slate"
+                size="sm"
                 data-testid={testId}
                 onClick={() =>
                   setStartSeconds((current) =>
@@ -588,15 +610,14 @@ export function SubmissionPanel({
                   )
                 }
                 disabled={!editable || !previewValid}
-                className="rounded-md border border-gold-400/40 px-2 py-2 text-xs text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t(key)}
-              </button>
+              </Button>
             ))}
           </div>
 
           {duration > 0 && (
-            <p className="text-xs text-cream-100/60">
+            <p className="br-read">
               {t('submission.durationLabel', {
                 duration: Math.floor(duration),
               })}
@@ -611,53 +632,49 @@ export function SubmissionPanel({
             <p
               data-testid="submission-notice"
               role="status"
-              className="rounded-lg border border-gold-400/25 bg-felt-900/60 px-3 py-2 text-xs text-cream-100/80"
+              className="br-notice"
             >
               {t(noticeKey)}
             </p>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
+          <div className="br-row">
+            <Button
               data-testid="save-submission"
               onClick={() => {
                 void save();
               }}
               disabled={!canSave}
-              className="rounded-md border border-emerald-400/50 bg-emerald-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.save')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              tone="red"
               data-testid="remove-submission"
               onClick={() => {
                 void remove();
               }}
               disabled={!editable || !choices.submitted}
-              className="rounded-md border border-rose-400/40 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.remove')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              tone="blue"
               data-testid="finish-submission"
               onClick={() => {
                 void finish();
               }}
               disabled={!permissions.canFinishSubmission || busy}
-              className="rounded-md border border-gold-400/50 px-4 py-2 text-sm text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {t('submission.finish')}
-            </button>
+            </Button>
           </div>
 
           {!permissions.canWrite && (
-            <p className="text-xs text-amber-200">{t('lobby.readOnly')}</p>
+            <p className="br-notice">{t('lobby.readOnly')}</p>
           )}
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

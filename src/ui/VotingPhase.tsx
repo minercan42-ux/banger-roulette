@@ -25,6 +25,9 @@ import {
 } from '../player/preview';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
+import { Button } from './pf/Button';
+import { Panel, PanelTitle } from './pf/Panel';
+import { SongCard } from './pf/SongCard';
 import {
   appendToRanking,
   insertRanking,
@@ -365,15 +368,17 @@ export function VotingPhase({
     }
   }
 
+  /** Card number: the song's place in the round's playback order. */
+  function songNumber(song: SongView): number {
+    return allSongs.findIndex((other) => other.videoId === song.videoId) + 1;
+  }
+
   function songOwners(song: SongView) {
     if (!song.ownersVisible || song.owners.length === 0) {
       return null;
     }
     return (
-      <p
-        data-testid="voting-song-owners"
-        className="mt-1 text-xs text-cream-100/60"
-      >
+      <p data-testid="voting-song-owners" className="br-read">
         {t('voting.owners', {
           names: song.owners.map((owner) => owner.nickname).join(', '),
         })}
@@ -382,10 +387,12 @@ export function VotingPhase({
   }
 
   function songButtons(song: SongView, listening: boolean) {
+    const flagged = choices.flaggedVideoIds.includes(song.videoId);
     return (
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
+      <>
+        <Button
+          tone="slate"
+          size="sm"
           data-testid="voting-listen"
           data-video-id={song.videoId}
           data-listening={listening}
@@ -393,49 +400,41 @@ export function VotingPhase({
             void listen(song);
           }}
           aria-label={t('voting.listenAria', { title: song.title })}
-          className="rounded-md border border-gold-400/40 px-2 py-1 text-xs text-cream-100 transition hover:bg-gold-500/15"
         >
           {listening ? t('voting.stop') : t('voting.listen')}
-        </button>
+        </Button>
         {flaggableIds.has(song.videoId) && (
-          <button
-            type="button"
+          <Button
+            tone="red"
+            size="sm"
             data-testid="voting-flag"
             data-video-id={song.videoId}
-            aria-pressed={choices.flaggedVideoIds.includes(song.videoId)}
+            pressed={flagged}
             onClick={() => {
               void toggleFlag(song);
             }}
             aria-label={t('voting.flagAria', { title: song.title })}
-            className={`rounded-md border px-2 py-1 text-xs transition ${
-              choices.flaggedVideoIds.includes(song.videoId)
-                ? 'border-rose-400/60 bg-rose-500/20 text-rose-100'
-                : 'border-rose-400/40 text-rose-200 hover:bg-rose-500/15'
-            }`}
           >
             {t('voting.flag')}
-          </button>
+          </Button>
         )}
-      </div>
+      </>
     );
   }
 
   return (
-    <section
+    <Panel
+      as="section"
       data-testid="voting-phase"
       data-voting-done={choices.votingDone}
       data-can-rank={permissions.canRank}
-      className="rounded-xl border border-gold-400/25 bg-felt-800/50 p-4"
+      className="br-stack"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('voting.heading')}
-        </h2>
-        <span className="text-xs text-cream-100/60">
-          {t('voting.partialHint')}
-        </span>
+        <PanelTitle>{t('voting.heading')}</PanelTitle>
+        <span className="br-label">{t('voting.partialHint')}</span>
       </div>
-      <p className="mt-1 text-sm text-cream-100/70">{t('voting.intro')}</p>
+      <p className="br-read">{t('voting.intro')}</p>
 
       <p
         data-testid="voting-announcement"
@@ -447,11 +446,7 @@ export function VotingPhase({
       </p>
 
       {!choices.isParticipant && (
-        <p
-          data-testid="voting-spectator"
-          role="status"
-          className="mt-3 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
-        >
+        <p data-testid="voting-spectator" role="status" className="br-notice">
           {t('voting.spectator')}
         </p>
       )}
@@ -460,35 +455,36 @@ export function VotingPhase({
         <p
           data-testid="voting-error"
           role="alert"
-          className="mt-3 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+          className="br-notice br-notice--error"
         >
           {t(errorKey)}
         </p>
       )}
 
-      <div
+      <Panel
+        well
         data-testid="voting-progress"
         data-count={doneCount}
         data-total={participants.length}
-        className="mt-4 rounded-lg border border-gold-400/20 bg-felt-900/50 px-3 py-2"
+        className="br-stack"
       >
-        <p className="text-sm text-cream-100/80">
+        <p className="br-read">
           {t('voting.progressHeading')}:{' '}
           {t('voting.progress', {
             done: doneCount,
             total: participants.length,
           })}
         </p>
-        <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1">
           {participants.map((player) => (
             <li
               key={player.id}
               data-testid="voting-progress-player"
               data-player-id={player.id}
               data-done={player.votingDone}
-              className={
-                player.votingDone ? 'text-emerald-200' : 'text-cream-100/60'
-              }
+              className={`br-read ${
+                player.votingDone ? 'text-green' : 'text-cream-muted'
+              }`}
             >
               {player.nickname}
               {player.isSelf ? ` (${t('lobby.you')})` : ''}:{' '}
@@ -498,24 +494,16 @@ export function VotingPhase({
             </li>
           ))}
         </ul>
-      </div>
+      </Panel>
 
       {choices.votingDone && (
-        <p
-          data-testid="voting-done"
-          role="status"
-          className="mt-4 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"
-        >
+        <p data-testid="voting-done" role="status" className="br-notice">
           {t('voting.done')}
         </p>
       )}
 
       {choices.isParticipant && !choices.votingDone && paused && (
-        <p
-          data-testid="voting-paused"
-          role="status"
-          className="mt-4 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-        >
+        <p data-testid="voting-paused" role="status" className="br-notice">
           {t('voting.paused')}
         </p>
       )}
@@ -524,21 +512,15 @@ export function VotingPhase({
         !choices.votingDone &&
         !paused &&
         eligible.length === 0 && (
-          <p
-            data-testid="voting-no-songs"
-            role="status"
-            className="mt-4 rounded-lg border border-gold-400/25 bg-felt-900/60 px-3 py-2 text-sm text-cream-100/80"
-          >
+          <p data-testid="voting-no-songs" role="status" className="br-notice">
             {t('voting.noSongs')}
           </p>
         )}
 
       {choices.isParticipant && (
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div>
-            <h3 className="text-sm font-semibold text-gold-200">
-              {t('voting.rankingHeading')}
-            </h3>
+        <div className="grid gap-6">
+          <div className="br-stack">
+            <h3 className="br-label">{t('voting.rankingHeading')}</h3>
             <ol
               data-testid="voting-ranking"
               onDragOver={(event) => {
@@ -550,12 +532,10 @@ export function VotingPhase({
                 event.preventDefault();
                 dropOnRankingEnd();
               }}
-              className="mt-2 space-y-2"
+              className="br-ranking"
             >
               {ranked.length === 0 && (
-                <li className="rounded-lg border border-dashed border-gold-400/25 px-3 py-2 text-xs text-cream-100/60">
-                  {t('voting.emptyRanking')}
-                </li>
+                <li className="br-notice w-full">{t('voting.emptyRanking')}</li>
               )}
               {ranked.map((song, index) => (
                 <li
@@ -578,34 +558,25 @@ export function VotingPhase({
                     event.preventDefault();
                     dropOnRankIndex(index);
                   }}
-                  className="rounded-lg border border-gold-400/25 bg-felt-900/60 p-2"
+                  className="br-panel br-panel--well br-rankrow"
                 >
-                  <div className="flex items-start gap-3">
-                    <span className="mt-1 font-display text-lg text-gold-200">
-                      {index + 1}.
-                    </span>
-                    {consented && (
-                      <img
-                        src={song.thumbnail}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="h-12 w-20 rounded object-cover"
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-cream-100">
-                        {song.title}
-                      </p>
-                      <p className="truncate text-xs text-cream-100/60">
-                        {song.channel}
-                      </p>
-                      {songOwners(song)}
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
+                  <SongCard
+                    selected
+                    rank={index + 1}
+                    number={songNumber(song)}
+                    song={song}
+                    showThumbnail={consented}
+                    tooltip={song.title}
+                    label={t('card.faceUp', {
+                      number: songNumber(song),
+                      title: song.title,
+                    })}
+                  />
+                  {songOwners(song)}
+                  <div className="br-rankrow__actions">
+                    <Button
+                      tone="slate"
+                      size="sm"
                       data-testid="voting-rank-up"
                       onClick={() => moveSong(song, -1)}
                       disabled={!editable || index === 0}
@@ -613,12 +584,12 @@ export function VotingPhase({
                         title: song.title,
                         place: index,
                       })}
-                      className="rounded-md border border-gold-400/40 px-2 py-1 text-xs text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {t('voting.up')}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      tone="slate"
+                      size="sm"
                       data-testid="voting-rank-down"
                       onClick={() => moveSong(song, 1)}
                       disabled={!editable || index === ranked.length - 1}
@@ -626,20 +597,21 @@ export function VotingPhase({
                         title: song.title,
                         place: index + 2,
                       })}
-                      className="rounded-md border border-gold-400/40 px-2 py-1 text-xs text-cream-100 transition hover:bg-gold-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {t('voting.down')}
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      tone="red"
+                      size="sm"
                       data-testid="voting-rank-remove"
                       onClick={() => removeSong(song)}
                       disabled={!editable}
-                      aria-label={t('voting.removeAria', { title: song.title })}
-                      className="rounded-md border border-rose-400/40 px-2 py-1 text-xs text-rose-200 transition hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={t('voting.removeAria', {
+                        title: song.title,
+                      })}
                     >
                       {t('voting.remove')}
-                    </button>
+                    </Button>
                     {songButtons(song, listeningId === song.videoId)}
                   </div>
                 </li>
@@ -647,15 +619,9 @@ export function VotingPhase({
             </ol>
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-gold-200">
-              {t('voting.poolHeading')}
-            </h3>
-            {editable && (
-              <p className="mt-1 text-xs text-cream-100/50">
-                {t('voting.dragHint')}
-              </p>
-            )}
+          <div className="br-stack">
+            <h3 className="br-label">{t('voting.poolHeading')}</h3>
+            {editable && <p className="br-read">{t('voting.dragHint')}</p>}
             <ul
               data-testid="voting-pool"
               onDragOver={(event) => {
@@ -667,9 +633,9 @@ export function VotingPhase({
                 event.preventDefault();
                 dropOnPool();
               }}
-              className="mt-2 space-y-2"
+              className="br-pool"
             >
-              {pool.map((song) => (
+              {pool.map((song, position) => (
                 <li
                   key={song.videoId}
                   data-testid="voting-song"
@@ -679,39 +645,24 @@ export function VotingPhase({
                     onDragStart(event, 'pool', song.videoId)
                   }
                   onDragEnd={onDragEnd}
-                  className="rounded-lg border border-gold-400/20 bg-felt-900/50 p-2"
+                  className="br-pool__item"
                 >
-                  <button
-                    type="button"
+                  <SongCard
                     data-testid="voting-song-add"
+                    index={position}
+                    number={songNumber(song)}
+                    song={song}
+                    showThumbnail={consented}
                     onClick={() => addSong(song)}
                     disabled={!editable}
-                    aria-label={t('voting.addAria', { title: song.title })}
-                    className="flex w-full items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {consented && (
-                      <img
-                        src={song.thumbnail}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="h-12 w-20 rounded object-cover"
-                      />
-                    )}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-cream-100">
-                        {song.title}
-                      </span>
-                      <span className="block truncate text-xs text-cream-100/60">
-                        {song.channel}
-                      </span>
-                    </span>
-                    <span className="text-xs text-gold-200">
-                      {t('voting.add')}
-                    </span>
-                  </button>
+                    tooltip={song.title}
+                    label={t('voting.addAria', { title: song.title })}
+                  />
+                  <span aria-hidden="true" className="br-label text-gold">
+                    {t('voting.add')}
+                  </span>
                   {songOwners(song)}
-                  <div className="mt-2">
+                  <div className="br-row justify-center">
                     {songButtons(song, listeningId === song.videoId)}
                   </div>
                 </li>
@@ -722,8 +673,8 @@ export function VotingPhase({
       )}
 
       {choices.isParticipant && (
-        <div className="mt-4 space-y-3">
-          <label className="flex items-start gap-2 text-sm text-cream-100/80">
+        <div className="br-stack">
+          <label className="br-check">
             <input
               type="checkbox"
               data-testid="voting-consent"
@@ -737,17 +688,17 @@ export function VotingPhase({
                   setListenStatus('idle');
                 }
               }}
-              className="mt-1"
+              className="br-check__input"
             />
             <span>{t('voting.consentLabel')}</span>
           </label>
 
-          <div className="rounded-lg border border-gold-400/20 bg-felt-900/50 p-2">
+          <Panel well className="br-stack">
             <p
               data-testid="voting-preview-status"
               data-state={listenState}
               role="status"
-              className="text-xs text-cream-100/70"
+              className="br-read"
             >
               {t(listenStatusKey(listenStatus))}
             </p>
@@ -756,34 +707,30 @@ export function VotingPhase({
                 previewRef.current.host = node;
               }}
               data-testid="voting-preview-host"
-              className="mt-2 overflow-hidden rounded-md border border-gold-400/20 bg-black/40"
+              className="overflow-hidden rounded-md bg-black/40"
               style={{ minHeight: '1px' }}
             />
-          </div>
+          </Panel>
 
           {noticeKey && (
-            <p
-              data-testid="voting-notice"
-              role="status"
-              className="rounded-lg border border-gold-400/25 bg-felt-900/60 px-3 py-2 text-xs text-cream-100/80"
-            >
+            <p data-testid="voting-notice" role="status" className="br-notice">
               {t(noticeKey)}
             </p>
           )}
 
-          <button
-            type="button"
-            data-testid="voting-finish"
-            onClick={() => {
-              void finishVoting();
-            }}
-            disabled={!permissions.canFinishVoting}
-            className="rounded-md border border-emerald-400/50 bg-emerald-500/20 px-4 py-2 text-sm text-cream-100 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {t('voting.finish')}
-          </button>
+          <div>
+            <Button
+              data-testid="voting-finish"
+              onClick={() => {
+                void finishVoting();
+              }}
+              disabled={!permissions.canFinishVoting}
+            >
+              {t('voting.finish')}
+            </Button>
+          </div>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

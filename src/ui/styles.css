@@ -1674,3 +1674,167 @@ body {
     }
   }
 }
+
+/* Song cards and hands (issue #64): SongCard/Hand on top of the T1 `br-card`
+   and `br-hand` rules. Own block, br- prefixed, tokens only. */
+@layer components {
+  /* Two-line titles on the 124 x 172 card. */
+  .br-card__corner {
+    font-size: 22px;
+  }
+  .br-card__mid {
+    min-width: 0;
+  }
+  .br-card__thumb {
+    display: block;
+    height: 48px;
+    margin-bottom: 2px;
+  }
+  .br-card__title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    font: 400 18px/18px var(--font-pixel);
+  }
+  .br-card__sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 14px;
+    margin-top: 2px;
+  }
+
+  /* A card that is not a button neither lifts nor changes the pointer. */
+  .br-card--static {
+    cursor: default;
+  }
+  .br-card--static:not(.is-selected):hover,
+  .br-card--static:not(.is-selected):focus-visible {
+    transform: rotate(var(--r));
+    z-index: auto;
+  }
+  .br-card--static.br-wobble:hover {
+    animation: br-wobble var(--dur-wobble) var(--ease-wobble) infinite;
+  }
+  .br-card--static:not(.is-selected, .is-winner):hover .br-card__face,
+  .br-card--static:not(.is-selected, .is-winner):hover .br-card__back {
+    box-shadow: var(--card-lift);
+  }
+  .br-card:disabled {
+    cursor: default;
+  }
+  .br-card:disabled:hover {
+    transform: rotate(var(--r));
+    z-index: auto;
+  }
+  .br-card:disabled:hover .br-card__face,
+  .br-card:disabled:hover .br-card__back {
+    box-shadow: var(--card-lift);
+  }
+  /* The song that is playing right now. */
+  .br-card[data-current='true'] {
+    z-index: 3;
+  }
+  .br-card[data-current='true'] .br-card__face {
+    box-shadow:
+      var(--card-lift),
+      0 0 0 4px var(--color-gold);
+  }
+
+  /* Every card overlaps its neighbours by 24px; rows wrap on narrow screens. */
+  .br-hand {
+    flex-wrap: wrap;
+    row-gap: var(--space-6);
+    padding: var(--space-6) var(--space-6) var(--space-4);
+  }
+  .br-hand > .br-card,
+  .br-hand > .br-card + .br-card {
+    margin-inline: -12px;
+  }
+
+  .br-playing__title,
+  .br-reveal__title {
+    margin: 0;
+    font: 400 26px/28px var(--font-pixel);
+    overflow-wrap: anywhere;
+    color: var(--color-cream);
+  }
+
+  /* Voting: the pool is a grid of cards, the ranking a column of rows. */
+  .br-pool {
+    list-style: none;
+    margin: 0;
+    padding: var(--space-4) 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--space-6) var(--space-3);
+  }
+  .br-pool__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    text-align: center;
+    min-width: 0;
+  }
+  /* The ranking is a row of picked cards, best first; each one carries its
+     own controls below. Cards share a row, so a drag from one to another
+     never has to scroll. */
+  .br-ranking {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .br-rankrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: 148px;
+    padding: var(--space-8) var(--space-2) var(--space-2);
+    text-align: center;
+  }
+  .br-rankrow__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-1);
+    width: 100%;
+  }
+  .br-rankrow__actions .br-btn {
+    min-width: 0;
+    padding-inline: var(--space-1);
+  }
+  /* Up and Down share a line; every other control gets its own. */
+  .br-rankrow__actions > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  /* Reveal: a root the jackpot overlay can anchor to, and one row per entry. */
+  .br-reveal {
+    position: relative;
+  }
+  .br-reveal__entry {
+    padding-block: var(--space-6) var(--space-4);
+  }
+  /* Beside the card while it fits, under it on a narrow screen. */
+  .br-reveal__body {
+    flex: 1 1 10rem;
+    min-width: 0;
+  }
+  /* The stamp lands on the thumbnail, clear of title and channel. */
+  .br-card__owner {
+    top: 44px;
+    bottom: auto;
+  }
+  .br-reveal__entry.is-winner {
+    box-shadow:
+      inset 0 3px 0 var(--color-edge),
+      inset 0 0 0 3px var(--color-gold);
+  }
+}
