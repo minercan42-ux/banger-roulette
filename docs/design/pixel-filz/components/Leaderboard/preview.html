@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Leaderboard</title>
+  </head>
+  <body class="br-stage">
+    <section class="br-panel" style="max-width: 380px">
+      <h3 class="br-panel__title">Zwischenstand</h3>
+      <ol class="br-lb" id="lb"></ol>
+    </section>
+    <button class="br-replay" id="go" style="margin-top: 10px">
+      Runde auswerten
+    </button>
+    <script>
+      var players = [
+        { id: 'h', name: 'DJ Horst', pts: 14 },
+        { id: 'b', name: 'Bassbert', pts: 11, me: true },
+        { id: 'm', name: 'Mia', pts: 9 },
+        { id: 't', name: 'Toni Tanzbein', pts: 4 },
+      ];
+      var rounds = [
+        { h: 3, b: 2, m: 9, t: 5 },
+        { h: 9, b: 1, m: 2, t: 4 },
+        { h: 1, b: 11, m: 3, t: 6 },
+      ];
+      var r = 0,
+        reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var lb = document.getElementById('lb');
+      function row(p) {
+        var li = document.createElement('li');
+        li.className = 'br-lb__row' + (p.me ? ' is-me' : '');
+        li.dataset.id = p.id;
+        li.innerHTML =
+          '<span class="br-lb__pos"></span><span class="br-lb__name"></span><span><span class="br-lb__pts"></span><span class="br-lb__delta"></span></span>';
+        li.querySelector('.br-lb__name').textContent = p.name;
+        return li;
+      }
+      function paint(prevRank) {
+        players.forEach(function (p, i) {
+          var li = lb.querySelector('[data-id="' + p.id + '"]');
+          li.querySelector('.br-lb__pos').textContent = i + 1 + '.';
+          li.querySelector('.br-lb__pts').textContent = p.pts;
+          var d = li.querySelector('.br-lb__delta');
+          d.className = 'br-lb__delta';
+          d.textContent = '';
+          if (prevRank && prevRank[p.id] > i) {
+            d.classList.add('is-up');
+            d.textContent = prevRank[p.id] - i;
+          }
+          if (prevRank && prevRank[p.id] < i) {
+            d.classList.add('is-down');
+            d.textContent = i - prevRank[p.id];
+          }
+        });
+      }
+      players.forEach(function (p) {
+        lb.appendChild(row(p));
+      });
+      paint();
+      document.getElementById('go').addEventListener('click', function () {
+        var add = rounds[r++ % rounds.length];
+        var prevRank = {},
+          first = {};
+        players.forEach(function (p, i) {
+          prevRank[p.id] = i;
+          first[p.id] = lb
+            .querySelector('[data-id="' + p.id + '"]')
+            .getBoundingClientRect().top;
+          p.pts += add[p.id];
+        });
+        players.sort(function (a, b) {
+          return b.pts - a.pts;
+        });
+        players.forEach(function (p) {
+          lb.appendChild(lb.querySelector('[data-id="' + p.id + '"]'));
+        });
+        paint(prevRank);
+        if (reduce) return;
+        players.forEach(function (p) {
+          var li = lb.querySelector('[data-id="' + p.id + '"]');
+          var dy = first[p.id] - li.getBoundingClientRect().top;
+          li.animate(
+            [
+              { transform: 'translateY(' + dy + 'px)', zIndex: dy > 0 ? 2 : 1 },
+              { transform: 'none', zIndex: 1 },
+            ],
+            { duration: 600, easing: 'cubic-bezier(0.3, 1.6, 0.5, 1)' },
+          );
+          var pts = li.querySelector('.br-lb__pts');
+          pts.classList.remove('br-bump');
+          void pts.offsetWidth;
+          pts.classList.add('br-bump');
+        });
+      });
+    </script>
+  </body>
+</html>

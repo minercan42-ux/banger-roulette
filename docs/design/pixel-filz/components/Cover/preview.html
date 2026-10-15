@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Cover</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        width: 960px;
+        height: 288px;
+        position: relative;
+        overflow: hidden;
+        background: var(--felt-950);
+      }
+      svg {
+        position: absolute;
+        left: 480px;
+        top: 0;
+      }
+      .red {
+        fill: var(--red);
+      }
+      .blue {
+        fill: var(--blue);
+      }
+      .gold {
+        fill: var(--gold);
+      }
+      .panel {
+        fill: var(--panel);
+      }
+      .felt {
+        fill: var(--felt-900);
+      }
+      .cream {
+        fill: var(--cream);
+      }
+      .edge {
+        fill: var(--edge);
+      }
+      .gold-deep {
+        fill: var(--gold-deep);
+      }
+      .red-deep {
+        fill: var(--red-deep);
+      }
+      .t {
+        position: absolute;
+        left: 32px;
+        bottom: 32px;
+        max-width: 440px;
+      }
+      .name {
+        font: 400 88px/0.95 var(--font-pixel);
+        color: var(--cream);
+        margin: 0;
+        letter-spacing: 1px;
+      }
+      .tag {
+        font: 400 14px/20px var(--font-text);
+        color: var(--cream-muted);
+        margin: 12px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="480" height="288" viewBox="0 0 480 288" aria-hidden="true">
+      <!--
+    blocks: red (160x288, bleeds top+bottom) · blue (144x168, bleeds bottom) · panel (144x176, bleeds top) · gold (144x96) · felt-900 (144x104); corners radius-md = 10
+    arrangement: one tall red slab with satellites, stepped like cards on a hand, blocks bleeding off top, right and bottom edges
+    pattern: chip discs (radius-round) — a literal motif: the system is a casino table and chips carry its points; 3 stacks + loose chips, 14 discs
+    scales: space-4 = 16 gaps, chip = 32 (br-chip), stack step = 6, radius-md 10, radius-round
+  -->
+      <rect class="red" x="0" y="-10" width="160" height="308" rx="10" />
+      <rect class="felt" x="176" y="-10" width="144" height="114" rx="10" />
+      <rect class="blue" x="176" y="120" width="144" height="178" rx="10" />
+      <rect class="panel" x="336" y="-10" width="154" height="186" rx="10" />
+      <rect class="gold" x="336" y="192" width="154" height="106" rx="10" />
+      <!-- chip stacks: disc = edge ring + face -->
+      <g>
+        <circle class="red-deep" cx="80" cy="222" r="16" />
+        <circle class="cream" cx="80" cy="218" r="16" />
+        <circle class="red" cx="80" cy="218" r="10" />
+        <circle class="red-deep" cx="80" cy="212" r="16" />
+        <circle class="cream" cx="80" cy="208" r="16" />
+        <circle class="red" cx="80" cy="208" r="10" />
+        <circle class="red-deep" cx="80" cy="202" r="16" />
+        <circle class="cream" cx="80" cy="198" r="16" />
+        <circle class="red" cx="80" cy="198" r="10" />
+        <circle class="red-deep" cx="80" cy="192" r="16" />
+        <circle class="cream" cx="80" cy="188" r="16" />
+        <circle class="red" cx="80" cy="188" r="10" />
+      </g>
+      <g>
+        <circle class="edge" cx="248" cy="56" r="16" />
+        <circle class="cream" cx="248" cy="52" r="16" />
+        <circle class="blue" cx="248" cy="52" r="10" />
+        <circle class="edge" cx="248" cy="46" r="16" />
+        <circle class="cream" cx="248" cy="42" r="16" />
+        <circle class="blue" cx="248" cy="42" r="10" />
+      </g>
+      <g>
+        <circle class="gold-deep" cx="413" cy="118" r="16" />
+        <circle class="cream" cx="413" cy="114" r="16" />
+        <circle class="gold" cx="413" cy="114" r="10" />
+        <circle class="gold-deep" cx="413" cy="108" r="16" />
+        <circle class="cream" cx="413" cy="104" r="16" />
+        <circle class="gold" cx="413" cy="104" r="10" />
+        <circle class="gold-deep" cx="413" cy="98" r="16" />
+        <circle class="cream" cx="413" cy="94" r="16" />
+        <circle class="gold" cx="413" cy="94" r="10" />
+        <circle class="gold-deep" cx="413" cy="88" r="16" />
+        <circle class="cream" cx="413" cy="84" r="16" />
+        <circle class="gold" cx="413" cy="84" r="10" />
+        <circle class="gold-deep" cx="413" cy="78" r="16" />
+        <circle class="cream" cx="413" cy="74" r="16" />
+        <circle class="gold" cx="413" cy="74" r="10" />
+      </g>
+      <g>
+        <circle class="edge" cx="216" cy="196" r="16" />
+        <circle class="cream" cx="216" cy="192" r="16" />
+        <circle class="red" cx="216" cy="192" r="10" />
+        <circle class="red-deep" cx="268" cy="236" r="16" />
+        <circle class="cream" cx="268" cy="232" r="16" />
+        <circle class="gold" cx="268" cy="232" r="10" />
+        <circle class="edge" cx="380" cy="246" r="16" />
+        <circle class="cream" cx="380" cy="242" r="16" />
+        <circle class="blue" cx="380" cy="242" r="10" />
+      </g>
+    </svg>
+    <div class="t">
+      <p class="name">Banger<br />Roulette</p>
+      <p class="tag">Spielerischer Casino-Tisch im Pixel-Look.</p>
+    </div>
+  </body>
+</html>

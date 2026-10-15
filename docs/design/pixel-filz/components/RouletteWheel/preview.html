@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>RouletteWheel</title>
+  </head>
+  <body class="br-stage" style="padding: 0">
+    <div
+      class="br-backdrop"
+      id="stage"
+      style="padding: 20px; min-height: 470px"
+    >
+      <div class="br-backdrop__swirl"></div>
+      <div
+        class="br-row"
+        style="align-items: center; justify-content: center; gap: 32px"
+      >
+        <div class="br-wheel" id="wheel">
+          <div class="br-wheel__pointer" id="ptr"></div>
+          <svg
+            class="br-wheel__disc"
+            id="disc"
+            viewBox="-160 -160 320 320"
+            aria-hidden="true"
+          ></svg>
+          <div class="br-wheel__hub">DREH<br />MICH</div>
+        </div>
+        <div class="br-stack" style="width: 260px">
+          <div
+            class="br-genre"
+            id="res"
+            role="status"
+            aria-live="polite"
+            style="visibility: hidden"
+          >
+            <span class="br-genre__kicker">Das Rad hat gesprochen</span>
+            <strong class="br-genre__name" id="resName">-</strong>
+          </div>
+          <button class="br-btn" id="spin">Drehen!</button>
+          <p class="br-read" style="margin: 0">
+            Das Ziel steht vor dem Spin fest (Host-RNG). Alle Clients laufen
+            dieselbe Kurve: <code>ease-wheel</code>, <code>dur-spin</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var GENRES = [
+          'Schlager',
+          'Rap',
+          'Metal',
+          'Techno',
+          'Disco',
+          'Punk',
+          'Reggae',
+          'K-Pop',
+          'Country',
+          'Polka',
+          'Eurodance',
+          'Indie',
+        ];
+        var N = GENRES.length,
+          SEG = 360 / N;
+        var css = getComputedStyle(document.documentElement);
+        function tok(n, fb) {
+          var v = css.getPropertyValue(n).trim();
+          return v || fb;
+        }
+        function ms(n, fb) {
+          var v = tok(n, '');
+          return v ? parseFloat(v) * (v.indexOf('ms') > -1 ? 1 : 1000) : fb;
+        }
+
+        // Build the disc.
+        var svg = document.getElementById('disc'),
+          NS = 'http://www.w3.org/2000/svg';
+        function el(name, attrs) {
+          var e = document.createElementNS(NS, name);
+          for (var k in attrs) e.setAttribute(k, attrs[k]);
+          return e;
+        }
+        svg.appendChild(el('circle', { r: 156, fill: 'var(--edge)' }));
+        svg.appendChild(el('circle', { r: 148, fill: 'var(--gold-deep)' }));
+        for (var i = 0; i < N; i++) {
+          var a0 = ((i * SEG - 90) * Math.PI) / 180,
+            a1 = (((i + 1) * SEG - 90) * Math.PI) / 180,
+            R = 140;
+          var fill =
+            i === 0
+              ? 'var(--swirl-green)'
+              : i % 2
+                ? 'var(--well)'
+                : 'var(--red)';
+          var ink = i % 2 || i === 0 ? 'var(--cream)' : 'var(--card-ink)';
+          svg.appendChild(
+            el('path', {
+              d:
+                'M0 0 L' +
+                (R * Math.cos(a0)).toFixed(2) +
+                ' ' +
+                (R * Math.sin(a0)).toFixed(2) +
+                ' A' +
+                R +
+                ' ' +
+                R +
+                ' 0 0 1 ' +
+                (R * Math.cos(a1)).toFixed(2) +
+                ' ' +
+                (R * Math.sin(a1)).toFixed(2) +
+                ' Z',
+              fill: fill,
+              stroke: 'var(--edge)',
+              'stroke-width': 3,
+            }),
+          );
+          var mid = i * SEG + SEG / 2;
+          var t = el('text', {
+            x: 0,
+            y: 0,
+            transform: 'rotate(' + (mid - 90) + ') translate(92 0)',
+            fill: ink,
+            'text-anchor': 'middle',
+            'dominant-baseline': 'central',
+            'font-size': 21,
+          });
+          t.setAttribute('style', 'font-family:var(--font-pixel)');
+          t.textContent =
+            GENRES[i].length > 9 ? GENRES[i].slice(0, 8) + '.' : GENRES[i];
+          svg.appendChild(t);
+          // bulb on the rim
+          var bx = 152 * Math.cos(a0),
+            by = 152 * Math.sin(a0);
+          svg.appendChild(
+            el('rect', {
+              x: (bx - 4).toFixed(1),
+              y: (by - 4).toFixed(1),
+              width: 8,
+              height: 8,
+              fill: 'var(--gold)',
+              class: 'bulb',
+            }),
+          );
+        }
+
+        // Cubic-bezier easing (same curve as --ease-wheel) for a frame-exact, deterministic path.
+        function bezier(x1, y1, x2, y2) {
+          function a(p1, p2) {
+            return 1 - 3 * p2 + 3 * p1;
+          }
+          function b(p1, p2) {
+            return 3 * p2 - 6 * p1;
+          }
+          function c(p1) {
+            return 3 * p1;
+          }
+          function calc(t, p1, p2) {
+            return ((a(p1, p2) * t + b(p1, p2)) * t + c(p1)) * t;
+          }
+          function slope(t, p1, p2) {
+            return 3 * a(p1, p2) * t * t + 2 * b(p1, p2) * t + c(p1);
+          }
+          return function (x) {
+            var t = x;
+            for (var i = 0; i < 8; i++) {
+              var s = slope(t, x1, x2);
+              if (!s) break;
+              t -= (calc(t, x1, x2) - x) / s;
+            }
+            return calc(Math.min(1, Math.max(0, t)), y1, y2);
+          };
+        }
+        var m = /cubic-bezier\(([^)]+)\)/.exec(
+          tok('--ease-wheel', 'cubic-bezier(0.12, 0.62, 0.08, 1)'),
+        );
+        var ease = bezier.apply(
+          null,
+          (m ? m[1] : '0.12,0.62,0.08,1').split(',').map(parseFloat),
+        );
+
+        var angle = 0,
+          spinning = false,
+          pick = 0;
+        var disc = document.getElementById('disc'),
+          ptr = document.getElementById('ptr'),
+          stage = document.getElementById('stage');
+        var res = document.getElementById('res'),
+          resName = document.getElementById('resName'),
+          btn = document.getElementById('spin');
+        var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var swirl = stage.querySelector('.br-backdrop__swirl');
+
+        function tick() {
+          ptr.classList.remove('is-tick');
+          void ptr.offsetWidth;
+          ptr.classList.add('is-tick');
+        }
+        function land(k) {
+          resName.textContent = GENRES[k];
+          res.style.visibility = 'visible';
+          res.classList.remove('is-in');
+          void res.offsetWidth;
+          res.classList.add('is-in');
+          if (!reduce) {
+            stage.classList.remove('br-shake');
+            void stage.offsetWidth;
+            stage.classList.add('br-shake');
+          }
+          spinning = false;
+          btn.disabled = false;
+        }
+        btn.addEventListener('click', function () {
+          if (spinning) return;
+          spinning = true;
+          btn.disabled = true;
+          res.style.visibility = 'hidden';
+          // Host decides the result before the animation: index + jitter inside the segment.
+          pick = (pick + 5) % N;
+          var jitter = ((((pick * 37) % 9) - 4) / 10) * SEG * 0.6;
+          var target =
+            angle +
+            360 * 6 +
+            ((((360 - (pick * SEG + SEG / 2) - (angle % 360)) % 360) + 360) %
+              360) +
+            jitter;
+          if (reduce) {
+            angle = target;
+            disc.style.transform = 'rotate(' + angle + 'deg)';
+            return land(pick);
+          }
+          var start = angle,
+            dur = ms('--dur-spin', 5200),
+            t0 = performance.now(),
+            lastSeg = Math.floor(start / SEG);
+          var sw = swirl.getAnimations()[0];
+          if (sw) sw.updatePlaybackRate(5);
+          (function frame(now) {
+            var p = Math.min(1, (now - t0) / dur);
+            angle = start + (target - start) * ease(p);
+            disc.style.transform = 'rotate(' + angle + 'deg)';
+            var seg = Math.floor(angle / SEG);
+            if (seg !== lastSeg) {
+              lastSeg = seg;
+              tick();
+            }
+            if (sw) sw.updatePlaybackRate(1 + 4 * (1 - p));
+            if (p < 1) requestAnimationFrame(frame);
+            else land(pick);
+          })(t0);
+        });
+      })();
+    </script>
+    <style>
+      .bulb {
+        animation: br-blink 0.8s var(--ease-pixel) infinite;
+      }
+      .bulb:nth-of-type(odd) {
+        animation-delay: 0.4s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .bulb {
+          animation: none;
+        }
+      }
+    </style>
+  </body>
+</html>

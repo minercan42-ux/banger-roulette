@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Motion</title>
+  </head>
+  <body class="br-stage">
+    <div class="grid">
+      <button class="cell" data-cls="br-pop-demo">
+        <span class="demo"
+          ><span class="br-badge br-badge--gold">POP</span></span
+        ><span class="br-label">pop-in</span>
+      </button>
+      <button class="cell" data-cls="br-bump">
+        <span class="demo"><span class="v">11</span></span
+        ><span class="br-label">bump</span>
+      </button>
+      <button class="cell" data-cls="br-shake">
+        <span class="demo"
+          ><span class="br-panel" style="padding: 4px 10px">WUMMS</span></span
+        ><span class="br-label">shake</span>
+      </button>
+      <button class="cell" data-cls="br-tick-demo">
+        <span class="demo"
+          ><span class="v" style="color: var(--red-text)">0:07</span></span
+        ><span class="br-label">tick</span>
+      </button>
+      <button class="cell" data-cls="br-blink-demo">
+        <span class="demo"><span class="v">1UP</span></span
+        ><span class="br-label">blink</span>
+      </button>
+      <button class="cell" data-cls="is-drop" data-target="chip">
+        <span class="demo"><span class="br-chip br-chip--blue"></span></span
+        ><span class="br-label">chip-drop</span>
+      </button>
+      <div class="cell" aria-hidden="true">
+        <span class="demo"
+          ><span class="mini br-wobble" style="--r: -4deg"></span></span
+        ><span class="br-label">wobble</span>
+      </div>
+      <div class="cell" aria-hidden="true">
+        <span class="demo"><span class="mini hover">HOVER</span></span
+        ><span class="br-label">lift</span>
+      </div>
+    </div>
+    <style>
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+        gap: var(--space-3);
+      }
+      .cell {
+        background: var(--panel);
+        border: 0;
+        border-radius: var(--radius-md);
+        box-shadow: var(--drop-edge);
+        color: var(--cream);
+        font: inherit;
+        padding: var(--space-3) var(--space-2);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-2);
+        cursor: pointer;
+      }
+      .demo {
+        height: 52px;
+        display: grid;
+        place-items: center;
+      }
+      .v {
+        font: 400 44px/40px var(--font-pixel);
+        color: var(--gold);
+        display: inline-block;
+      }
+      .mini {
+        display: block;
+        width: 34px;
+        height: 46px;
+        border-radius: var(--radius-sm);
+        background: var(--card-face);
+        box-shadow: 0 4px 0 var(--card-edge);
+      }
+      .mini.hover {
+        width: auto;
+        height: auto;
+        padding: 6px 8px;
+        font: 400 16px/1 var(--font-pixel);
+        color: var(--card-ink);
+        animation: lift 1.6s var(--ease-spring) infinite;
+      }
+      @keyframes lift {
+        0%,
+        40%,
+        100% {
+          transform: none;
+        }
+        55%,
+        85% {
+          transform: translateY(-10px) scale(1.06);
+        }
+      }
+      .br-pop-demo {
+        animation: br-pop-in var(--dur-pop) var(--ease-spring) both;
+      }
+      .br-tick-demo {
+        animation: br-tick 1s var(--ease-pixel) 3;
+      }
+      .br-blink-demo {
+        animation: br-blink 1s var(--ease-pixel) 3;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .mini.hover,
+        .br-pop-demo,
+        .br-tick-demo,
+        .br-blink-demo {
+          animation: none;
+        }
+      }
+    </style>
+    <script>
+      document.querySelectorAll('button.cell').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var t = b.querySelector('.demo').firstElementChild,
+            cls = b.dataset.cls;
+          t.classList.remove(cls);
+          void t.offsetWidth;
+          t.classList.add(cls);
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>Chip</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-row" style="gap: 24px; align-items: flex-end">
+      <div class="br-chips">
+        <span class="br-chip" aria-hidden="true"></span
+        ><span class="br-chip br-chip--blue" aria-hidden="true"></span
+        ><span class="br-chip br-chip--gold" aria-hidden="true"></span>
+      </div>
+      <span
+        class="br-chip br-chip--lg br-chip--gold"
+        role="img"
+        aria-label="Jackpot-Chip"
+      ></span>
+      <div
+        class="br-chipstack"
+        id="stack"
+        role="img"
+        aria-label="5 Punkte"
+      ></div>
+      <span class="br-read">Stapel = Punkte dieser Runde</span>
+    </div>
+    <button class="br-replay" id="again">Stapel nochmal fallen lassen</button>
+    <script>
+      var tones = ['', 'br-chip--blue', '', 'br-chip--gold', 'br-chip--blue'];
+      function build() {
+        var s = document.getElementById('stack');
+        s.innerHTML = '';
+        tones.forEach(function (t, i) {
+          var c = document.createElement('span');
+          c.className = 'br-chip is-drop ' + t;
+          c.style.animationDelay = i * 110 + 'ms';
+          s.appendChild(c);
+        });
+      }
+      build();
+      document.getElementById('again').addEventListener('click', build);
+    </script>
+  </body>
+</html>

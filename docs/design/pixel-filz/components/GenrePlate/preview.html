@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>GenrePlate</title>
+  </head>
+  <body class="br-stage">
+    <div style="max-width: 360px">
+      <div class="br-genre is-in" id="g" role="status" aria-live="polite">
+        <span class="br-genre__kicker">Das Rad hat gesprochen</span>
+        <strong class="br-genre__name">Schlager</strong>
+      </div>
+    </div>
+    <button class="br-replay" id="again" style="margin-top: 10px">
+      Nochmal ziehen
+    </button>
+    <script>
+      var names = ['Schlager', 'Eurodance', 'Metal', 'Polka', 'Techno'],
+        i = 0;
+      document.getElementById('again').addEventListener('click', function () {
+        var g = document.getElementById('g');
+        i = (i + 1) % names.length;
+        g.classList.remove('is-in');
+        void g.offsetWidth;
+        g.querySelector('.br-genre__name').textContent = names[i];
+        g.classList.add('is-in');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,89 @@
+/* Banger Roulette, generated from tokens.json. Do not edit by hand. */
+:root,
+[data-theme='felt'] {
+  --felt-950: #0b1f1c;
+  --felt-900: #123a33;
+  --swirl-green: #0f4f45;
+  --swirl-red: #b8322f;
+  --swirl-blue: #165a8c;
+  --panel: #24312f;
+  --well: #0f1a18;
+  --edge: #0a1312;
+  --cream: #fff6e3;
+  --cream-muted: #c9bfa8;
+  --ink-disabled: #7e8c89;
+  --card-face: var(--cream);
+  --card-edge: #b9a98a;
+  --card-ink: #2a1b14;
+  --card-muted: #6b5a4a;
+  --card-red: #c8372f;
+  --gold: #f5b630;
+  --gold-deep: #a8730f;
+  --red: #f2504b;
+  --red-deep: #8c2420;
+  --red-text: #ff6b63;
+  --blue: #1a72bd;
+  --blue-deep: #0d4778;
+  --green: #5fe08a;
+  --slate: #4a5856;
+  --slate-deep: #2c3634;
+  --focus: var(--gold);
+  --drop-edge: 0 5px 0 #0a1312;
+  --drop-edge-sm: 0 3px 0 #0a1312;
+  --press-gold: 0 5px 0 #a8730f;
+  --press-blue: 0 5px 0 #0d4778;
+  --press-red: 0 5px 0 #8c2420;
+  --press-slate: 0 5px 0 #2c3634;
+  --card-lift: 0 6px 0 #b9a98a, 0 12px 18px rgba(0, 0, 0, 0.4);
+  --card-lift-hover: 0 10px 0 #b9a98a, 0 24px 30px rgba(0, 0, 0, 0.45);
+  --glow-gold: 0 0 0 3px #f5b630, 0 0 22px rgba(245, 182, 48, 0.6);
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-round: 999px;
+  --dur-press: 80ms;
+  --dur-quick: 150ms;
+  --dur-base: 240ms;
+  --dur-pop: 420ms;
+  --dur-reveal: 600ms;
+  --dur-count: 900ms;
+  --dur-wobble: 3s;
+  --dur-spin: 5200ms;
+  --dur-jackpot: 2400ms;
+  --dur-swirl: 40s;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
+  --ease-wheel: cubic-bezier(0.12, 0.62, 0.08, 1);
+  --ease-wobble: cubic-bezier(0.45, 0, 0.55, 1);
+  --ease-pixel: steps(4, end);
+  --font-pixel: 'Jersey 10', ui-monospace, monospace;
+  --font-label: Silkscreen, ui-monospace, monospace;
+  --font-text: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+@font-face {
+  font-family: 'Jersey 10';
+  src: url('fonts/Jersey10-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('fonts/Silkscreen-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Silkscreen';
+  src: url('fonts/Silkscreen-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}

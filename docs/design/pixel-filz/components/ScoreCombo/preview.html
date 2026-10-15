@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="de" data-theme="felt">
+  <head>
+    <link rel="stylesheet" href="../../tokens.css" />
+    <link rel="stylesheet" href="../../components.css" />
+    <meta charset="utf-8" />
+    <title>ScoreCombo</title>
+  </head>
+  <body class="br-stage">
+    <div class="br-panel" style="max-width: 380px">
+      <div class="br-combo" aria-live="polite" aria-atomic="true">
+        <span class="br-combo__box br-combo__box--votes" id="v">0</span>
+        <span class="br-combo__op">+</span>
+        <span class="br-combo__box br-combo__box--bonus" id="b">0</span>
+        <span class="br-combo__op">=</span>
+        <span class="br-combo__box br-combo__box--total" id="t">0</span>
+      </div>
+      <div class="br-combo__caption br-label">
+        <span>Stimmen</span><span>Jackpot</span><span>Runde</span>
+      </div>
+    </div>
+    <button class="br-replay" id="again" style="margin-top: 10px">
+      Nochmal zählen
+    </button>
+    <script>
+      var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      function bump(el) {
+        el.classList.remove('br-bump');
+        void el.offsetWidth;
+        el.classList.add('br-bump');
+      }
+      function count(el, to, stepMs, done) {
+        if (reduce) {
+          el.textContent = to;
+          bump(el);
+          return done && done();
+        }
+        var n = 0;
+        (function step() {
+          el.textContent = n;
+          bump(el);
+          if (n++ < to) setTimeout(step, stepMs);
+          else if (done) setTimeout(done, 200);
+        })();
+      }
+      function run() {
+        var v = document.getElementById('v'),
+          b = document.getElementById('b'),
+          t = document.getElementById('t');
+        v.textContent = b.textContent = t.textContent = '0';
+        count(v, 9, 900 / 9, function () {
+          count(b, 2, 160, function () {
+            count(t, 11, 55);
+          });
+        });
+      }
+      run();
+      document.getElementById('again').addEventListener('click', run);
+    </script>
+  </body>
+</html>
