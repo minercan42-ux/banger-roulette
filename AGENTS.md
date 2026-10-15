@@ -31,7 +31,7 @@ The product and architecture spec is `SPEC.md`. Read it before doing anything. I
 | `pnpm test:e2e:live` | Playwright live smoke against a deployed URL (not part of PR CI) |
 | `pnpm lighthouse` | Lighthouse CI: Performance desktop >= 90, mobile >= 80, median of 3 runs per URL (NFR-01); reports in `lhci/desktop` and `lhci/mobile` (`pnpm lighthouse:desktop` / `lighthouse:mobile` run one pass) |
 | `pnpm test:e2e:csp` | Production-CSP regression against the built app (chromium) |
-| `pnpm test:e2e --project=<browser>` | Single-browser harness run (`chromium`, `firefox`, `webkit`); PRs use chromium, `main` and manual runs also run firefox and webkit |
+| `pnpm test:e2e --project=<browser>` | Single-browser harness run (`chromium`, `firefox`, `webkit`); PRs and pushes to `main` use chromium, the nightly `schedule` run (03:00 UTC) and manual runs (`workflow_dispatch`) also run firefox and webkit |
 
 Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` locally before every push.
 
