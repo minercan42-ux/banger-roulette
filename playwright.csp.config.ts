@@ -13,7 +13,11 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e/csp',
   fullyParallel: true,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // The sharded PR job (`PW_BLOB_REPORT`, see ci.yml) writes a blob report per
+  // shard and merges them into one HTML report afterwards.
+  reporter: process.env.PW_BLOB_REPORT
+    ? [['list'], ['blob']]
+    : [['list'], ['html', { open: 'never' }]],
   use: { baseURL: 'http://127.0.0.1:4174', trace: 'retain-on-failure' },
   webServer: {
     command:

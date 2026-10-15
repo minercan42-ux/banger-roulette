@@ -5,7 +5,11 @@ export default defineConfig({
   // not this dev server, so it is ignored in every project.
   testIgnore: '**/csp/**',
   fullyParallel: true,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // The sharded PR job (`PW_BLOB_REPORT`, see ci.yml) writes a blob report per
+  // shard and merges them into one HTML report afterwards.
+  reporter: process.env.PW_BLOB_REPORT
+    ? [['list'], ['blob']]
+    : [['list'], ['html', { open: 'never' }]],
   use: { baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure' },
   webServer: {
     command: 'pnpm exec vite --config e2e/vite.config.ts',
