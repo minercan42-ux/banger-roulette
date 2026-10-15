@@ -5,11 +5,11 @@ import { REJECTIONS, SESSION_FAILURES, type SessionError } from '../net/errors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import './i18n';
 import './styles.css';
-import { Chip } from './Chip';
 import { HomeView } from './HomeView';
 import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
 import { Backdrop } from './pf/Backdrop';
+import { Chip } from './pf/Chip';
 import { RoomView } from './RoomView';
 import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
 import { useSfxStore } from './sfx-store';
@@ -204,9 +204,9 @@ export function Shell({ session }: { session: GameSession }) {
         <header className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div className="flex items-center gap-3">
             <span aria-hidden="true" className="flex -space-x-2">
-              <Chip tone="red" size="md" />
-              <Chip tone="gold" size="md" />
-              <Chip tone="neon" size="md" />
+              <Chip tone="red" />
+              <Chip tone="gold" />
+              <Chip tone="blue" />
             </span>
             <span
               data-testid="app-title"

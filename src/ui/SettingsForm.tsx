@@ -5,6 +5,9 @@ import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
 import { nicknameKey } from '../shared/primitives';
 import type { Settings } from '../shared/settings';
+import { Button } from './pf/Button';
+import { Field, SelectField } from './pf/Field';
+import { Panel, PanelTitle } from './pf/Panel';
 
 type GenreMode = Settings['genre']['mode'];
 type LinkedPoints = Settings['linkedPoints'];
@@ -233,153 +236,125 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
         : t('settings.saved');
 
   return (
-    <section
-      data-testid="settings-section"
-      className="rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('settings.heading')}
-        </h2>
+    <Panel as="section" data-testid="settings-section">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <PanelTitle>{t('settings.heading')}</PanelTitle>
         <span
           data-testid="settings-status"
           data-state={
             busy ? 'saving' : errorKey ? 'error' : dirty ? 'dirty' : 'saved'
           }
-          className="text-xs text-cream-100/70"
+          className="br-read"
         >
           {statusText}
         </span>
       </div>
-      {!canEdit && (
-        <p className="mt-2 text-xs text-cream-100/60">
-          {t('lobby.settingsHostOnly')}
-        </p>
-      )}
+      {!canEdit && <p className="br-read">{t('lobby.settingsHostOnly')}</p>}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">{t('settings.modeLabel')}</span>
-          <select
-            data-testid="settings-genre-mode"
-            value={draft.mode}
-            disabled={disabled}
-            onChange={(event) =>
-              update({ mode: event.target.value as GenreMode })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          >
-            <option value="roulette">{t('settings.modeRoulette')}</option>
-            <option value="custom">{t('settings.modeCustom')}</option>
-            <option value="fixed">{t('settings.modeFixed')}</option>
-          </select>
-        </label>
+        <SelectField
+          data-testid="settings-genre-mode"
+          label={t('settings.modeLabel')}
+          value={draft.mode}
+          disabled={disabled}
+          onChange={(event) =>
+            update({ mode: event.target.value as GenreMode })
+          }
+        >
+          <option value="roulette">{t('settings.modeRoulette')}</option>
+          <option value="custom">{t('settings.modeCustom')}</option>
+          <option value="fixed">{t('settings.modeFixed')}</option>
+        </SelectField>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">{t('settings.rounds')}</span>
-          <input
-            type="number"
-            data-testid="settings-rounds"
-            min={BOUNDS.rounds.min}
-            max={BOUNDS.rounds.max}
-            step={1}
-            value={draft.rounds}
-            disabled={disabled}
-            onChange={(event) =>
-              update({
-                rounds: clamp(
-                  Number(event.target.value),
-                  BOUNDS.rounds.min,
-                  BOUNDS.rounds.max,
-                ),
-              })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          />
-        </label>
+        <Field
+          type="number"
+          data-testid="settings-rounds"
+          label={t('settings.rounds')}
+          min={BOUNDS.rounds.min}
+          max={BOUNDS.rounds.max}
+          step={1}
+          value={draft.rounds}
+          disabled={disabled}
+          onChange={(event) =>
+            update({
+              rounds: clamp(
+                Number(event.target.value),
+                BOUNDS.rounds.min,
+                BOUNDS.rounds.max,
+              ),
+            })
+          }
+        />
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">
-            {t('settings.submissionSeconds')}
-          </span>
-          <input
-            type="number"
-            data-testid="settings-submission-seconds"
-            min={BOUNDS.submissionSeconds.min}
-            max={BOUNDS.submissionSeconds.max}
-            step={1}
-            value={draft.submissionSeconds}
-            disabled={disabled}
-            onChange={(event) =>
-              update({
-                submissionSeconds: clamp(
-                  Number(event.target.value),
-                  BOUNDS.submissionSeconds.min,
-                  BOUNDS.submissionSeconds.max,
-                ),
-              })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          />
-        </label>
+        <Field
+          type="number"
+          data-testid="settings-submission-seconds"
+          label={t('settings.submissionSeconds')}
+          min={BOUNDS.submissionSeconds.min}
+          max={BOUNDS.submissionSeconds.max}
+          step={1}
+          value={draft.submissionSeconds}
+          disabled={disabled}
+          onChange={(event) =>
+            update({
+              submissionSeconds: clamp(
+                Number(event.target.value),
+                BOUNDS.submissionSeconds.min,
+                BOUNDS.submissionSeconds.max,
+              ),
+            })
+          }
+        />
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">{t('settings.clipSeconds')}</span>
-          <input
-            type="number"
-            data-testid="settings-clip-seconds"
-            min={BOUNDS.clipSeconds.min}
-            max={BOUNDS.clipSeconds.max}
-            step={1}
-            value={draft.clipSeconds}
-            disabled={disabled}
-            onChange={(event) =>
-              update({
-                clipSeconds: clamp(
-                  Number(event.target.value),
-                  BOUNDS.clipSeconds.min,
-                  BOUNDS.clipSeconds.max,
-                ),
-              })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          />
-        </label>
+        <Field
+          type="number"
+          data-testid="settings-clip-seconds"
+          label={t('settings.clipSeconds')}
+          min={BOUNDS.clipSeconds.min}
+          max={BOUNDS.clipSeconds.max}
+          step={1}
+          value={draft.clipSeconds}
+          disabled={disabled}
+          onChange={(event) =>
+            update({
+              clipSeconds: clamp(
+                Number(event.target.value),
+                BOUNDS.clipSeconds.min,
+                BOUNDS.clipSeconds.max,
+              ),
+            })
+          }
+        />
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">
-            {t('settings.votingSeconds')}
-          </span>
-          <input
-            type="number"
-            data-testid="settings-voting-seconds"
-            min={BOUNDS.votingSeconds.min}
-            max={BOUNDS.votingSeconds.max}
-            step={1}
-            value={draft.votingSeconds}
-            disabled={disabled}
-            onChange={(event) =>
-              update({
-                votingSeconds: clamp(
-                  Number(event.target.value),
-                  BOUNDS.votingSeconds.min,
-                  BOUNDS.votingSeconds.max,
-                ),
-              })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          />
-        </label>
+        <Field
+          type="number"
+          data-testid="settings-voting-seconds"
+          label={t('settings.votingSeconds')}
+          min={BOUNDS.votingSeconds.min}
+          max={BOUNDS.votingSeconds.max}
+          step={1}
+          value={draft.votingSeconds}
+          disabled={disabled}
+          onChange={(event) =>
+            update({
+              votingSeconds: clamp(
+                Number(event.target.value),
+                BOUNDS.votingSeconds.min,
+                BOUNDS.votingSeconds.max,
+              ),
+            })
+          }
+        />
 
         <div
           role="group"
           aria-labelledby="settings-genre-fail-heading"
-          className="flex flex-col gap-1 text-sm"
+          className="br-field"
         >
-          <span id="settings-genre-fail-heading" className="text-cream-100/80">
+          <span id="settings-genre-fail-heading" className="br-field__label">
             {t('settings.genreFailPenalty')}
           </span>
-          <label className="flex items-center gap-2 text-xs text-cream-100/70">
+          <label className="br-check">
             <input
               type="checkbox"
               data-testid="settings-genre-fail-enabled"
@@ -394,7 +369,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                     : 0,
                 })
               }
-              className="size-4 accent-gold-400"
+              className="br-check__input"
             />
             <span id="settings-genre-fail-toggle">
               {t('settings.genreFailEnabled')}
@@ -419,104 +394,87 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ),
               })
             }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
+            className="br-field__input"
           />
           {genreFailEnabled ? (
-            <span
-              id="settings-genre-fail-help"
-              className="text-xs text-cream-100/50"
-            >
+            <span id="settings-genre-fail-help" className="br-field__hint">
               {t('settings.genreFailPenaltyHint')}
             </span>
           ) : (
             <span
               id="settings-genre-fail-help"
               data-testid="settings-genre-fail-off"
-              className="text-xs text-cream-100/50"
+              className="br-field__hint"
             >
               {t('settings.genreFailOff')}
             </span>
           )}
         </div>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">
-            {t('settings.linkedPoints')}
-          </span>
-          <select
-            data-testid="settings-linked-points"
-            value={draft.linkedPoints}
-            disabled={disabled}
-            onChange={(event) =>
-              update({ linkedPoints: event.target.value as LinkedPoints })
-            }
-            className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-          >
-            <option value="full">{t('settings.linkedPointsFull')}</option>
-            <option value="halfCeil">
-              {t('settings.linkedPointsHalfCeil')}
-            </option>
-          </select>
-        </label>
+        <SelectField
+          data-testid="settings-linked-points"
+          label={t('settings.linkedPoints')}
+          value={draft.linkedPoints}
+          disabled={disabled}
+          onChange={(event) =>
+            update({ linkedPoints: event.target.value as LinkedPoints })
+          }
+        >
+          <option value="full">{t('settings.linkedPointsFull')}</option>
+          <option value="halfCeil">{t('settings.linkedPointsHalfCeil')}</option>
+        </SelectField>
 
-        <label className="flex items-center gap-2 text-sm">
+        <label className="br-check">
           <input
             type="checkbox"
             data-testid="settings-anonymous"
             checked={draft.anonymous}
             disabled={disabled}
             onChange={(event) => update({ anonymous: event.target.checked })}
-            className="size-4 accent-gold-400"
+            className="br-check__input"
           />
-          <span className="text-cream-100/80">{t('settings.anonymous')}</span>
+          <span>{t('settings.anonymous')}</span>
         </label>
       </div>
 
       {draft.mode === 'custom' && (
-        <div data-testid="settings-custom-items" className="mt-4 space-y-2">
-          <p className="text-xs text-cream-100/60">
+        <div data-testid="settings-custom-items" className="mt-4 space-y-3">
+          <p className="br-read">
             {t('settings.customCount', { total: draft.custom.length })}
           </p>
           {draft.custom.map((item, index) => (
             <div
               key={item.key}
               data-testid="settings-custom-row"
-              className="flex flex-wrap items-end gap-2"
+              className="flex flex-wrap items-end gap-3"
             >
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
-                <span className="text-cream-100/70">
-                  {t('settings.customDe')}
-                </span>
-                <input
-                  type="text"
-                  data-testid="settings-custom-de"
-                  value={item.de}
-                  disabled={disabled}
-                  maxLength={80}
-                  onChange={(event) =>
-                    updateCustom(index, { de: event.target.value })
-                  }
-                  className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-                />
-              </label>
-              <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
-                <span className="text-cream-100/70">
-                  {t('settings.customEn')}
-                </span>
-                <input
-                  type="text"
-                  data-testid="settings-custom-en"
-                  value={item.en}
-                  disabled={disabled}
-                  maxLength={80}
-                  onChange={(event) =>
-                    updateCustom(index, { en: event.target.value })
-                  }
-                  className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-                />
-              </label>
-              <button
-                type="button"
+              <Field
+                type="text"
+                data-testid="settings-custom-de"
+                label={t('settings.customDe')}
+                value={item.de}
+                disabled={disabled}
+                maxLength={80}
+                onChange={(event) =>
+                  updateCustom(index, { de: event.target.value })
+                }
+                className="min-w-0 flex-1"
+              />
+              <Field
+                type="text"
+                data-testid="settings-custom-en"
+                label={t('settings.customEn')}
+                value={item.en}
+                disabled={disabled}
+                maxLength={80}
+                onChange={(event) =>
+                  updateCustom(index, { en: event.target.value })
+                }
+                className="min-w-0 flex-1"
+              />
+              <Button
+                tone="red"
+                size="sm"
                 data-testid="settings-custom-remove"
                 disabled={disabled}
                 onClick={() =>
@@ -526,14 +484,14 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                     ),
                   })
                 }
-                className="rounded-md border border-rose-400/40 px-2 py-1 text-xs text-rose-200 disabled:opacity-50"
               >
                 {t('settings.customRemove')}
-              </button>
+              </Button>
             </div>
           ))}
-          <button
-            type="button"
+          <Button
+            tone="blue"
+            size="sm"
             data-testid="settings-custom-add"
             disabled={disabled || draft.custom.length >= 50}
             onClick={() =>
@@ -544,68 +502,61 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 ],
               })
             }
-            className="rounded-md border border-gold-400/40 px-3 py-1 text-xs text-cream-100 disabled:opacity-50"
           >
             {t('settings.customAdd')}
-          </button>
+          </Button>
         </div>
       )}
 
       {draft.mode === 'fixed' && (
         <div className="mt-4 flex flex-wrap gap-3">
-          <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
-            <span className="text-cream-100/70">{t('settings.fixedDe')}</span>
-            <input
-              type="text"
-              data-testid="settings-fixed-de"
-              value={draft.fixed.de}
-              disabled={disabled}
-              maxLength={80}
-              onChange={(event) =>
-                update({ fixed: { ...draft.fixed, de: event.target.value } })
-              }
-              className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-            />
-          </label>
-          <label className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
-            <span className="text-cream-100/70">{t('settings.fixedEn')}</span>
-            <input
-              type="text"
-              data-testid="settings-fixed-en"
-              value={draft.fixed.en}
-              disabled={disabled}
-              maxLength={80}
-              onChange={(event) =>
-                update({ fixed: { ...draft.fixed, en: event.target.value } })
-              }
-              className="min-w-0 casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
-            />
-          </label>
+          <Field
+            type="text"
+            data-testid="settings-fixed-de"
+            label={t('settings.fixedDe')}
+            value={draft.fixed.de}
+            disabled={disabled}
+            maxLength={80}
+            onChange={(event) =>
+              update({ fixed: { ...draft.fixed, de: event.target.value } })
+            }
+            className="min-w-0 flex-1"
+          />
+          <Field
+            type="text"
+            data-testid="settings-fixed-en"
+            label={t('settings.fixedEn')}
+            value={draft.fixed.en}
+            disabled={disabled}
+            maxLength={80}
+            onChange={(event) =>
+              update({ fixed: { ...draft.fixed, en: event.target.value } })
+            }
+            className="min-w-0 flex-1"
+          />
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
+        <Button
           data-testid="settings-save"
           onClick={() => {
             void save();
           }}
           disabled={disabled || !dirty || validation !== null}
-          className="rounded-md border border-gold-400/50 bg-gold-500/20 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {t('settings.save')}
-        </button>
+        </Button>
         {errorKey && (
           <span
             data-testid="settings-error"
             role="alert"
-            className="text-xs text-rose-300"
+            className="br-read text-red-text"
           >
             {t(errorKey)}
           </span>
         )}
       </div>
-    </section>
+    </Panel>
   );
 }

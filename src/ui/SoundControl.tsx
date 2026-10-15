@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameSession } from '../net/session';
 import { releaseAudioContext, unlockAudioContext } from './audio-context';
+import { Badge } from './pf/Badge';
+import { Button } from './pf/Button';
+import { Panel } from './pf/Panel';
 
 interface SoundControlProps {
   session: GameSession;
@@ -74,53 +77,41 @@ export function SoundControl({
   }
 
   return (
-    <section
-      data-testid="sound-control"
-      className="rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
-    >
+    <Panel as="section" data-testid="sound-control" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-sm text-cream-100/80">
-          {t('sound.statusLabel')}
-        </span>
-        <span
+        <span className="br-label">{t('sound.statusLabel')}</span>
+        <Badge
           data-testid="sound-status"
           data-unlocked={soundReady}
-          className={
-            soundReady
-              ? 'rounded-full border border-emerald-400/50 px-3 py-1 text-xs text-emerald-200'
-              : 'rounded-full border border-gold-400/30 px-3 py-1 text-xs text-gold-300'
-          }
+          tone={soundReady ? 'green' : 'slate'}
+          dot={soundReady}
         >
           {soundReady ? t('sound.unlocked') : t('sound.locked')}
-        </span>
+        </Badge>
       </div>
       {!soundReady && (
-        <div className="mt-3 space-y-2">
-          <button
-            type="button"
+        <div className="space-y-2">
+          <Button
             data-testid="sound-consent"
             onClick={() => {
               void enable();
             }}
             disabled={busy || !canWrite}
-            className="rounded-md border border-gold-400/50 bg-gold-500/20 px-3 py-2 text-sm text-cream-100 transition hover:bg-gold-500/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? t('settings.saving') : t('sound.consentButton')}
-          </button>
-          <p className="text-xs leading-relaxed text-cream-100/60">
-            {t('sound.consentExplainer')}
-          </p>
+          </Button>
+          <p className="br-read">{t('sound.consentExplainer')}</p>
         </div>
       )}
       {errorKey && (
         <p
           data-testid="sound-error"
           role="alert"
-          className="mt-2 text-xs text-rose-300"
+          className="br-read text-red-text"
         >
           {t(errorKey)}
         </p>
       )}
-    </section>
+    </Panel>
   );
 }

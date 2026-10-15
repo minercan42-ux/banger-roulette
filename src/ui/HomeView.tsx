@@ -2,8 +2,11 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import genres from '../content/genres.json';
 import type { SessionError } from '../net/errors';
-import { Chip } from './Chip';
 import { normalizeRoomCode, ROOM_CODE_PATTERN } from './format';
+import { Button } from './pf/Button';
+import { Chip } from './pf/Chip';
+import { Field } from './pf/Field';
+import { Panel, PanelTitle } from './pf/Panel';
 
 interface HomeViewProps {
   prefillCode: string | null;
@@ -12,6 +15,20 @@ interface HomeViewProps {
   onCreate: (nickname: string) => Promise<SessionError | null>;
   onJoin: (code: string, nickname: string) => Promise<SessionError | null>;
 }
+
+type FormName = 'create' | 'join';
+
+interface Failure {
+  key: string;
+  form: FormName;
+}
+
+/** Errors that point at the room code field / the nickname field. */
+const CODE_ERRORS = new Set([
+  'errors.INVALID_ROOM_CODE',
+  'errors.ROOM_NOT_FOUND',
+]);
+const NICKNAME_ERRORS = new Set(['errors.INVALID', 'errors.NICKNAME_TAKEN']);
 
 function nicknameError(nickname: string): boolean {
   const trimmed = nickname.trim();
@@ -32,36 +49,41 @@ export function HomeView({
   );
   const [joinNickname, setJoinNickname] = useState('');
   const [busy, setBusy] = useState(false);
-  const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
+
+  const errorKey = failure?.key ?? null;
+  const nicknameInvalid = (form: FormName) =>
+    failure?.form === form && NICKNAME_ERRORS.has(failure.key);
+  const codeInvalid = failure?.form === 'join' && CODE_ERRORS.has(failure.key);
 
   async function submitCreate() {
     if (nicknameError(nickname)) {
-      setErrorKey('errors.INVALID');
+      setFailure({ key: 'errors.INVALID', form: 'create' });
       return;
     }
     setBusy(true);
-    setErrorKey(null);
+    setFailure(null);
     const error = await onCreate(nickname.trim());
     if (error) {
-      setErrorKey(`errors.${error}`);
+      setFailure({ key: `errors.${error}`, form: 'create' });
     }
     setBusy(false);
   }
 
   async function submitJoin() {
     if (!ROOM_CODE_PATTERN.test(code)) {
-      setErrorKey('errors.INVALID_ROOM_CODE');
+      setFailure({ key: 'errors.INVALID_ROOM_CODE', form: 'join' });
       return;
     }
     if (nicknameError(joinNickname)) {
-      setErrorKey('errors.INVALID');
+      setFailure({ key: 'errors.INVALID', form: 'join' });
       return;
     }
     setBusy(true);
-    setErrorKey(null);
+    setFailure(null);
     const error = await onJoin(code, joinNickname.trim());
     if (error) {
-      setErrorKey(`errors.${error}`);
+      setFailure({ key: `errors.${error}`, form: 'join' });
     }
     setBusy(false);
   }
@@ -69,17 +91,12 @@ export function HomeView({
   return (
     <div data-testid="home-view" className="space-y-5">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
-          {t('home.heading')}
-        </h1>
-        <p className="mt-2 text-sm text-cream-100/80">{t('home.intro')}</p>
+        <PanelTitle as="h1">{t('home.heading')}</PanelTitle>
+        <p className="br-read">{t('home.intro')}</p>
       </div>
 
       {joining && (
-        <p
-          data-testid="route-joining"
-          className="rounded-lg border border-gold-400/20 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
-        >
+        <p data-testid="route-joining" className="br-notice">
           {t('home.rejoining')}
         </p>
       )}
@@ -93,7 +110,7 @@ export function HomeView({
             <p
               data-testid="identity-missing"
               role="status"
-              className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+              className="br-notice"
             >
               {t('home.identityMissing')}
             </p>
@@ -103,110 +120,92 @@ export function HomeView({
             <p
               data-testid="home-error"
               role="alert"
-              className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+              className="br-notice br-notice--error"
             >
               {t(errorKey)}
             </p>
           )}
 
-          <form
+          <Panel
+            as="form"
             data-testid="create-form"
             onSubmit={(event) => {
               event.preventDefault();
               void submitCreate();
             }}
-            className="felt-panel space-y-2 rounded-xl p-4"
+            className="space-y-3"
           >
-            <h2 className="flex items-center gap-2 font-display text-lg text-gold-300">
+            <PanelTitle className="flex items-center gap-2">
               <Chip tone="gold" size="sm" />
               {t('home.createHeading')}
-            </h2>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-cream-100/80">
-                {t('home.nicknameLabel')}
-              </span>
-              <input
-                type="text"
-                data-testid="create-nickname"
-                value={nickname}
-                maxLength={20}
-                autoComplete="off"
-                onChange={(event) => setNickname(event.target.value)}
-                className="casino-field rounded-md border bg-ink-950 px-3 py-2 text-cream-100"
-              />
-              <span className="text-xs text-cream-100/70">
-                {t('home.nicknameHint')}
-              </span>
-            </label>
-            <button
-              type="submit"
-              data-testid="create-room"
-              disabled={busy}
-              className="casino-button px-4 py-2 text-sm"
-            >
+            </PanelTitle>
+            <Field
+              type="text"
+              data-testid="create-nickname"
+              label={t('home.nicknameLabel')}
+              hint={t('home.nicknameHint')}
+              invalid={nicknameInvalid('create')}
+              value={nickname}
+              maxLength={20}
+              autoComplete="off"
+              onChange={(event) => setNickname(event.target.value)}
+            />
+            <Button type="submit" data-testid="create-room" disabled={busy}>
               {t('home.createButton')}
-            </button>
-          </form>
+            </Button>
+          </Panel>
 
-          <form
+          <Panel
+            as="form"
             data-testid="join-form"
             onSubmit={(event) => {
               event.preventDefault();
               void submitJoin();
             }}
-            className="felt-panel space-y-2 rounded-xl p-4"
+            className="space-y-3"
           >
-            <h2 className="flex items-center gap-2 font-display text-lg text-gold-300">
-              <Chip tone="red" size="sm" />
+            <PanelTitle className="flex items-center gap-2">
+              <Chip tone="blue" size="sm" />
               {t('home.joinHeading')}
-            </h2>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-cream-100/80">
-                {t('home.joinCodeLabel')}
-              </span>
-              <input
-                type="text"
-                data-testid="join-code"
-                value={code}
-                maxLength={6}
-                autoComplete="off"
-                inputMode="text"
-                onChange={(event) =>
-                  setCode(normalizeRoomCode(event.target.value))
-                }
-                className="casino-field rounded-md border bg-ink-950 px-3 py-2 font-mono tracking-[0.3em] text-cream-100 uppercase"
-              />
-              <span className="text-xs text-cream-100/70">
-                {t('home.joinCodeHint')} {t('home.codeExample')}
-              </span>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-cream-100/80">
-                {t('home.nicknameLabel')}
-              </span>
-              <input
-                type="text"
-                data-testid="join-nickname"
-                value={joinNickname}
-                maxLength={20}
-                autoComplete="off"
-                onChange={(event) => setJoinNickname(event.target.value)}
-                className="casino-field rounded-md border bg-ink-950 px-3 py-2 text-cream-100"
-              />
-            </label>
-            <button
+            </PanelTitle>
+            <Field
+              type="text"
+              data-testid="join-code"
+              label={t('home.joinCodeLabel')}
+              hint={`${t('home.joinCodeHint')} ${t('home.codeExample')}`}
+              invalid={codeInvalid}
+              value={code}
+              maxLength={6}
+              autoComplete="off"
+              inputMode="text"
+              onChange={(event) =>
+                setCode(normalizeRoomCode(event.target.value))
+              }
+              className="br-field--code"
+            />
+            <Field
+              type="text"
+              data-testid="join-nickname"
+              label={t('home.nicknameLabel')}
+              invalid={nicknameInvalid('join')}
+              value={joinNickname}
+              maxLength={20}
+              autoComplete="off"
+              onChange={(event) => setJoinNickname(event.target.value)}
+            />
+            <Button
               type="submit"
+              tone="blue"
               data-testid="join-room"
               disabled={busy}
-              className="casino-button px-4 py-2 text-sm"
             >
               {t('home.joinButton')}
-            </button>
-          </form>
+            </Button>
+          </Panel>
         </div>
       )}
 
-      <p className="text-xs text-gold-300/80">
+      <p className="br-label">
         {t('home.genreCatalogue', { count: genres.length })}
       </p>
     </div>
