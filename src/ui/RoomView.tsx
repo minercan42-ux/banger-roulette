@@ -10,12 +10,15 @@ import {
 } from '../engine/selectors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
-import { Chip } from './Chip';
 import { useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
 import { PhaseAnnouncer, PhaseSummary } from './PhaseSummary';
+import { Button } from './pf/Button';
+import { Chip } from './pf/Chip';
+import { Field } from './pf/Field';
+import { Panel, PanelTitle } from './pf/Panel';
 import { PlaybackPhase } from './PlaybackPhase';
 import {
   PlaybackControllerContext,
@@ -104,62 +107,48 @@ export function RoomView({
       {/* SPEC §6: the phase live region is mounted for the whole room lifecycle
           (LOBBY included) so the lobby boundary is announced too. */}
       <PhaseAnnouncer room={room} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 font-display text-2xl font-semibold text-cream-100 sm:text-3xl">
-            <Chip tone="black" size="md" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <PanelTitle as="h1" className="flex items-center gap-2">
+            <Chip tone="gold" />
             {t('lobby.heading')}
-          </h1>
-          <p className="mt-2 text-sm text-cream-100/80">
-            {t('lobby.roomCodeLabel')}:{' '}
-            <span
-              data-testid="room-code"
-              className="inline-block rounded-md border border-neon-cyan/60 bg-ink-950 px-2 py-0.5 font-mono tracking-[0.3em] text-neon-cyan text-glow-neon uppercase shadow-glow-cyan"
-            >
+          </PanelTitle>
+          <p className="br-label flex flex-wrap items-center gap-2">
+            {t('lobby.roomCodeLabel')}:
+            <span data-testid="room-code" className="br-code">
               {room.roomCode}
             </span>
           </p>
         </div>
-        <button
-          type="button"
-          data-testid="leave-room"
-          onClick={onLeave}
-          className="rounded-md border border-rose-400/50 bg-ink-950/60 px-3 py-2 text-sm text-rose-200 transition hover:bg-rose-500/15"
-        >
+        <Button tone="slate" data-testid="leave-room" onClick={onLeave}>
           {t('lobby.leave')}
-        </button>
+        </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          tone="blue"
+          size="sm"
           data-testid="copy-link"
           onClick={() => {
             void copyLink();
           }}
-          className="casino-ghost px-3 py-2 text-sm"
         >
           {t('lobby.copyLink')}
-        </button>
-        <span
-          data-testid="copy-status"
-          role="status"
-          className="text-xs text-cream-100/70"
-        >
+        </Button>
+        <span data-testid="copy-status" role="status" className="br-read">
           {copied === 'copied' ? t('common.copied') : ''}
         </span>
         {copied === 'failed' && (
-          <label className="flex flex-col gap-1 text-xs text-amber-100">
-            <span>{t('lobby.copyFailed')}</span>
-            <input
-              type="text"
-              data-testid="copy-link-fallback"
-              readOnly
-              value={shareUrl}
-              onFocus={(event) => event.target.select()}
-              className="min-w-0 casino-field rounded-md border bg-ink-950 px-2 py-1 text-cream-100"
-            />
-          </label>
+          <Field
+            type="text"
+            data-testid="copy-link-fallback"
+            label={t('lobby.copyFailed')}
+            readOnly
+            value={shareUrl}
+            onFocus={(event) => event.target.select()}
+            className="min-w-0 flex-1"
+          />
         )}
       </div>
 
@@ -167,7 +156,7 @@ export function RoomView({
         <p
           data-testid="read-only-indicator"
           role="status"
-          className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+          className="br-notice"
         >
           {t('lobby.readOnly')}
         </p>
@@ -177,18 +166,14 @@ export function RoomView({
         <p
           data-testid="action-error"
           role="alert"
-          className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+          className="br-notice br-notice--error"
         >
           {t(errorKey)}
         </p>
       )}
 
       {!self && (
-        <p
-          data-testid="player-pending"
-          role="status"
-          className="rounded-lg border border-gold-400/20 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
-        >
+        <p data-testid="player-pending" role="status" className="br-notice">
           {t('lobby.waitingForHost')}
         </p>
       )}
@@ -201,10 +186,7 @@ export function RoomView({
       />
 
       {room.phase === 'LOBBY' && (
-        <p
-          data-testid="lobby-start-hint"
-          className="rounded-lg border border-gold-400/20 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
-        >
+        <p data-testid="lobby-start-hint" className="br-notice">
           {t('lobby.startHint')}
         </p>
       )}
@@ -305,35 +287,33 @@ export function RoomView({
         unlocked={self?.soundUnlocked ?? false}
       />
 
-      <section
+      <Panel
+        as="section"
         data-testid="lobby-readiness"
         data-ready={readiness.ready}
         data-connected={readiness.connectedPlayers}
-        className="felt-panel rounded-xl p-4 text-sm"
+        className="space-y-1"
       >
-        <p className="text-cream-100/80">
+        <p>
           {t('sound.playersConnected', {
             connected: readiness.connectedPlayers,
             min: readiness.minPlayers,
             max: readiness.maxPlayers,
           })}
         </p>
-        <p className="mt-1 text-xs text-cream-100/70">
+        <p className="br-read">
           {readiness.soundLockedIds.length === 0
             ? t('sound.readinessReady')
             : t('sound.readinessWaiting', { min: readiness.minPlayers })}
         </p>
         {readiness.soundLockedIds.length > 0 && (
-          <p
-            data-testid="sound-locked-count"
-            className="mt-1 text-xs text-gold-300"
-          >
+          <p data-testid="sound-locked-count" className="br-read text-gold">
             {t('sound.soundLocked', {
               count: readiness.soundLockedIds.length,
             })}
           </p>
         )}
-      </section>
+      </Panel>
 
       <RosterList
         roster={roster}

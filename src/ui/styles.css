@@ -1452,3 +1452,104 @@ body {
     transform: none;
   }
 }
+
+/*
+ * Primitive additions (src/ui/pf, Home and Lobby screens). Same `br-` naming
+ * as the design reference; nothing here changes a token or the blocks above.
+ */
+@layer components {
+  .br-btn {
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .br-chip--sm {
+    width: 20px;
+    height: 20px;
+    box-shadow:
+      0 2px 0 var(--chip-deep),
+      0 0 0 1px var(--color-edge);
+  }
+  .br-chip--sm::after {
+    width: 10px;
+    height: 10px;
+    border-width: 1px;
+  }
+
+  .br-field__input:disabled {
+    color: var(--color-ink-disabled);
+    cursor: not-allowed;
+  }
+  .br-field--code .br-field__input {
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+
+  .br-check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font: 400 15px/22px var(--font-text);
+    color: var(--color-cream);
+  }
+  .br-check__input {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    accent-color: var(--color-gold);
+  }
+
+  .br-notice {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-well);
+    box-shadow: inset 4px 0 0 var(--color-gold);
+    font: 400 15px/22px var(--font-text);
+    color: var(--color-cream);
+  }
+  .br-notice--error {
+    box-shadow: inset 4px 0 0 var(--color-red-text);
+    color: var(--color-red-text);
+  }
+
+  .br-code {
+    display: inline-block;
+    padding: 2px var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-well);
+    box-shadow: inset 0 3px 0 var(--color-edge);
+    font: 400 30px/32px var(--font-pixel);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-gold);
+  }
+
+  /*
+   * Roster row (#56): the nickname keeps its full width and wraps instead of
+   * being cut off; the badge group drops to its own line when both do not fit.
+   */
+  .br-roster__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-well);
+  }
+  .br-roster__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: 400 22px/24px var(--font-pixel);
+    color: var(--color-cream);
+    overflow-wrap: anywhere;
+  }
+  .br-roster__badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+}
