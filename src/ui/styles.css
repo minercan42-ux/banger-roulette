@@ -1553,3 +1553,82 @@ body {
     gap: var(--space-2);
   }
 }
+
+/* Leaderboard and finale (issue #67): podium and finale lists on top of the
+   T1 `br-lb` rows. Own block, br- prefixed, tokens only. */
+@layer components {
+  .br-lb.br-panel {
+    padding-block: var(--space-2);
+  }
+  .br-podium {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-3);
+  }
+  .br-podium__place {
+    flex: 1 1 8rem;
+    min-width: 0;
+    text-align: center;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-well);
+    box-shadow: inset 0 3px 0 var(--color-edge);
+  }
+  .br-podium__place[data-rank='1'] {
+    padding-block: var(--space-6);
+    box-shadow:
+      inset 0 3px 0 var(--color-edge),
+      inset 0 0 0 3px var(--color-gold);
+  }
+  .br-podium__rank {
+    margin: 0;
+    font: 400 30px/32px var(--font-pixel);
+    color: var(--color-gold);
+  }
+  .br-podium__players {
+    list-style: none;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    font: 400 22px/24px var(--font-pixel);
+  }
+  .br-podium__players li + li {
+    margin-top: var(--space-2);
+  }
+  .br-podium__name {
+    overflow-wrap: anywhere;
+  }
+  .br-podium__pts {
+    display: block;
+    font: 400 16px/20px var(--font-label);
+    color: var(--color-cream-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .br-final__rounds {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .br-final__winners {
+    list-style: none;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    font: 400 16px/22px var(--font-text);
+  }
+  .br-final__link {
+    color: var(--color-cream);
+    text-decoration: underline;
+    text-decoration-color: var(--color-gold);
+    text-underline-offset: 3px;
+    overflow-wrap: anywhere;
+  }
+  .br-final__link:hover {
+    color: var(--color-gold);
+  }
+}
