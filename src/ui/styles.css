@@ -1632,3 +1632,45 @@ body {
     color: var(--color-gold);
   }
 }
+
+/*
+ * Genre roulette (`GenreSpin.tsx`): layout of the wheel stage and the rim
+ * bulbs. The wheel, pointer, hub, shake and genre plate come from the
+ * `br-*` classes above.
+ */
+@layer components {
+  .br-spin {
+    padding-inline: var(--space-2);
+    overflow-x: clip;
+  }
+  .br-spin__stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: var(--space-2);
+  }
+  .br-spin__slot {
+    width: 100%;
+    min-height: 100px;
+  }
+  .br-spin .br-genre__name {
+    overflow-wrap: anywhere;
+  }
+  .br-spin .br-genre__name[data-long='true'] {
+    font-size: 34px;
+    line-height: 34px;
+  }
+  .br-wheel__bulb {
+    fill: var(--color-gold);
+    animation: br-blink 0.8s var(--ease-pixel) infinite;
+  }
+  .br-wheel__bulb--odd {
+    animation-delay: 0.4s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .br-wheel__bulb {
+      animation: none;
+    }
+  }
+}

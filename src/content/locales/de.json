@@ -179,6 +179,7 @@
     "spinning": "Das Rad dreht …",
     "fixedNotice": "Festes Genre: Es wird nicht gedreht, alle Runden laufen mit diesem Genre.",
     "resultLabel": "Genre",
+    "kicker": "Das Rad hat gesprochen",
     "announcement": "Genre gezogen: {{genre}}"
   },
   "submission": {

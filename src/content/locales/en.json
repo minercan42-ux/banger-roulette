@@ -179,6 +179,7 @@
     "spinning": "Spinning …",
     "fixedNotice": "Fixed genre: no spin, every round uses this genre.",
     "resultLabel": "Genre",
+    "kicker": "The wheel has spoken",
     "announcement": "Genre drawn: {{genre}}"
   },
   "submission": {
