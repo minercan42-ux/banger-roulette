@@ -9,10 +9,16 @@ interface LinkedAnimationProps {
   showEmptyMarker: boolean;
   /**
    * Server time since the moment started, for a view that mounts late (reload
-   * during the reveal): the animation joins at that offset so every client is
-   * in the same frame. Read once at mount; 0 plays from the start.
+   * during the reveal or the preroll): the animation joins at that offset so
+   * every client is in the same frame. Read when the animation mounts and
+   * again on every pause/resume; 0 plays from the start.
    */
   elapsedMs?: number;
+  /**
+   * The shared timeline is frozen (host pause): the animation holds at
+   * `elapsedMs` and continues from there on resume.
+   */
+  paused?: boolean;
 }
 
 /** Owner names are only shown once the reveal made them public (AK-3). */
@@ -20,12 +26,29 @@ const isNamed = (song: SongView) =>
   song.ownersVisible && song.owners.length > 0;
 
 /**
+ * Server time elapsed in the playback preroll of the first song: the preroll
+ * starts `prerollMs` before `startAt` and is frozen at the pause instant while
+ * the host paused, so every client sits at the same frame.
+ */
+export function prerollElapsedMs(
+  view: { startAt: number; prerollMs: number; pausedAt: number | null },
+  now: number,
+): number {
+  const reference = view.pausedAt ?? now;
+  return Math.min(
+    view.prerollMs,
+    Math.max(0, reference - (view.startAt - view.prerollMs)),
+  );
+}
+
+/**
  * FR-26 "Spiritually Linked" (docs/design/pixel-filz/components/SpiritLinked):
  * songs several players submitted under the same video id collapse into one
  * entry with multiple owners. Two flipped cards fly together, a golden chain
- * links them and the banner stamps on. The timeline is pure CSS keyed to mount
- * time (no client-side randomness). While anonymity is on, `SongView.owners` is
- * empty, so no name can leak before the reveal (AK-3).
+ * links them and the banner stamps on. The timeline is pure CSS that joins at
+ * the server-derived `elapsedMs` (no client-side randomness, no mount-time
+ * dependence). While anonymity is on, `SongView.owners` is empty, so no name
+ * can leak before the reveal (AK-3).
  *
  * Reduced motion (CSS): the cards rest side by side, the chain is gone and the
  * banner and names fade in.
@@ -34,27 +57,40 @@ export function LinkedAnimation({
   songs,
   showEmptyMarker,
   elapsedMs = 0,
+  paused = false,
 }: LinkedAnimationProps) {
   const { t } = useTranslation();
   const { consented } = useEmbedConsent();
   const rootRef = useRef<HTMLElement>(null);
-  const joinedAt = useRef(elapsedMs);
+  const latestElapsed = useRef(elapsedMs);
+  const wasPaused = useRef(false);
   const linked = songs.filter((song) => song.linked);
   const hasLinked = linked.length > 0;
 
   useLayoutEffect(() => {
+    latestElapsed.current = elapsedMs;
+  });
+
+  useLayoutEffect(() => {
+    const resumed = wasPaused.current && !paused;
+    wasPaused.current = paused;
     const root = rootRef.current;
     if (
       !root ||
-      joinedAt.current <= 0 ||
+      (!paused && !resumed && latestElapsed.current <= 0) ||
       typeof root.getAnimations !== 'function'
     ) {
       return;
     }
     for (const animation of root.getAnimations({ subtree: true })) {
-      animation.currentTime = joinedAt.current;
+      animation.currentTime = latestElapsed.current;
+      if (paused) {
+        animation.pause();
+      } else if (resumed) {
+        animation.play();
+      }
     }
-  }, [hasLinked]);
+  }, [hasLinked, paused]);
 
   if (!hasLinked) {
     return showEmptyMarker ? (

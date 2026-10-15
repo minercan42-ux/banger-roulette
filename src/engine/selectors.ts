@@ -9,7 +9,7 @@ import type {
 } from '../shared/game';
 import type { Genre, Media } from '../shared/primitives';
 import type { Settings } from '../shared/settings';
-import { REVEAL_PER_SONG_MS } from './reducer';
+import { PRE_ROLL_MS, REVEAL_PER_SONG_MS } from './reducer';
 import { MAX_PLAYERS, MIN_PLAYERS, isActivePlayer, sortPlayers } from './state';
 
 /**
@@ -109,6 +109,8 @@ export interface PlaybackView {
   /** Absolute server-normalized timestamps, shifted together on resume. */
   startAt: number;
   deadlineAt: number;
+  /** Length of the shared preroll that ends at `startAt` (first song only). */
+  prerollMs: number;
   pausedAt: number | null;
   flaggedByViewer: boolean;
   canFlag: boolean;
@@ -410,6 +412,7 @@ export function selectPlayback(
     index: state.phase.index,
     songCount: state.round.playbackOrder.length,
     startAt: state.phase.startAt,
+    prerollMs: PRE_ROLL_MS,
     deadlineAt: state.phase.deadlineAt,
     pausedAt: state.pause?.at ?? null,
     flaggedByViewer: (state.round.genreFailFlags[viewerId] ?? []).includes(

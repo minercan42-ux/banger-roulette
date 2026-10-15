@@ -11,7 +11,7 @@ import type { PlaybackPlan, PlaybackStatus } from '../player/playback';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
 import { formatDuration } from './format';
-import { LinkedAnimation } from './LinkedAnimation';
+import { LinkedAnimation, prerollElapsedMs } from './LinkedAnimation';
 import { usePlaybackControllerContext } from './playback-controller';
 import { Button } from './pf/Button';
 import { Hand } from './pf/Hand';
@@ -226,7 +226,12 @@ export function PlaybackPhase({
           <p data-testid="playback-preroll" className="br-read">
             {t('later.playbackPreroll')}
           </p>
-          <LinkedAnimation songs={songs} showEmptyMarker />
+          <LinkedAnimation
+            songs={songs}
+            showEmptyMarker
+            elapsedMs={prerollElapsedMs(view, now)}
+            paused={view.pausedAt !== null}
+          />
         </div>
       )}
 
