@@ -122,7 +122,7 @@ Die vordefinierte Genre-Liste umfasst mindestens 30 Genres und liegt als `src/co
 - FR-62 Finale: Podium, Liste aller Rundensieger-Banger mit Links, Button "Nochmal" (zurück in die Lobby, Einstellungen bleiben erhalten).
 
 ## 6. UI und UX
-- Casino-Flair: dunkles Filzgrün, Schwarz und Gold, Neon-Akzente, Chips, Roulette-Rad, Jackpot-Effekte. Dezente Soundeffekte (eigene oder CC0, lokal gehostet, abschaltbar).
+- Pixel-Filz: spielerischer Casino-Tisch im Pixel-Look. Dunkler Filz mit langsam wirbelndem Hintergrund, Songs als Spielkarten, Punkte als Chips und Combos, spürbare Bewegung bei jedem Spielereignis. Design-Referenz: docs/design/pixel-filz/ (Brand Book, Tokens, Bausteine). Dezente Soundeffekte (synthetisiert oder CC0, lokal, abschaltbar).
 - Keine urheberrechtlich geschützten Assets ohne Lizenz, keine fremden Logos.
 - `prefers-reduced-motion` wird respektiert.
 - Accessibility: vollständige Tastaturbedienung, Kontraste nach WCAG AA, `aria-live` für Phasenwechsel und Timer.
