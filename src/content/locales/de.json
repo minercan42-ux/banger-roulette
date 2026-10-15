@@ -79,7 +79,7 @@
     "title": "Datenschutz",
     "embed": "Videos werden von youtube-nocookie.com eingebettet, und zwar erst nach deiner Zustimmung in diesem Tab.",
     "noTracking": "Diese App nutzt keine Analyse-Tools und setzt keine Cookies.",
-    "storage": "Gespeichert wird nur eine zufällige Spieler-ID im localStorage deines Browsers."
+    "storage": "Gespeichert wird nur eine zufällige Spieler-ID im localStorage deines Browsers, damit dich ein Neuladen wiedererkennt. Kein Konto, kein Spielstand."
   },
   "lobby": {
     "heading": "Lobby",
