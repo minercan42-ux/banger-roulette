@@ -34,8 +34,11 @@ const BOUNDS = {
   submissionSeconds: { min: 30, max: 300 },
   clipSeconds: { min: 15, max: 60 },
   votingSeconds: { min: 30, max: 180 },
-  genreFailPenalty: { min: -10, max: 0 },
+  genreFailPenalty: { min: -10, max: -1 },
 } as const;
+
+/** Penalty restored when the host switches genre-fail back on (SPEC §5.2). */
+const GENRE_FAIL_DEFAULT = -3;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -220,6 +223,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
 
   const validation = validateDraft(draft);
   const disabled = !canEdit || busy;
+  const genreFailEnabled = draft.genreFailPenalty !== 0;
   const statusText = busy
     ? t('settings.saving')
     : errorKey
@@ -367,18 +371,45 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-cream-100/80">
+        <div
+          role="group"
+          aria-labelledby="settings-genre-fail-heading"
+          className="flex flex-col gap-1 text-sm"
+        >
+          <span id="settings-genre-fail-heading" className="text-cream-100/80">
             {t('settings.genreFailPenalty')}
           </span>
+          <label className="flex items-center gap-2 text-xs text-cream-100/70">
+            <input
+              type="checkbox"
+              data-testid="settings-genre-fail-enabled"
+              aria-labelledby="settings-genre-fail-heading settings-genre-fail-toggle"
+              aria-describedby="settings-genre-fail-help"
+              checked={genreFailEnabled}
+              disabled={disabled}
+              onChange={(event) =>
+                update({
+                  genreFailPenalty: event.target.checked
+                    ? GENRE_FAIL_DEFAULT
+                    : 0,
+                })
+              }
+              className="size-4 accent-gold-400"
+            />
+            <span id="settings-genre-fail-toggle">
+              {t('settings.genreFailEnabled')}
+            </span>
+          </label>
           <input
             type="number"
             data-testid="settings-genre-fail-penalty"
+            aria-labelledby="settings-genre-fail-heading"
+            aria-describedby="settings-genre-fail-help"
             min={BOUNDS.genreFailPenalty.min}
             max={BOUNDS.genreFailPenalty.max}
             step={1}
-            value={draft.genreFailPenalty}
-            disabled={disabled}
+            value={genreFailEnabled ? draft.genreFailPenalty : ''}
+            disabled={disabled || !genreFailEnabled}
             onChange={(event) =>
               update({
                 genreFailPenalty: clamp(
@@ -390,10 +421,23 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             }
             className="casino-field rounded-md border bg-felt-950 px-2 py-1 text-cream-100 disabled:opacity-60"
           />
-          <span className="text-xs text-cream-100/50">
-            {t('settings.genreFailPenaltyHint')}
-          </span>
-        </label>
+          {genreFailEnabled ? (
+            <span
+              id="settings-genre-fail-help"
+              className="text-xs text-cream-100/50"
+            >
+              {t('settings.genreFailPenaltyHint')}
+            </span>
+          ) : (
+            <span
+              id="settings-genre-fail-help"
+              data-testid="settings-genre-fail-off"
+              className="text-xs text-cream-100/50"
+            >
+              {t('settings.genreFailOff')}
+            </span>
+          )}
+        </div>
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-cream-100/80">
