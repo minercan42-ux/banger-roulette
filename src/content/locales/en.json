@@ -119,6 +119,10 @@
     "soundLocked_other": "{{count}} players without sound",
     "playersConnected": "Active: {{connected}} of {{min}}–{{max}}"
   },
+  "sfx": {
+    "on": "SFX on",
+    "off": "SFX off"
+  },
   "settings": {
     "heading": "Rules",
     "modeLabel": "Genre mode",

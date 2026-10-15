@@ -90,7 +90,9 @@ test('Home: every focusable control shows the gold focus ring on Tab', async ({
     const tags = stops.map((stop) => stop.tag);
     expect(tags).toContain('SELECT');
     expect(tags.filter((tag) => tag === 'INPUT')).toHaveLength(3);
-    expect(tags.filter((tag) => tag === 'BUTTON')).toHaveLength(2);
+    // Home buttons: create room, join room and the shell's sound-effects
+    // toggle, which the header owns since SPEC 6 effects exist.
+    expect(tags.filter((tag) => tag === 'BUTTON')).toHaveLength(3);
     expectRing(stops);
   } finally {
     await closeStages([host]);

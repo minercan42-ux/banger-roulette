@@ -11,6 +11,7 @@ import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
 import { RoomView } from './RoomView';
 import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
+import { useSfxStore } from './sfx-store';
 
 const ERROR_CODES = new Set<string>([...SESSION_FAILURES, ...REJECTIONS]);
 
@@ -50,6 +51,8 @@ export function Shell({ session }: { session: GameSession }) {
   const { t } = useTranslation();
   const language = useLanguageStore((store) => store.language);
   const setLanguage = useLanguageStore((store) => store.setLanguage);
+  const sfxEnabled = useSfxStore((store) => store.enabled);
+  const setSfxEnabled = useSfxStore((store) => store.setEnabled);
   const snapshot = useSessionSnapshot(session);
   const [route, navigate] = useRoute();
   const [noticeError, setNoticeError] = useState<SessionError | null>(null);
@@ -210,7 +213,18 @@ export function Shell({ session }: { session: GameSession }) {
               {t('app.title')}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-testid="sfx-toggle"
+              aria-pressed={sfxEnabled}
+              onClick={() => {
+                setSfxEnabled(!sfxEnabled);
+              }}
+              className="casino-ghost px-2 py-1 text-sm"
+            >
+              {sfxEnabled ? t('sfx.on') : t('sfx.off')}
+            </button>
             <label
               htmlFor="language-switch"
               className="text-xs text-gold-300/80"
