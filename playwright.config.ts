@@ -16,9 +16,10 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
   },
-  // NFR-05: pull requests stay Chromium-only (Actions minute budget); Firefox
-  // and WebKit run on `main` and on `workflow_dispatch` in the
-  // `e2e-cross-browser` CI job. `pnpm test:e2e` runs all three projects.
+  // NFR-05: pull requests and pushes to `main` stay Chromium-only (Actions
+  // minute budget); Firefox and WebKit run nightly (`schedule`) and on
+  // `workflow_dispatch` in the `e2e-cross-browser` CI job. `pnpm test:e2e`
+  // runs all three projects.
   projects: [
     { name: 'chromium', use: { browserName: 'chromium' } },
     { name: 'firefox', use: { browserName: 'firefox' } },

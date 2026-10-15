@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Nightly Firefox/WebKit run (NFR-05, Actions minute budget). On a `schedule`
+  # run only `verify` and `e2e-cross-browser` execute; the Chromium shards, the
+  # CSP suite and Lighthouse stay push/pull_request-only, see their `if`.
+  schedule:
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -38,6 +43,9 @@ jobs:
   # check that keeps the pre-sharding name `E2E (Playwright)`.
   e2e-shard:
     name: E2E shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }} (chromium)
+    # Chromium covers every PR and push; the nightly `schedule` run is the
+    # Firefox/WebKit job only.
+    if: github.event_name != 'schedule'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -68,6 +76,7 @@ jobs:
   # Production-CSP suite: runs once per PR, not per shard.
   e2e-csp:
     name: E2E production CSP (chromium)
+    if: github.event_name != 'schedule'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -94,7 +103,7 @@ jobs:
     name: E2E (Playwright)
     # Runs even when a shard failed so the merged report exists, then fails
     # itself unless every shard and the CSP suite succeeded.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name != 'schedule' }}
     needs: [e2e-shard, e2e-csp]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -130,6 +139,7 @@ jobs:
 
   lighthouse:
     name: Lighthouse (desktop >= 90, mobile >= 80)
+    if: github.event_name != 'schedule'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -159,8 +169,10 @@ jobs:
 
   e2e-cross-browser:
     name: E2E cross-browser (${{ matrix.browser }})
-    # NFR-05: pull requests stay Chromium-only (Actions minute budget).
-    if: github.event_name != 'pull_request'
+    # NFR-05 (Actions minute budget): Chromium-only for pull requests and for
+    # pushes to `main`; Firefox and WebKit run nightly (`schedule`, 03:00 UTC)
+    # and on demand (`workflow_dispatch`) only.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30

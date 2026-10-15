@@ -48,7 +48,7 @@ Append `?debug=1` to a room URL to inspect clock offset/RTT/synchronization, pla
 
 Chrome, Firefox, Edge (Chromium-based) and Safari are supported in their current versions (NFR-05); iOS Safari is checked manually on a real device and is not part of CI.
 
-`playwright.config.ts` defines the projects `chromium`, `firefox` and `webkit` ([#50](https://github.com/minercan42-ux/banger-roulette/pull/50)). Pull requests stay Chromium-only because of the Actions minute budget; `main` and manual runs (`workflow_dispatch`) also run the `e2e-cross-browser` CI job for Firefox and WebKit. Locally: `pnpm exec playwright install firefox webkit` (never `--with-deps`, never sudo), then `pnpm test:e2e --project=firefox` or `--project=webkit`.
+`playwright.config.ts` defines the projects `chromium`, `firefox` and `webkit` ([#50](https://github.com/minercan42-ux/banger-roulette/pull/50)). Pull requests and pushes to `main` stay Chromium-only because of the Actions minute budget; the nightly `schedule` run (03:00 UTC) and manual runs (`workflow_dispatch`) also run the `e2e-cross-browser` CI job for Firefox and WebKit. Locally: `pnpm exec playwright install firefox webkit` (never `--with-deps`, never sudo), then `pnpm test:e2e --project=firefox` or `--project=webkit`.
 
 Known Firefox issue: the submission preview iframe stays in the tab order and can trap Tab ([#57](https://github.com/minercan42-ux/banger-roulette/issues/57), one harness test is marked `fixme` for it).
 
