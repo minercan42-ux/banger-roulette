@@ -221,6 +221,21 @@ test('360 px: the drawer is a keyboard-accessible dialog', async ({
     await expect(page.getByTestId('drawer-close')).toBeFocused();
     await expect(page.getByTestId('sound-status')).toBeVisible();
 
+    // Moving the control from the stage to the drawer keeps the permission
+    // enabled in the lobby: no second click, one control, roster agrees.
+    await expect(page.getByTestId('sound-control')).toHaveCount(1);
+    await expect(drawer.getByTestId('sound-control')).toHaveCount(1);
+    await expect(page.getByTestId('sound-status')).toHaveAttribute(
+      'data-unlocked',
+      'true',
+    );
+    await expect(page.getByTestId('sound-consent')).toHaveCount(0);
+    await expect(
+      page
+        .locator('[data-testid="roster-row"][data-self="true"]')
+        .getByTestId('player-sound-status'),
+    ).toHaveAttribute('data-unlocked', 'true');
+
     // Tab and Shift+Tab wrap inside the dialog.
     for (let step = 0; step < 6; step += 1) {
       await page.keyboard.press('Tab');

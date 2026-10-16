@@ -1,80 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { GameSession } from '../net/session';
-import { releaseAudioContext, unlockAudioContext } from './audio-context';
 import { Badge } from './pf/Badge';
 import { Button } from './pf/Button';
 import { Panel } from './pf/Panel';
+import type { SoundUnlock } from './useSoundUnlock';
 
 interface SoundControlProps {
-  session: GameSession;
+  sound: SoundUnlock;
   canWrite: boolean;
-  unlocked: boolean;
 }
 
 /**
- * FR-07 local audio unlock. The consent click really resumes an AudioContext
- * and only then reports SOUND_STATUS. It proves the browser permits audio, not
- * YouTube autoplay: only an actual PLAYING event does that (M4 player). Any
- * failure resets to `false`.
+ * FR-07 consent control. Presentation only: the unlock state and the shared
+ * AudioContext live in `useSoundUnlock` (room lifetime), so this component may
+ * unmount and remount when the layout moves it without losing the permission.
  */
-export function SoundControl({
-  session,
-  canWrite,
-  unlocked,
-}: SoundControlProps) {
+export function SoundControl({ sound, canWrite }: SoundControlProps) {
   const { t } = useTranslation();
-  const [busy, setBusy] = useState(false);
-  const [errorKey, setErrorKey] = useState<string | null>(null);
-  const [locallyUnlocked, setLocallyUnlocked] = useState(false);
-  const resetInFlight = useRef(false);
-  const soundReady = locallyUnlocked && unlocked;
-
-  // A retained actor's old flag is not proof of this tab's audio permission.
-  useEffect(() => {
-    if (!canWrite || !unlocked || locallyUnlocked || resetInFlight.current) {
-      return;
-    }
-    resetInFlight.current = true;
-    void session
-      .dispatch({ type: 'SOUND_STATUS', unlocked: false })
-      .finally(() => {
-        resetInFlight.current = false;
-      });
-  }, [canWrite, unlocked, locallyUnlocked, session]);
-
-  // Leaving the room drops the shared context the sfx director plays on; a
-  // later consent click in the next room creates a fresh one.
-  useEffect(() => () => releaseAudioContext(), []);
-
-  async function enable() {
-    if (busy || !canWrite || soundReady) {
-      return;
-    }
-    setBusy(true);
-    setErrorKey(null);
-    try {
-      await unlockAudioContext();
-      setLocallyUnlocked(true);
-      const result = await session.dispatch({
-        type: 'SOUND_STATUS',
-        unlocked: true,
-      });
-      if (result.status === 'rejected') {
-        setErrorKey(`errors.${result.reason}`);
-      }
-    } catch {
-      setLocallyUnlocked(false);
-      setErrorKey('sound.failed');
-      if (canWrite) {
-        await session
-          .dispatch({ type: 'SOUND_STATUS', unlocked: false })
-          .catch(() => undefined);
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+  const { soundReady, busy, errorKey, enable } = sound;
 
   return (
     <Panel as="section" data-testid="sound-control" className="space-y-3">

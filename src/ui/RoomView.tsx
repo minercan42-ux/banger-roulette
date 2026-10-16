@@ -30,6 +30,7 @@ import { SettingsForm } from './SettingsForm';
 import { SfxDirector } from './SfxDirector';
 import { SoundControl } from './SoundControl';
 import { SubmissionPanel } from './SubmissionPanel';
+import { useSoundUnlock } from './useSoundUnlock';
 
 interface RoomViewProps {
   session: GameSession;
@@ -85,6 +86,15 @@ export function RoomView({
     hostRef: playbackHostRef,
   });
 
+  // FR-07: the unlock state and AudioContext belong to the room view, not to
+  // the SoundControl that the layout moves between the stage and the drawer.
+  const canWriteSelf = self !== undefined && permissions.canWrite;
+  const sound = useSoundUnlock(
+    session,
+    canWriteSelf,
+    self?.soundUnlocked ?? false,
+  );
+
   async function copyLink() {
     try {
       if (!navigator.clipboard) {
@@ -106,13 +116,7 @@ export function RoomView({
   }
 
   const lobby = room.phase === 'LOBBY';
-  const soundControl = (
-    <SoundControl
-      session={session}
-      canWrite={self !== undefined && permissions.canWrite}
-      unlocked={self?.soundUnlocked ?? false}
-    />
-  );
+  const soundControl = <SoundControl sound={sound} canWrite={canWriteSelf} />;
 
   const stage = (
     <div data-testid="room-view" data-phase={room.phase} className="space-y-4">
