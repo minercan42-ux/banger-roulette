@@ -162,6 +162,19 @@ for (const reducedMotion of [false, true] as const) {
         await expect
           .poll(async () => (await playStates(host)).includes('running'))
           .toBe(false);
+        // A pause is only in effect once the next frame has committed it: a
+        // pending pause still reports `paused` while its time keeps running.
+        await expect
+          .poll(() =>
+            host.evaluate(
+              () =>
+                document
+                  .querySelector('[data-testid="banger-show"]')
+                  ?.getAnimations({ subtree: true })
+                  .some((animation) => animation.pending) ?? false,
+            ),
+          )
+          .toBe(false);
         const frozen = await host.evaluate(() => {
           const root = document.querySelector('[data-testid="banger-show"]');
           return (
