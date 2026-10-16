@@ -715,6 +715,122 @@ test('the playback player is pre-warmed during SUBMISSION and reused into PLAYBA
   }
 });
 
+test('the video leads the playback stage, locked behind a pointer shield', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const stages = await Promise.all([
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [alice] = stages;
+    await assembleRoom(alice, stages.slice(1));
+    await enterSubmission(stages.map((stage) => stage.page));
+    await submitAll(stages, [SONG_A, SONG_B, SONG_C]);
+    for (const stage of stages) {
+      await enablePlaybackDebug(stage.page);
+    }
+    await finishToPlayback(stages);
+    await waitForPlaybackState(alice.page, 'playing', 20000);
+
+    const page = alice.page;
+    const iframe = page.locator('[data-testid="playback-host"] iframe');
+    await expect(iframe).toHaveCount(1);
+
+    // No YouTube UI: the embed URL carries the locked player parameters.
+    const src = (await iframe.getAttribute('src')) ?? '';
+    const embed = new URL(src);
+    for (const [name, value] of Object.entries({
+      controls: '0',
+      disablekb: '1',
+      fs: '0',
+      rel: '0',
+      iv_load_policy: '3',
+      playsinline: '1',
+    })) {
+      expect(embed.searchParams.get(name), name).toBe(value);
+    }
+
+    // The shield covers the iframe's bounding box and takes every pointer
+    // event: hover or click on the iframe centre (and near each corner) hits it.
+    const shield = page.getByTestId('playback-shield');
+    await expect(shield).toHaveCount(1);
+    // elementFromPoint only sees the viewport: bring the whole video into it.
+    await shield.scrollIntoViewIfNeeded();
+    const iframeBox = await iframe.boundingBox();
+    const shieldBox = await shield.boundingBox();
+    expect(iframeBox).not.toBeNull();
+    expect(shieldBox).not.toBeNull();
+    expect(shieldBox!.x).toBeLessThanOrEqual(iframeBox!.x + 1);
+    expect(shieldBox!.y).toBeLessThanOrEqual(iframeBox!.y + 1);
+    expect(shieldBox!.x + shieldBox!.width).toBeGreaterThanOrEqual(
+      iframeBox!.x + iframeBox!.width - 1,
+    );
+    expect(shieldBox!.y + shieldBox!.height).toBeGreaterThanOrEqual(
+      iframeBox!.y + iframeBox!.height - 1,
+    );
+    const hits = await page.evaluate(
+      ([x, y, width, height]) =>
+        [
+          [0.5, 0.5],
+          [0.05, 0.05],
+          [0.95, 0.05],
+          [0.05, 0.95],
+          [0.95, 0.95],
+        ].map(
+          ([fx, fy]) =>
+            document
+              .elementFromPoint(x! + width! * fx!, y! + height! * fy!)
+              ?.getAttribute('data-testid') ?? null,
+        ),
+      [iframeBox!.x, iframeBox!.y, iframeBox!.width, iframeBox!.height],
+    );
+    expect(hits).toEqual(Array(5).fill('playback-shield'));
+    // Hover and click on the video leave the playback untouched.
+    await page.mouse.move(
+      iframeBox!.x + iframeBox!.width / 2,
+      iframeBox!.y + iframeBox!.height / 2,
+    );
+    await page.mouse.click(
+      iframeBox!.x + iframeBox!.width / 2,
+      iframeBox!.y + iframeBox!.height / 2,
+    );
+    expect((await readDiagnostics(page)).status).toBe('playing');
+
+    // Stage order: video (16:9, full stage width up to 960 px), then the song
+    // title, the rating bar, the timer and finally the compact card hand.
+    const host = page.getByTestId('playback-host');
+    const hostBox = await host.boundingBox();
+    const phaseBox = await page.getByTestId('playback-phase').boundingBox();
+    expect(hostBox).not.toBeNull();
+    expect(phaseBox).not.toBeNull();
+    expect(hostBox!.width / hostBox!.height).toBeGreaterThan(1.7);
+    expect(hostBox!.width / hostBox!.height).toBeLessThan(1.85);
+    expect(hostBox!.width).toBeGreaterThan(Math.min(960, phaseBox!.width) - 2);
+    expect(hostBox!.width).toBeLessThanOrEqual(960.5);
+    const tops: number[] = [];
+    for (const id of [
+      'playback-host',
+      'playback-title',
+      'rating-section',
+      'playback-timer',
+      'playback-hand',
+    ]) {
+      const box = await page.getByTestId(id).boundingBox();
+      expect(box, id).not.toBeNull();
+      tops.push(box!.y);
+    }
+    expect(tops).toEqual([...tops].sort((a, b) => a - b));
+    // Compact cards: well below the full 124 x 172 size.
+    const card = await page.getByTestId('song-card').first().boundingBox();
+    expect(card!.height).toBeLessThan(150);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
 test('a failed pre-warm is retried when the playback plan arrives', async ({
   browser,
 }) => {

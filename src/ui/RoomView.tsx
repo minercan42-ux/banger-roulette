@@ -170,6 +170,38 @@ export function RoomView({
       <PlaybackControllerContext.Provider value={playback}>
         {!lobby && <PhaseNotices room={room} self={self} />}
 
+        {/* One stable host node across SUBMISSION and PLAYBACK, so the warm
+            player is never moved in the DOM (a move would reload the iframe).
+            It sits before the phase panels so the video leads the PLAYBACK
+            stage; its slot never changes between the two phases. During
+            SUBMISSION it keeps a >=200x200 box (Chrome throttles hidden
+            frames) but is invisible, unfocusable and non-interactive. In
+            PLAYBACK a transparent shield covers the iframe, so hover and
+            clicks never reach the YouTube UI (#95). */}
+        {(room.phase === 'SUBMISSION' || room.phase === 'PLAYBACK') && (
+          <div
+            key="playback-host"
+            ref={playbackHostRef}
+            data-testid="playback-host"
+            data-warm={room.phase === 'SUBMISSION'}
+            aria-hidden={room.phase === 'SUBMISSION' ? true : undefined}
+            tabIndex={room.phase === 'SUBMISSION' ? -1 : undefined}
+            className={
+              room.phase === 'PLAYBACK'
+                ? 'br-stage-video'
+                : 'pointer-events-none fixed top-0 left-0 h-[200px] w-[200px] overflow-hidden opacity-0'
+            }
+          >
+            {room.phase === 'PLAYBACK' && (
+              <div
+                data-testid="playback-shield"
+                aria-hidden="true"
+                className="br-stage-video__shield"
+              />
+            )}
+          </div>
+        )}
+
         {room.phase === 'GENRE_SPIN' && (
           <GenreSpin session={session} state={state} />
         )}
@@ -211,27 +243,6 @@ export function RoomView({
             state={state}
             viewerId={viewerId}
             viewerConnectionId={snapshot.connectionId}
-          />
-        )}
-
-        {/* One stable host node across SUBMISSION and PLAYBACK, so the warm
-            player is never moved in the DOM (a move would reload the iframe).
-            During SUBMISSION it keeps a >=200x200 box (Chrome throttles hidden
-            frames) but is invisible, unfocusable and non-interactive. */}
-        {(room.phase === 'SUBMISSION' || room.phase === 'PLAYBACK') && (
-          <div
-            key="playback-host"
-            ref={playbackHostRef}
-            data-testid="playback-host"
-            data-warm={room.phase === 'SUBMISSION'}
-            aria-hidden={room.phase === 'SUBMISSION' ? true : undefined}
-            tabIndex={room.phase === 'SUBMISSION' ? -1 : undefined}
-            className={
-              room.phase === 'PLAYBACK'
-                ? 'br-panel br-panel--well overflow-hidden p-0'
-                : 'pointer-events-none fixed top-0 left-0 h-[200px] w-[200px] overflow-hidden opacity-0'
-            }
-            style={room.phase === 'PLAYBACK' ? { minHeight: '1px' } : undefined}
           />
         )}
       </PlaybackControllerContext.Provider>
