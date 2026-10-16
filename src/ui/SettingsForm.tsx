@@ -100,30 +100,60 @@ function slugId(
   return id;
 }
 
-function validateDraft(draft: Draft): string | null {
+/** The first validation problem plus the inputs it points at (`c0:de`, `fixed:en`, `add`). */
+interface DraftProblem {
+  key: string;
+  fields: ReadonlySet<string>;
+}
+
+/**
+ * One language is enough per genre: the other name falls back to it. The
+ * saved item (`toSettings`) and the uniqueness check use the same fallback.
+ */
+function effectiveNames(item: GenreDraft): { de: string; en: string } {
+  const de = item.de.trim();
+  const en = item.en.trim();
+  return { de: de || en, en: en || de };
+}
+
+function validateDraft(draft: Draft): DraftProblem | null {
   if (draft.mode === 'custom') {
     if (draft.custom.length < 2) {
-      return 'settings.customNeedTwo';
+      return { key: 'settings.customNeedTwo', fields: new Set(['add']) };
     }
-    const names: string[] = [];
     for (const item of draft.custom) {
-      const de = item.de.trim();
-      const en = item.en.trim();
-      if (de.length === 0 || en.length === 0) {
-        return 'settings.invalid';
+      if (item.de.trim().length === 0 && item.en.trim().length === 0) {
+        return {
+          key: 'settings.invalid',
+          fields: new Set([`${item.key}:de`, `${item.key}:en`]),
+        };
       }
-      names.push(nicknameKey(de), nicknameKey(en));
     }
-    if (new Set(names).size !== names.length) {
-      return 'settings.customUnique';
+    // Unique per genre: two rows clash when their DE names or their EN names
+    // match. Identical DE and EN inside one row is fine.
+    const seen = { de: new Set<string>(), en: new Set<string>() };
+    for (const item of draft.custom) {
+      const names = effectiveNames(item);
+      for (const lang of ['de', 'en'] as const) {
+        const key = nicknameKey(names[lang]);
+        if (seen[lang].has(key)) {
+          const own =
+            item[lang].trim().length > 0 ? lang : lang === 'de' ? 'en' : 'de';
+          return {
+            key: 'settings.customUnique',
+            fields: new Set([`${item.key}:${own}`]),
+          };
+        }
+        seen[lang].add(key);
+      }
     }
   }
   if (draft.mode === 'fixed') {
-    if (
-      draft.fixed.de.trim().length === 0 ||
-      draft.fixed.en.trim().length === 0
-    ) {
-      return 'settings.invalid';
+    const fields = (['de', 'en'] as const)
+      .filter((lang) => draft.fixed[lang].trim().length === 0)
+      .map((lang) => `fixed:${lang}`);
+    if (fields.length > 0) {
+      return { key: 'settings.invalid', fields: new Set(fields) };
     }
   }
   return null;
@@ -137,11 +167,14 @@ function toSettings(draft: Draft): Settings {
       : draft.mode === 'custom'
         ? {
             mode: 'custom',
-            items: draft.custom.map((item) => ({
-              id: slugId('custom', item.de, item.en, used),
-              de: item.de.trim().normalize('NFKC'),
-              en: item.en.trim().normalize('NFKC'),
-            })),
+            items: draft.custom.map((item) => {
+              const names = effectiveNames(item);
+              return {
+                id: slugId('custom', names.de, names.en, used),
+                de: names.de.normalize('NFKC'),
+                en: names.en.normalize('NFKC'),
+              };
+            }),
           }
         : {
             mode: 'fixed',
@@ -151,6 +184,7 @@ function toSettings(draft: Draft): Settings {
               en: draft.fixed.en.trim().normalize('NFKC'),
             },
           };
+
   return {
     genre,
     rounds: draft.rounds,
@@ -196,9 +230,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
   }
 
   async function save() {
-    const validation = validateDraft(draft);
-    if (validation) {
-      setErrorKey(validation);
+    if (validateDraft(draft)) {
       return;
     }
     setBusy(true);
@@ -220,7 +252,8 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
     }
   }
 
-  const validation = validateDraft(draft);
+  const problem = validateDraft(draft);
+  const invalid = (field: string) => problem?.fields.has(field) === true;
   const disabled = !canEdit || busy;
   const genreFailEnabled = draft.genreFailPenalty !== 0;
   const statusText = busy
@@ -434,7 +467,8 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 onChange={(event) =>
                   updateCustom(index, { de: event.target.value })
                 }
-                className="min-w-0 flex-1"
+                invalid={invalid(`${item.key}:de`)}
+                className="min-w-[8rem] flex-1"
               />
               <Field
                 type="text"
@@ -446,7 +480,8 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 onChange={(event) =>
                   updateCustom(index, { en: event.target.value })
                 }
-                className="min-w-0 flex-1"
+                invalid={invalid(`${item.key}:en`)}
+                className="min-w-[8rem] flex-1"
               />
               <Button
                 tone="red"
@@ -469,6 +504,10 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             tone="blue"
             size="sm"
             data-testid="settings-custom-add"
+            aria-describedby={
+              invalid('add') ? 'settings-validation' : undefined
+            }
+            data-invalid={invalid('add') ? 'true' : undefined}
             disabled={disabled || draft.custom.length >= 50}
             onClick={() =>
               update({
@@ -496,6 +535,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             onChange={(event) =>
               update({ fixed: { ...draft.fixed, de: event.target.value } })
             }
+            invalid={invalid('fixed:de')}
             className="min-w-0 flex-1"
           />
           <Field
@@ -508,6 +548,7 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
             onChange={(event) =>
               update({ fixed: { ...draft.fixed, en: event.target.value } })
             }
+            invalid={invalid('fixed:en')}
             className="min-w-0 flex-1"
           />
         </div>
@@ -519,10 +560,18 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
           onClick={() => {
             void save();
           }}
-          disabled={disabled || !dirty || validation !== null}
+          disabled={disabled || !dirty || problem !== null}
         >
           {t('settings.save')}
         </Button>
+        <span
+          id="settings-validation"
+          data-testid="settings-validation"
+          role="status"
+          className="br-read text-red-text"
+        >
+          {canEdit && problem ? t(problem.key) : null}
+        </span>
         {errorKey && (
           <span
             data-testid="settings-error"
