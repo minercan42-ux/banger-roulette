@@ -9,7 +9,7 @@ import type {
 } from '../shared/game';
 import type { Genre, Media } from '../shared/primitives';
 import type { Settings } from '../shared/settings';
-import { PRE_ROLL_MS, REVEAL_PER_SONG_MS } from './reducer';
+import { PRE_ROLL_MS, revealSlotMs } from './reducer';
 import { MAX_PLAYERS, MIN_PLAYERS, isActivePlayer, sortPlayers } from './state';
 
 /**
@@ -63,9 +63,8 @@ export interface PlayerView {
   soundUnlocked: boolean;
   totalScore: number;
   isParticipant: boolean;
-  /** Progress only: never the submitted or ranked content. */
+  /** Progress only: never the submitted content. */
   submissionDone: boolean;
-  votingDone: boolean;
 }
 
 export interface RoomView {
@@ -96,7 +95,6 @@ export interface RoundView {
   genre: Genre;
   participantIds: string[];
   submissionDoneIds: string[];
-  votingDoneIds: string[];
   songs: SongView[];
   playbackIndex: number | null;
   currentVideoId: string | null;
@@ -114,15 +112,34 @@ export interface PlaybackView {
   pausedAt: number | null;
   flaggedByViewer: boolean;
   canFlag: boolean;
+  /** The viewer's own rating of the current song; null while unrated. */
+  rating: number | null;
+  /** The viewer may rate the current song right now (never an owner). */
+  canRate: boolean;
+}
+
+/** One song the viewer may have rated: the current and every earlier one. */
+export interface RatingEntryView {
+  videoId: string;
+  title: string;
+  channel: string;
+  thumbnail: string;
+  /** Zero-based position in the playback order. */
+  index: number;
+  isCurrent: boolean;
+  ownedByViewer: boolean;
+  /** The viewer's own rating; null while unrated (always null for owners). */
+  rating: number | null;
+  canRate: boolean;
 }
 
 export interface ViewerChoices {
   isParticipant: boolean;
   submitted: boolean;
   submissionDone: boolean;
-  votingDone: boolean;
   media: MediaView | null;
-  ranking: string[];
+  /** The viewer's own ratings by video id (never other players' ratings). */
+  ratings: Record<string, number>;
   /** The viewer's own genre-fail flags for the current round. */
   flaggedVideoIds: string[];
 }
@@ -142,8 +159,7 @@ export interface ViewerPermissions {
   canRematch: boolean;
   canSubmit: boolean;
   canFinishSubmission: boolean;
-  canRank: boolean;
-  canFinishVoting: boolean;
+  canRate: boolean;
   canSetGenreFail: boolean;
 }
 
@@ -166,8 +182,14 @@ export interface RevealEntryView {
   owners: OwnerView[];
   ownerCount: number;
   linked: boolean;
-  borda: number;
+  /** Mean rating in tenths (73 = 7.3); 50 when nobody could rate the song. */
+  scoreTenths: number;
+  ratingCount: number;
+  banger: boolean;
+  basis: ScoredSong['basis'];
+  /** Winner bonus in tenths. */
   bonus: number;
+  /** Points the owners earned in tenths, penalty included. */
   roundPoints: number;
   genreFailed: boolean;
   flaggerIds: string[];
@@ -180,6 +202,8 @@ export interface StagedRevealEntryView extends RevealEntryView {
    * A late joiner only sees entries whose `revealAt` is already in the past.
    */
   revealAt: number;
+  /** How long this entry owns the stage: longer for a banger. */
+  slotMs: number;
 }
 
 export interface RevealView {
@@ -190,11 +214,10 @@ export interface RevealView {
   startedAt: number;
   /** Absolute server time the phase ends (hold after the last entry). */
   deadlineAt: number;
-  /** Staging pipeline: entry i is revealed at `startedAt + i * perSongMs`. */
-  perSongMs: number;
+
   /** Frozen reference instant while paused; null while running. */
   pausedAt: number | null;
-  /** Ascending Borda; equal scores keep the frozen submission order. */
+  /** Ascending score (winner last); equal scores keep the frozen submission order. */
   entries: StagedRevealEntryView[];
 }
 
@@ -241,7 +264,6 @@ export interface SettingsView {
   rounds: number;
   submissionSeconds: number;
   clipSeconds: number;
-  votingSeconds: number;
   anonymous: boolean;
   genreFailPenalty: number;
   linkedPoints: Settings['linkedPoints'];
@@ -259,7 +281,6 @@ export function selectSettings(state: GameState): SettingsView {
     rounds: state.settings.rounds,
     submissionSeconds: state.settings.submissionSeconds,
     clipSeconds: state.settings.clipSeconds,
-    votingSeconds: state.settings.votingSeconds,
     anonymous: state.settings.anonymous,
     genreFailPenalty: state.settings.genreFailPenalty,
     linkedPoints: state.settings.linkedPoints,
@@ -350,7 +371,6 @@ export function selectRoster(state: GameState, viewerId: string): PlayerView[] {
       ? round.participantIds.includes(player.id)
       : isActivePlayer(player),
     submissionDone: round ? round.submissionDoneIds.includes(player.id) : false,
-    votingDone: round ? round.votingDoneIds.includes(player.id) : false,
   }));
 }
 
@@ -368,7 +388,6 @@ export function selectRound(
     genre: { ...round.genre },
     participantIds: [...round.participantIds],
     submissionDoneIds: [...round.submissionDoneIds],
-    votingDoneIds: [...round.votingDoneIds],
     songs: roundSongs(state, round, viewerId),
     playbackIndex: phase.type === 'PLAYBACK' ? phase.index : null,
     currentVideoId:
@@ -418,25 +437,43 @@ export function selectPlayback(
     flaggedByViewer: (state.round.genreFailFlags[viewerId] ?? []).includes(
       song.videoId,
     ),
-    canFlag: permittedTargets(
-      state,
-      viewerId,
-      viewerConnectionId,
-      'flag',
-    ).includes(song.videoId),
+    canFlag: permittedFlagTargets(state, viewerId, viewerConnectionId).includes(
+      song.videoId,
+    ),
+    rating: state.round.ratings[viewerId]?.[song.videoId] ?? null,
+    canRate: canRateNow(state, viewerId, viewerConnectionId, song),
   };
 }
 
 /**
- * Songs the viewer may rank: own and linked songs are excluded (FR-40) and the
- * caller must hold the viewer's bound write connection.
+ * The songs the viewer can rate or re-rate while PLAYBACK runs (FR-40): the
+ * current song plus every earlier one, in playback order. Owned songs are
+ * listed with `canRate: false` so the UI can say "your song". Empty outside
+ * PLAYBACK. Only the viewer's own ratings are ever exposed.
  */
-export function selectEligibleSongs(
+export function selectRatingEntries(
   state: GameState,
   viewerId: string,
   viewerConnectionId: string | null,
-): SongView[] {
-  return selectableSongs(state, viewerId, viewerConnectionId, 'rank');
+): RatingEntryView[] {
+  const round = state.round;
+  if (!round || state.phase.type !== 'PLAYBACK') {
+    return [];
+  }
+  const current = state.phase.index;
+  return roundSongs(state, round, viewerId)
+    .slice(0, current + 1)
+    .map((song, index) => ({
+      videoId: song.videoId,
+      title: song.title,
+      channel: song.channel,
+      thumbnail: song.thumbnail,
+      index,
+      isCurrent: index === current,
+      ownedByViewer: song.ownedByViewer,
+      rating: round.ratings[viewerId]?.[song.videoId] ?? null,
+      canRate: canRateNow(state, viewerId, viewerConnectionId, song),
+    }));
 }
 
 /**
@@ -448,7 +485,16 @@ export function selectFlaggableSongs(
   viewerId: string,
   viewerConnectionId: string | null,
 ): SongView[] {
-  return selectableSongs(state, viewerId, viewerConnectionId, 'flag');
+  const round = state.round;
+  const permitted = new Set(
+    permittedFlagTargets(state, viewerId, viewerConnectionId),
+  );
+  if (!round || permitted.size === 0) {
+    return [];
+  }
+  return roundSongs(state, round, viewerId).filter((song) =>
+    permitted.has(song.videoId),
+  );
 }
 
 export function selectViewerChoices(
@@ -461,21 +507,18 @@ export function selectViewerChoices(
       isParticipant: false,
       submitted: false,
       submissionDone: false,
-      votingDone: false,
       media: null,
-      ranking: [],
+      ratings: {},
       flaggedVideoIds: [],
     };
   }
   const submission = round.submissions[viewerId];
-  const ballot = round.ballots[viewerId];
   return {
     isParticipant: round.participantIds.includes(viewerId),
     submitted: submission !== undefined,
     submissionDone: round.submissionDoneIds.includes(viewerId),
-    votingDone: round.votingDoneIds.includes(viewerId),
     media: submission ? { ...submission.media } : null,
-    ranking: ballot ? [...ballot.ranking] : [],
+    ratings: { ...round.ratings[viewerId] },
     flaggedVideoIds: [...(round.genreFailFlags[viewerId] ?? [])],
   };
 }
@@ -505,12 +548,6 @@ export function selectViewerPermissions(
     phase === 'SUBMISSION' &&
     !access.paused &&
     !round.submissionDoneIds.includes(viewerId);
-  const votingOpen =
-    access.participant &&
-    round !== null &&
-    phase === 'VOTING' &&
-    !access.paused &&
-    !round.votingDoneIds.includes(viewerId);
   return {
     canWrite: access.bound,
     isHost: access.isHost,
@@ -525,10 +562,13 @@ export function selectViewerPermissions(
     canRematch: access.isHost && phase === 'FINAL',
     canSubmit: submissionOpen,
     canFinishSubmission: submissionOpen,
-    canRank: votingOpen,
-    canFinishVoting: votingOpen,
+    canRate:
+      access.participant &&
+      round !== null &&
+      phase === 'PLAYBACK' &&
+      !access.paused,
     canSetGenreFail:
-      permittedTargets(state, viewerId, viewerConnectionId, 'flag').length > 0,
+      permittedFlagTargets(state, viewerId, viewerConnectionId).length > 0,
   };
 }
 
@@ -542,19 +582,21 @@ export function selectReveal(state: GameState): RevealView | null {
   if (!result || result.number !== round.number) {
     return null;
   }
+  let revealAt = phase.startedAt;
+  const staged = revealEntries(state, result.songs).map((entry) => {
+    const stagedEntry = { ...entry, revealAt, slotMs: revealSlotMs(entry) };
+    revealAt += stagedEntry.slotMs;
+    return stagedEntry;
+  });
   return {
     roundNumber: result.number,
     genre: { ...result.genre },
     reason: result.reason,
     startedAt: phase.startedAt,
     deadlineAt: phase.deadlineAt,
-    perSongMs: REVEAL_PER_SONG_MS,
     pausedAt: state.pause ? state.pause.at : null,
-    // Worst first: entry i becomes visible at startedAt + i * REVEAL_PER_SONG_MS.
-    entries: revealEntries(state, result.songs).map((entry, index) => ({
-      ...entry,
-      revealAt: phase.startedAt + index * REVEAL_PER_SONG_MS,
-    })),
+    // Worst first: each entry becomes visible once the slots before it ran.
+    entries: staged,
   };
 }
 
@@ -619,8 +661,6 @@ export function selectStandings(
     }));
 }
 
-type TargetKind = 'rank' | 'flag';
-
 interface ViewerAccess {
   round: Round | null;
   /** Round membership (or the lobby active list) used for role display. */
@@ -661,62 +701,42 @@ function viewerAccess(
 }
 
 /**
- * Video ids the viewer may currently act on. Ranking and flagging are locked
- * by FINISH_VOTING; flagging is also set-once during playback but stays
- * retractable during voting, and own or linked songs are never targets.
+ * Video ids the viewer may flag as a genre fail: only during PLAYBACK, once
+ * per song, never an own or linked song.
  */
-function permittedTargets(
+function permittedFlagTargets(
   state: GameState,
   viewerId: string,
   viewerConnectionId: string | null,
-  kind: TargetKind,
 ): string[] {
   const access = viewerAccess(state, viewerId, viewerConnectionId);
   const round = access.round;
   if (!round || !access.participant || access.paused) {
     return [];
   }
-  const finished = round.votingDoneIds.includes(viewerId);
-  if (kind === 'rank') {
-    if (access.phase !== 'VOTING' || finished) {
-      return [];
-    }
-  } else {
-    if (access.phase !== 'PLAYBACK' && access.phase !== 'VOTING') {
-      return [];
-    }
-    if (access.phase === 'VOTING' && finished) {
-      return [];
-    }
+  if (access.phase !== 'PLAYBACK') {
+    return [];
   }
   const flagged = round.genreFailFlags[viewerId] ?? [];
   return round.songs
     .filter((song) => !song.ownerIds.includes(viewerId))
-    .filter(
-      (song) =>
-        kind === 'rank' ||
-        access.phase === 'VOTING' ||
-        !flagged.includes(song.media.videoId),
-    )
+    .filter((song) => !flagged.includes(song.media.videoId))
     .map((song) => song.media.videoId);
 }
 
-/** Ordered view of the songs the viewer may act on right now. */
-function selectableSongs(
+/** Whether the viewer may rate this song right now (FR-40). */
+function canRateNow(
   state: GameState,
   viewerId: string,
   viewerConnectionId: string | null,
-  kind: TargetKind,
-): SongView[] {
-  const round = state.round;
-  const permitted = new Set(
-    permittedTargets(state, viewerId, viewerConnectionId, kind),
-  );
-  if (!round || permitted.size === 0) {
-    return [];
-  }
-  return roundSongs(state, round, viewerId).filter((song) =>
-    permitted.has(song.videoId),
+  song: SongView,
+): boolean {
+  const access = viewerAccess(state, viewerId, viewerConnectionId);
+  return (
+    access.participant &&
+    !access.paused &&
+    access.phase === 'PLAYBACK' &&
+    !song.ownedByViewer
   );
 }
 
@@ -728,8 +748,6 @@ function phaseTotalMs(state: GameState, phase: Phase): number | null {
       return state.settings.submissionSeconds * 1000;
     case 'PLAYBACK':
       return phase.deadlineAt - phase.startAt;
-    case 'VOTING':
-      return state.settings.votingSeconds * 1000;
     case 'REVEAL':
       return phase.deadlineAt - phase.startedAt;
     default:
@@ -781,13 +799,13 @@ function revealEntries(
   scored: readonly ScoredSong[],
 ): RevealEntryView[] {
   // Ascending placement (FR-60): winners always close the reveal, even when a
-  // genre-failed song collected more Borda points and lost the bonus.
+  // genre-failed song scored higher and lost the bonus.
   return scored
     .map((scoredSong, index) => ({ scoredSong, index }))
     .sort(
       (a, b) =>
         Number(a.scoredSong.winner) - Number(b.scoredSong.winner) ||
-        a.scoredSong.borda - b.scoredSong.borda ||
+        a.scoredSong.scoreTenths - b.scoredSong.scoreTenths ||
         a.index - b.index,
     )
     .map(({ scoredSong }) => toRevealEntry(state, scoredSong));
@@ -813,7 +831,10 @@ function toRevealEntry(state: GameState, scored: ScoredSong): RevealEntryView {
     owners: scored.song.ownerIds.map((id) => ownerView(state, id)),
     ownerCount: scored.song.ownerIds.length,
     linked: scored.song.ownerIds.length > 1,
-    borda: scored.borda,
+    scoreTenths: scored.scoreTenths,
+    ratingCount: scored.ratingCount,
+    banger: scored.banger,
+    basis: scored.basis,
     bonus: scored.bonus,
     roundPoints: scored.ownerDeltas[firstOwner],
     genreFailed: scored.genreFailed,

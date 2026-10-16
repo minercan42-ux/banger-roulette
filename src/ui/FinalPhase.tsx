@@ -9,7 +9,7 @@ import {
 } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
-import { genreName } from './format';
+import { formatTenths, genreName } from './format';
 
 interface FinalPhaseProps {
   session: GameSession;
@@ -103,7 +103,9 @@ export function FinalPhase({
                       )}
                     </span>
                     <span className="br-podium__pts">
-                      {t('leaderboard.score', { points: player.totalScore })}
+                      {t('leaderboard.score', {
+                        points: formatTenths(player.totalScore),
+                      })}
                     </span>
                   </li>
                 ))}
@@ -138,9 +140,11 @@ export function FinalPhase({
                 )}
               </span>
               <span className="br-lb__pts whitespace-nowrap">
-                <span aria-hidden="true">{row.totalScore}</span>
+                <span aria-hidden="true">{formatTenths(row.totalScore)}</span>
                 <span className="sr-only">
-                  {t('leaderboard.score', { points: row.totalScore })}
+                  {t('leaderboard.score', {
+                    points: formatTenths(row.totalScore),
+                  })}
                 </span>
               </span>
             </li>
@@ -189,9 +193,7 @@ export function FinalPhase({
                   <p className="br-read mt-1">
                     {result.reason === 'noSongs'
                       ? t('final.roundNoSongs')
-                      : result.reason === 'singleSong'
-                        ? t('final.roundSingleSong')
-                        : t('final.roundAllFailed')}
+                      : t('final.roundAllFailed')}
                   </p>
                 )}
               </li>

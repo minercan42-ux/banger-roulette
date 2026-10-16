@@ -13,7 +13,7 @@ import { nicknameKey } from '../shared/primitives';
 import type { RejectionSchema } from '../shared/protocol';
 import type { Settings } from '../shared/settings';
 import { drawGenre, shuffle } from './rng';
-import { scoreRound } from './scoring';
+import { MAX_RATING, scoreRound } from './scoring';
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -30,6 +30,8 @@ export const SPIN_MS = 3000;
 export const FIXED_INTRO_MS = 1000;
 export const PRE_ROLL_MS = 3000;
 export const REVEAL_PER_SONG_MS = 2500;
+/** Longer reveal slot for a banger entry (every rating a 10). */
+export const BANGER_REVEAL_MS = 5000;
 export const REVEAL_HOLD_MS = 5000;
 
 export type CommandRejection = z.infer<typeof RejectionSchema>;
@@ -190,60 +192,38 @@ export function classifyCommand(
       }
       return null;
     }
-    case 'SET_RANKING': {
-      if (!round || phase !== 'VOTING' || state.pause) {
+    case 'RATE': {
+      if (!round || state.phase.type !== 'PLAYBACK' || state.pause) {
         return 'WRONG_PHASE';
       }
       if (!round.participantIds.includes(actorId)) {
         return 'FORBIDDEN';
       }
-      if (round.votingDoneIds.includes(actorId)) {
-        return 'FORBIDDEN';
-      }
-      if (new Set(command.ranking).size !== command.ranking.length) {
-        return 'INVALID';
-      }
       if (
-        !command.ranking.every((videoId) =>
-          round.songs.some(
-            (song) =>
-              song.media.videoId === videoId &&
-              !song.ownerIds.includes(actorId),
-          ),
-        )
+        !Number.isInteger(command.value) ||
+        command.value < 0 ||
+        command.value > MAX_RATING
       ) {
         return 'INVALID';
       }
-      const current = round.ballots[actorId];
+      const song = round.songs.find(
+        (candidate) => candidate.media.videoId === command.songId,
+      );
+      // A song opens for rating when it starts (preroll included) and stays
+      // open until the PLAYBACK phase ends.
       if (
-        current &&
-        current.ranking.length === command.ranking.length &&
-        current.ranking.every(
-          (videoId, index) => videoId === command.ranking[index],
-        )
+        !song ||
+        song.ownerIds.includes(actorId) ||
+        round.playbackOrder.indexOf(command.songId) > state.phase.index
       ) {
-        return 'NOT_READY';
+        return 'INVALID';
       }
-      return null;
-    }
-    case 'FINISH_VOTING': {
-      if (!round || phase !== 'VOTING' || state.pause) {
-        return 'WRONG_PHASE';
-      }
-      if (!round.participantIds.includes(actorId)) {
-        return 'FORBIDDEN';
-      }
-      if (round.votingDoneIds.includes(actorId)) {
-        return 'FORBIDDEN';
-      }
-      return null;
+      return round.ratings[actorId]?.[command.songId] === command.value
+        ? 'NOT_READY'
+        : null;
     }
     case 'SET_GENRE_FAIL': {
-      if (
-        !round ||
-        (phase !== 'PLAYBACK' && phase !== 'VOTING') ||
-        state.pause
-      ) {
+      if (!round || phase !== 'PLAYBACK' || state.pause) {
         return 'WRONG_PHASE';
       }
       if (!round.participantIds.includes(actorId)) {
@@ -258,13 +238,7 @@ export function classifyCommand(
       const flagged = (round.genreFailFlags[actorId] ?? []).includes(
         command.videoId,
       );
-      if (phase === 'PLAYBACK') {
-        return command.flagged && !flagged ? null : 'INVALID';
-      }
-      if (round.votingDoneIds.includes(actorId)) {
-        return 'FORBIDDEN';
-      }
-      return command.flagged === flagged ? 'INVALID' : null;
+      return command.flagged && !flagged ? null : 'INVALID';
     }
     case 'ADVANCE':
     case 'PAUSE': {
@@ -460,35 +434,25 @@ function applyCommand(state: GameState, action: CommandAction): GameState {
         ? enterPlaybackOrReveal(drafted, at)
         : { ...drafted, stateVersion: drafted.stateVersion + 1 };
     }
-    case 'SET_RANKING': {
-      if (!round || phaseType !== 'VOTING') {
+    case 'RATE': {
+      if (!round || phaseType !== 'PLAYBACK') {
         return state;
       }
       return commit({
         round: {
           ...round,
-          ballots: {
-            ...round.ballots,
-            [actorId]: { ranking: [...command.ranking] },
+          ratings: {
+            ...round.ratings,
+            [actorId]: {
+              ...round.ratings[actorId],
+              [command.songId]: command.value,
+            },
           },
         },
       });
     }
-    case 'FINISH_VOTING': {
-      if (!round || phaseType !== 'VOTING') {
-        return state;
-      }
-      const drafted: GameState = {
-        ...state,
-        round: { ...round, votingDoneIds: [...round.votingDoneIds, actorId] },
-        appliedCommandIds: rememberCommand(state.appliedCommandIds, commandId),
-      };
-      return allVotingDone(drafted)
-        ? enterReveal(drafted, at)
-        : { ...drafted, stateVersion: drafted.stateVersion + 1 };
-    }
     case 'SET_GENRE_FAIL': {
-      if (!round || (phaseType !== 'PLAYBACK' && phaseType !== 'VOTING')) {
+      if (!round || phaseType !== 'PLAYBACK') {
         return state;
       }
       const current = round.genreFailFlags[actorId] ?? [];
@@ -779,8 +743,6 @@ function transition(state: GameState, at: number): GameState {
       return enterPlaybackOrReveal(state, at);
     case 'PLAYBACK':
       return advancePlayback(state, at);
-    case 'VOTING':
-      return enterReveal(state, at);
     case 'REVEAL':
       return leaveReveal(state, at);
     default:
@@ -797,10 +759,8 @@ function enterPlaybackOrReveal(state: GameState, at: number): GameState {
   const aggregated: Round = {
     ...round,
     songs,
-    playbackOrder:
-      songs.length === 1 ? [songs[0].media.videoId] : round.playbackOrder,
   };
-  if (songs.length <= 1) {
+  if (songs.length === 0) {
     return revealWithResult(
       { ...state, round: aggregated },
       at,
@@ -837,7 +797,7 @@ function advancePlayback(state: GameState, at: number): GameState {
   }
   const nextIndex = state.phase.index + 1;
   if (nextIndex >= round.playbackOrder.length) {
-    return enterVoting(state, at);
+    return enterReveal(state, at);
   }
   const song = round.songs.find(
     (candidate) => candidate.media.videoId === round.playbackOrder[nextIndex],
@@ -856,25 +816,6 @@ function advancePlayback(state: GameState, at: number): GameState {
     },
     stateVersion: state.stateVersion + 1,
   };
-}
-
-function enterVoting(state: GameState, at: number): GameState {
-  const round = state.round;
-  if (!round) {
-    return state;
-  }
-  // One submission per player means every participant of a round with >= 2
-  // songs has a foreign song; >= 1 song rounds bypass voting (FR-54).
-  const drafted: GameState = {
-    ...state,
-    phase: {
-      type: 'VOTING',
-      deadlineAt: at + state.settings.votingSeconds * 1000,
-    },
-  };
-  return allVotingDone(drafted)
-    ? enterReveal(drafted, at)
-    : { ...drafted, stateVersion: drafted.stateVersion + 1 };
 }
 
 function enterReveal(state: GameState, at: number): GameState {
@@ -898,7 +839,9 @@ function revealWithResult(
       type: 'REVEAL',
       startedAt: at,
       deadlineAt:
-        at + result.songs.length * REVEAL_PER_SONG_MS + REVEAL_HOLD_MS,
+        at +
+        result.songs.reduce((total, song) => total + revealSlotMs(song), 0) +
+        REVEAL_HOLD_MS,
     },
     stateVersion: state.stateVersion + 1,
   };
@@ -938,8 +881,7 @@ function startRound(state: GameState, at: number): GameState {
     nextSubmissionOrder: 0,
     songs: [],
     playbackOrder: [],
-    ballots: {},
-    votingDoneIds: [],
+    ratings: {},
     genreFailFlags: {},
   };
   return {
@@ -1043,18 +985,6 @@ function allSubmissionDone(state: GameState): boolean {
   );
 }
 
-function allVotingDone(state: GameState): boolean {
-  const round = state.round;
-  if (!round) {
-    return false;
-  }
-  return round.participantIds.every(
-    (participantId) =>
-      round.votingDoneIds.includes(participantId) ||
-      !isActivePlayer(state.players[participantId]),
-  );
-}
-
 /** Quorum only counts connected players that are part of the current round. */
 function connectedParticipantCount(state: GameState): number {
   const round = state.round;
@@ -1114,8 +1044,6 @@ function shiftPhase(phase: Phase, shift: number): Phase {
         startAt: phase.startAt + shift,
         deadlineAt: phase.deadlineAt + shift,
       };
-    case 'VOTING':
-      return { ...phase, deadlineAt: phase.deadlineAt + shift };
     case 'REVEAL':
       return {
         ...phase,
@@ -1125,6 +1053,11 @@ function shiftPhase(phase: Phase, shift: number): Phase {
     default:
       return phase;
   }
+}
+
+/** Reveal slot of one scored song: bangers linger longer. */
+export function revealSlotMs(song: { banger: boolean }): number {
+  return song.banger ? BANGER_REVEAL_MS : REVEAL_PER_SONG_MS;
 }
 
 function deadlineDue(state: GameState, at: number): boolean {
@@ -1158,7 +1091,6 @@ function settingsEqual(left: Settings, right: Settings): boolean {
     left.rounds !== right.rounds ||
     left.submissionSeconds !== right.submissionSeconds ||
     left.clipSeconds !== right.clipSeconds ||
-    left.votingSeconds !== right.votingSeconds ||
     left.anonymous !== right.anonymous ||
     left.genreFailPenalty !== right.genreFailPenalty ||
     left.linkedPoints !== right.linkedPoints

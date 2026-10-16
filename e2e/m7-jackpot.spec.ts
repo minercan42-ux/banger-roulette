@@ -1,16 +1,13 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
 import type { Media } from '../src/shared/primitives';
 import {
   assembleRoom,
   closeStages,
-  dispatch,
   newStage,
   stateOf,
-  waitForPhase,
   type Stage,
 } from './m3-support';
-import { advanceToVoting, playToPlayback } from './m5-support';
+import { playToPlayback, ratePlayback } from './m5-support';
 import {
   FIXTURE_CHANNEL,
   fixtureThumbnail,
@@ -38,28 +35,17 @@ function mediaOf(videoId: string): Media {
 }
 
 /**
- * Alice and Bob submit the same video (linked, worst ranked), Cara a solo
- * song that both of them rank first: the solo song wins and closes the reveal.
+ * Alice and Bob submit the same video (linked, worst rated 2), Cara a solo
+ * song that both of them rate a 9: the solo song wins and closes the reveal.
  */
 async function playToReveal(stages: Stage[]): Promise<void> {
   const pages = stages.map((stage) => stage.page);
+  const medias = [mediaOf(DUP), mediaOf(DUP), mediaOf(SOLO)];
   await assembleRoom(stages[0]!, stages.slice(1));
-  await playToPlayback(pages, [mediaOf(DUP), mediaOf(DUP), mediaOf(SOLO)]);
-  await advanceToVoting(pages);
-  const ballots: Array<[Page, string[]]> = [
-    [pages[0]!, [SOLO]],
-    [pages[1]!, [SOLO]],
-    [pages[2]!, [DUP]],
-  ];
-  for (const [page, ranking] of ballots) {
-    expect(
-      (await dispatch(page, { type: 'SET_RANKING', ranking })).status,
-    ).toBe('accepted');
-    expect((await dispatch(page, { type: 'FINISH_VOTING' })).status).toBe(
-      'accepted',
-    );
-  }
-  await waitForPhase(pages[0]!, 'REVEAL');
+  await playToPlayback(pages, medias);
+  await ratePlayback(pages, medias, (rater, song) =>
+    song === 2 ? 9 : rater === 2 ? 2 : null,
+  );
 }
 
 for (const reducedMotion of [false, true] as const) {

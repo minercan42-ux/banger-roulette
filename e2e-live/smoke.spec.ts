@@ -152,7 +152,6 @@ async function applySettings(page: Page): Promise<void> {
   await page.getByTestId('settings-rounds').fill('2');
   await page.getByTestId('settings-submission-seconds').fill('30');
   await page.getByTestId('settings-clip-seconds').fill('15');
-  await page.getByTestId('settings-voting-seconds').fill('30');
   await expect(page.getByTestId('settings-status')).toHaveAttribute(
     'data-state',
     'dirty',
@@ -236,51 +235,83 @@ async function submitSong(page: Page, videoId: string): Promise<void> {
     .not.toBe('wait');
 }
 
-/** Adds every unranked foreign song in pool order, then submits the ballot. */
-async function rankAndFinish(page: Page): Promise<void> {
-  const pool = page.locator('[data-testid="voting-song"]');
-  const finish = page.getByTestId('voting-finish');
-  while ((await pool.count()) > 0 && (await finish.count()) > 0) {
-    const before = await pool.count();
-    await pool.nth(0).getByTestId('voting-song-add').click();
-    await expect.poll(() => pool.count(), { timeout: 15_000 }).toBe(before - 1);
-  }
-  if ((await finish.count()) > 0) {
-    await finish.click();
-  }
-  await expect
-    .poll(
-      async () => {
-        if (
-          await page
-            .getByTestId('voting-done')
-            .isVisible()
-            .catch(() => false)
-        ) {
-          return 'done';
-        }
-        const phase = await page
-          .getByTestId('room-view')
-          .getAttribute('data-phase')
-          .catch(() => null);
-        return phase === 'VOTING' ? 'wait' : 'left';
-      },
-      { timeout: 20_000 },
-    )
-    .not.toBe('wait');
-}
-
-/** AK-3: no owner nickname may be visible on a voting song card before REVEAL. */
+/** AK-3: no owner nickname may be visible in the rating section before REVEAL. */
 async function assertNoOwnerLeak(page: Page): Promise<void> {
-  await expect(page.getByTestId('voting-song-owners')).toHaveCount(0);
-  const cards = await page
-    .locator('[data-testid="voting-song"], [data-testid="voting-rank-item"]')
-    .allTextContents();
-  const joined = cards.join(' | ');
+  const text =
+    (await page
+      .getByTestId('rating-section')
+      .textContent({ timeout: 2_000 })
+      .catch(() => '')) ?? '';
   for (const nickname of NICKNAMES) {
-    expect(joined, `nickname ${nickname} leaked before REVEAL`).not.toContain(
+    expect(text, `nickname ${nickname} leaked before REVEAL`).not.toContain(
       nickname,
     );
+  }
+}
+
+interface RatingSummary {
+  /** Songs rated through the chip bar. */
+  rated: number;
+  /** Songs that showed "your song" instead of a bar. */
+  own: number;
+  /** Whether the genre-fail button was ever enabled on an owned song. */
+  ownFlagEnabled: boolean;
+}
+
+/**
+ * Plays PLAYBACK like a player (FR-40): taps the same chip for every song that
+ * is not theirs while it plays, notes the songs that show "your song" instead,
+ * and returns once the phase ends. A paused game keeps the chips disabled, so
+ * the loop simply waits for the host to resume.
+ */
+async function ratePlaying(page: Page, value = 8): Promise<RatingSummary> {
+  const seen = new Set<string>();
+  const summary: RatingSummary = { rated: 0, own: 0, ownFlagEnabled: false };
+  const room = page.getByTestId('room-view');
+  for (;;) {
+    const phase = await room
+      .getAttribute('data-phase', { timeout: 5_000 })
+      .catch(() => null);
+    if (phase !== 'PLAYBACK') {
+      return summary;
+    }
+    const index = await page
+      .getByTestId('playback-phase')
+      .getAttribute('data-index', { timeout: 1_000 })
+      .catch(() => null);
+    if (index !== null && !seen.has(index)) {
+      const chip = page.getByTestId(`rating-chip-${value}`);
+      if (
+        await page
+          .getByTestId('rating-own')
+          .isVisible()
+          .catch(() => false)
+      ) {
+        seen.add(index);
+        summary.own += 1;
+        if (
+          await page
+            .getByTestId('playback-flag')
+            .isEnabled()
+            .catch(() => false)
+        ) {
+          summary.ownFlagEnabled = true;
+        }
+        await assertNoOwnerLeak(page);
+      } else if (await chip.isEnabled().catch(() => false)) {
+        await chip.click({ timeout: 5_000 }).catch(() => undefined);
+        const pressed = await expect(chip)
+          .toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (pressed) {
+          seen.add(index);
+          summary.rated += 1;
+          await assertNoOwnerLeak(page);
+        }
+      }
+    }
+    await page.waitForTimeout(300);
   }
 }
 
@@ -298,7 +329,7 @@ async function readScores(
       .locator('span:not([data-testid])')
       .allTextContents();
     const scoreText = texts.find((text) => /Punkte|points/.test(text)) ?? '';
-    const match = scoreText.match(/-?\d+/);
+    const match = scoreText.match(/-?\d+(?:\.\d+)?/);
     scores.set(id, match ? Number(match[0]) : Number.NaN);
   }
   return scores;
@@ -310,8 +341,9 @@ async function readScores(
  * is read without parsing the surrounding copy.
  */
 function lastNumber(text: string): number | null {
-  const match = text.match(/-?\d+(?!.*\d)/);
-  return match ? Number(match[0]) : null;
+  const numbers = [...text.matchAll(/-?\d+(?:\.\d+)?/g)];
+  const last = numbers[numbers.length - 1];
+  return last ? Number(last[0]) : null;
 }
 
 /**
@@ -376,7 +408,7 @@ async function waitForNewHost(
  * resume. Clicks that button whenever it appears and returns once `cara` can
  * write again, so the wait is bounded by the recovery, not a fixed window.
  */
-async function recoverVoting(
+async function recoverPlayback(
   players: readonly Player[],
   cara: Player,
 ): Promise<void> {
@@ -388,18 +420,22 @@ async function recoverVoting(
         await resume.click();
       }
     }
-    const canRank = await cara.page
-      .getByTestId('voting-phase')
-      .getAttribute('data-can-rank')
-      .catch(() => null);
-    if (canRank === 'true') {
+    const writable =
+      (await cara.page
+        .getByTestId('rating-chip-8')
+        .isEnabled()
+        .catch(() => false)) ||
+      (await cara.page
+        .getByTestId('rating-own')
+        .isVisible()
+        .catch(() => false));
+    if (writable) {
       return;
     }
     await players[0]!.page.waitForTimeout(300);
   }
-  throw new Error('voting did not become writable again after the reload');
+  throw new Error('rating did not become writable again after the reload');
 }
-
 interface DebugSample {
   index: number;
   startSkew: string | null;
@@ -578,44 +614,27 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     type: 'linked-animation-in-playback',
     description: (await round1LinkedObservation) ? 'seen' : 'not-seen',
   });
-  await Promise.all(
-    players.map((player) => waitPhase(player.page, 'VOTING', 150_000)),
+  // AK-2 and AK-3 while the songs play: every player rates the two songs they
+  // do not own (the linked song counts as one song owned by Alice and Bob),
+  // sees "your song" instead of a bar for their own, can neither rate nor flag
+  // it, and no owner nickname shows up in the rating section.
+  const round1Rated = await Promise.all(
+    players.map((player) => ratePlaying(player.page)),
   );
   round1Sampler.stopped = true;
   await round1Sampling;
   annotateDebug(round1Samples, 1);
-
-  // AK-2 in voting: neither linked owner sees or can flag their own song.
-  for (const page of [host.page, bob.page]) {
-    await expect(
-      page.locator(`[data-testid="voting-song"][data-video-id="${LINKED_ID}"]`),
-    ).toHaveCount(0);
-    await expect(
-      page.locator(`[data-testid="voting-flag"][data-video-id="${LINKED_ID}"]`),
-    ).toHaveCount(0);
+  for (const summary of round1Rated) {
+    expect(summary.own, 'AK-2: each player owns exactly one of 3 songs').toBe(
+      1,
+    );
+    expect(summary.rated, 'every foreign song is rated through the bar').toBe(
+      2,
+    );
+    expect(summary.ownFlagEnabled, 'AK-2: owners cannot flag their song').toBe(
+      false,
+    );
   }
-  for (const page of [cara.page, dana.page]) {
-    await expect(
-      page.locator(`[data-testid="voting-song"][data-video-id="${LINKED_ID}"]`),
-    ).toHaveCount(1);
-    await expect
-      .poll(
-        () =>
-          page
-            .locator(
-              `[data-testid="voting-flag"][data-video-id="${LINKED_ID}"]`,
-            )
-            .count(),
-        { timeout: 15_000 },
-      )
-      .toBeGreaterThan(0);
-  }
-  // AK-3 in voting: no owner nickname leaks before REVEAL.
-  for (const player of players) {
-    await assertNoOwnerLeak(player.page);
-  }
-
-  await Promise.all(players.map((player) => rankAndFinish(player.page)));
   await Promise.all(
     players.map((player) => waitPhase(player.page, 'REVEAL', 60_000)),
   );
@@ -695,17 +714,11 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   await Promise.all(
     players.map((player) => waitPhase(player.page, 'PLAYBACK')),
   );
-  await Promise.all(
-    players.map((player) => waitPhase(player.page, 'VOTING', 150_000)),
-  );
   round2Sampler.stopped = true;
   await round2Sampling;
   annotateDebug(round2Samples, 2);
-  for (const player of [bob, cara, dana]) {
-    await assertNoOwnerLeak(player.page);
-  }
 
-  // AK-4: the host closes the tab during VOTING; another player takes over.
+  // AK-4: the host closes the tab during PLAYBACK; another player takes over.
   // `hostId`, captured at the round-1 reveal, is the id that must lose the badge.
   const ak4Start = Date.now();
   await host.page.close();
@@ -726,17 +739,17 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   // AK-5: Cara reloads and rejoins the running room with an unchanged total.
   const ak5Start = Date.now();
   await cara.page.reload({ waitUntil: 'domcontentloaded' });
-  await waitPhase(cara.page, 'VOTING', 15_000);
+  await waitPhase(cara.page, 'PLAYBACK', 15_000);
   const ak5Ms = Date.now() - ak5Start;
   expect(ak5Ms, 'AK-5: rejoin must finish within 5 s').toBeLessThan(5_000);
   test.info().annotations.push({
     type: 'ak5-rejoin-ms',
     description: String(ak5Ms),
   });
-  await recoverVoting([bob, cara, dana], cara);
+  await recoverPlayback([bob, cara, dana], cara);
 
   await Promise.all(
-    [bob, cara, dana].map((player) => rankAndFinish(player.page)),
+    [bob, cara, dana].map((player) => ratePlaying(player.page)),
   );
   await Promise.all(
     [bob, cara, dana].map((player) => waitPhase(player.page, 'REVEAL', 60_000)),
@@ -823,15 +836,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     ),
   );
   await Promise.all(
-    [bob, cara, dana].map((player) =>
-      waitPhase(player.page, 'VOTING', 150_000),
-    ),
-  );
-  for (const player of [bob, cara, dana]) {
-    await assertNoOwnerLeak(player.page);
-  }
-  await Promise.all(
-    [bob, cara, dana].map((player) => rankAndFinish(player.page)),
+    [bob, cara, dana].map((player) => ratePlaying(player.page)),
   );
   await Promise.all(
     [bob, cara, dana].map((player) => waitPhase(player.page, 'REVEAL', 60_000)),

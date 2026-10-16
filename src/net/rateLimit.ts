@@ -2,8 +2,8 @@
 export const MAX_RATE_LIMIT_KEYS = 64;
 
 /**
- * Per-client token bucket. A party client bursts (dragging a ranking fires
- * several `SET_RANKING`) but must not be able to flood the host. Refill is
+ * Per-client token bucket. A party client bursts (tapping out a 0-10 rating
+ * sends one `RATE` per change) but must not be able to flood the host. Refill is
  * continuous, so there is no fixed-window edge to game.
  *
  * The key space is attacker-controlled (unsigned sender ids can be rotated),

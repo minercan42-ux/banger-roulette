@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { selectStandings } from '../engine/selectors';
 import type { GameState } from '../shared/game';
+import { formatTenths } from './format';
 import { usePrefersReducedMotion } from './motion';
 
 interface LeaderboardProps {
@@ -73,9 +74,11 @@ export function Leaderboard({ state, viewerId }: LeaderboardProps) {
                 <span
                   className={`br-lb__pts inline-block${row.delta > 0 && !reducedMotion ? ' br-bump' : ''}`}
                 >
-                  <span aria-hidden="true">{row.totalScore}</span>
+                  <span aria-hidden="true">{formatTenths(row.totalScore)}</span>
                   <span className="sr-only">
-                    {t('leaderboard.score', { points: row.totalScore })}
+                    {t('leaderboard.score', {
+                      points: formatTenths(row.totalScore),
+                    })}
                   </span>
                 </span>
                 <span

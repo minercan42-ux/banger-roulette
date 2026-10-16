@@ -216,12 +216,21 @@ export function playbackState(count = 4, settings?: Settings): GameState {
   return state;
 }
 
-export function votingState(count = 4, settings?: Settings): GameState {
+/**
+ * Every song except the last has played: the PLAYBACK phase sits on the last
+ * song of the shuffled order, earlier songs are still open for rating.
+ */
+export function lastSongState(count = 4, settings?: Settings): GameState {
   let state = playbackState(count, settings);
-  for (let step = 0; step < 8 && state.phase.type === 'PLAYBACK'; step += 1) {
+  const last = (state.round?.playbackOrder.length ?? 0) - 1;
+  for (
+    let step = 0;
+    step < 12 && state.phase.type === 'PLAYBACK' && state.phase.index < last;
+    step += 1
+  ) {
     state = fireDeadline(state);
   }
-  expect(state.phase.type).toBe('VOTING');
+  expect(state.phase.type).toBe('PLAYBACK');
   expect(validationError(state)).toBeNull();
   return state;
 }
@@ -256,8 +265,10 @@ export function completedFinalState(count = 4): GameState {
 }
 
 /**
- * Three-player round with real, non-zero scores, completed as FINAL:
- * A 6, B 3, C 2 (song A wins with Borda 4 plus the +2 bonus).
+ * Three-player round with real, non-zero scores, completed as FINAL. Ratings
+ * are given while each song plays: song 1 rated 8 and 9 (8.5), song 2 rated 6
+ * and 7 (6.5), song 3 rated 4 and 5 (4.5). Song 1 wins: totals in tenths are
+ * player 1 = 105 (8.5 + 2.0), player 2 = 65, player 3 = 45.
  */
 export function scoredFinalState(): GameState {
   let state = fireDeadline(
@@ -267,24 +278,14 @@ export function scoredFinalState(): GameState {
     ),
     4000,
   );
-  state = command(
-    state,
-    id(1),
-    { type: 'SUBMIT_SONG', media: media(videoId(1)) },
-    4100,
-  );
-  state = command(
-    state,
-    id(2),
-    { type: 'SUBMIT_SONG', media: media(videoId(2)) },
-    4101,
-  );
-  state = command(
-    state,
-    id(3),
-    { type: 'SUBMIT_SONG', media: media(videoId(3)) },
-    4102,
-  );
+  for (let player = 1; player <= 3; player += 1) {
+    state = command(
+      state,
+      id(player),
+      { type: 'SUBMIT_SONG', media: media(videoId(player)) },
+      4100 + player,
+    );
+  }
   for (let player = 1; player <= 3; player += 1) {
     state = command(
       state,
@@ -293,37 +294,32 @@ export function scoredFinalState(): GameState {
       4200 + player,
     );
   }
-  for (let step = 0; step < 6; step += 1) {
+  const given: Record<number, Record<number, number>> = {
+    1: { 2: 6, 3: 4 },
+    2: { 1: 8, 3: 5 },
+    3: { 1: 9, 2: 7 },
+  };
+  for (let step = 0; step < 3; step += 1) {
     if (state.phase.type !== 'PLAYBACK') {
-      break;
+      throw new Error('Scored fixture left playback too early');
+    }
+    const current = state.round!.playbackOrder[state.phase.index];
+    const startAt = state.phase.startAt;
+    for (let player = 1; player <= 3; player += 1) {
+      const value = Object.entries(given[player]).find(
+        ([song]) => videoId(Number(song)) === current,
+      )?.[1];
+      if (value !== undefined) {
+        state = command(
+          state,
+          id(player),
+          { type: 'RATE', songId: current, value },
+          startAt + player,
+        );
+      }
     }
     state = fireDeadline(state);
   }
-  if (state.phase.type !== 'VOTING')
-    throw new Error('Scored fixture did not reach voting');
-  const voteAt =
-    state.phase.deadlineAt - state.settings.votingSeconds * 1000 + 1;
-  state = command(
-    state,
-    id(1),
-    { type: 'SET_RANKING', ranking: [videoId(2), videoId(3)] },
-    voteAt,
-  );
-  state = command(
-    state,
-    id(2),
-    { type: 'SET_RANKING', ranking: [videoId(1), videoId(3)] },
-    voteAt + 1,
-  );
-  state = command(
-    state,
-    id(3),
-    { type: 'SET_RANKING', ranking: [videoId(1), videoId(2)] },
-    voteAt + 2,
-  );
-  state = command(state, id(1), { type: 'FINISH_VOTING' }, voteAt + 3);
-  state = command(state, id(2), { type: 'FINISH_VOTING' }, voteAt + 4);
-  state = command(state, id(3), { type: 'FINISH_VOTING' }, voteAt + 5);
   const final = fireDeadline(state);
   expect(final.phase).toEqual({ type: 'FINAL', reason: 'completed' });
   expect(validationError(final)).toBeNull();

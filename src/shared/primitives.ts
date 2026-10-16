@@ -3,6 +3,8 @@ import { z } from 'zod';
 export const Id = z.uuid();
 export const Int = z.number().int().nonnegative();
 export const Time = Int;
+/** Live rating of one song: an integer from 0 (worst) to 10 (banger). */
+export const Rating = z.number().int().min(0).max(10);
 export const Seconds = z.number().finite().nonnegative();
 export const VideoId = z.string().regex(/^[A-Za-z0-9_-]{11}$/);
 export const RoomCode = z.string().regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/);

@@ -1587,56 +1587,116 @@ body {
     color: var(--color-cream);
   }
 
-  /* Voting: the pool is a grid of cards, the ranking a column of rows. */
-  .br-pool {
-    list-style: none;
-    margin: 0;
-    padding: var(--space-4) 0 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: var(--space-6) var(--space-3);
-  }
-  .br-pool__item {
+  /* Live rating (FR-40): eleven round chips 0-10 under the playing song. The
+     chosen chip is `aria-pressed`; every chip up to it is gold, so the row
+     reads as a bar. The pressed chip also grows and gets a cream rim, so the
+     value is never carried by colour alone. */
+  .br-ratebar {
     display: flex;
-    flex-direction: column;
-    align-items: center;
+    flex-wrap: wrap;
     gap: var(--space-2);
-    text-align: center;
-    min-width: 0;
   }
-  /* The ranking is a row of picked cards, best first; each one carries its
-     own controls below. Cards share a row, so a drag from one to another
-     never has to scroll. */
-  .br-ranking {
+  .br-ratechip {
+    --chip: var(--color-blue);
+    --chip-deep: var(--color-blue-deep);
+    --chip-face: var(--color-blue-deep);
+    --chip-ink: var(--color-cream);
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-round);
+    background: repeating-conic-gradient(
+      var(--color-cream) 0 20deg,
+      var(--chip) 20deg 60deg
+    );
+    box-shadow:
+      0 3px 0 var(--chip-deep),
+      0 0 0 2px var(--color-edge);
+    color: var(--chip-ink);
+    cursor: pointer;
+    transition: transform var(--dur-quick) var(--ease-spring);
+  }
+  .br-ratechip__face {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-round);
+    background: var(--chip-face);
+    border: 2px solid var(--color-cream);
+    font: 400 18px/1 var(--font-pixel);
+  }
+  .br-ratechip.is-filled {
+    --chip: var(--color-gold);
+    --chip-deep: var(--color-gold-deep);
+    --chip-face: var(--color-gold);
+    --chip-ink: var(--color-card-ink);
+  }
+  .br-ratechip.is-on {
+    transform: translateY(-3px) scale(1.1);
+    box-shadow:
+      0 5px 0 var(--chip-deep),
+      0 0 0 3px var(--color-cream);
+  }
+  .br-ratechip:hover:not(:disabled):not(.is-on) {
+    transform: translateY(-2px);
+  }
+  .br-ratechip:disabled {
+    cursor: not-allowed;
+    filter: grayscale(0.7);
+    opacity: 0.7;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .br-ratechip {
+      transition-duration: 1ms;
+    }
+    .br-ratechip:hover:not(:disabled):not(.is-on) {
+      transform: none;
+    }
+  }
+  /* "Deine Bewertungen": one row per song that already played. */
+  .br-ratelist {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-  .br-rankrow {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    width: 148px;
-    padding: var(--space-8) var(--space-2) var(--space-2);
-    text-align: center;
-  }
-  .br-rankrow__actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-1);
+    gap: var(--space-2);
+  }
+  .br-rateentry {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  .br-rateentry__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
     width: 100%;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--color-cream);
+    font: inherit;
+    text-align: start;
   }
-  .br-rankrow__actions .br-btn {
+  button.br-rateentry__head {
+    cursor: pointer;
+  }
+  .br-rateentry__title {
     min-width: 0;
-    padding-inline: var(--space-1);
+    overflow-wrap: anywhere;
   }
-  /* Up and Down share a line; every other control gets its own. */
-  .br-rankrow__actions > :nth-child(n + 3) {
-    grid-column: 1 / -1;
+  .br-rateentry__value {
+    flex: none;
+    color: var(--color-gold);
+    font: 400 22px/1 var(--font-pixel);
   }
 
   /* Reveal: a root the jackpot overlay can anchor to, and one row per entry. */

@@ -8,6 +8,7 @@ export {
 } from './state';
 export type { CreateInitialStateArgs, HostSeed } from './state';
 export {
+  BANGER_REVEAL_MS,
   FIXED_INTRO_MS,
   PRE_ROLL_MS,
   REVEAL_HOLD_MS,
@@ -16,6 +17,7 @@ export {
   classifyCommand,
   electHost,
   reducer,
+  revealSlotMs,
 } from './reducer';
 export type { CommandRejection } from './reducer';
 export { scoreRound } from './scoring';

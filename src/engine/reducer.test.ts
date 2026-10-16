@@ -33,7 +33,7 @@ import {
   submissionState,
   validationError,
   videoId,
-  votingState,
+  lastSongState,
 } from './fixtures';
 
 describe('createInitialState', () => {
@@ -943,7 +943,7 @@ describe('aggregation and playback', () => {
     );
   });
 
-  it('clamps playback to the clip and reaches voting', () => {
+  it('clamps playback to the clip and reaches the reveal', () => {
     let state = playbackState();
     const phase = state.phase;
     expect(phase).toEqual({
@@ -964,7 +964,8 @@ describe('aggregation and playback', () => {
       }
       state = fireDeadline(state);
     }
-    expect(state.phase).toEqual({ type: 'VOTING', deadlineAt: 236203 });
+    expect(state.phase.type).toBe('REVEAL');
+    expect(state.results[0].reason).toBe('normal');
     expect(validationError(state)).toBeNull();
   });
 
@@ -1005,46 +1006,32 @@ describe('aggregation and playback', () => {
   });
 });
 
-describe('voting', () => {
-  it('rejects own, linked and unknown rankings', () => {
-    const state = votingState();
-    const own = videoId(1);
+describe('genre fail', () => {
+  it('rejects retracting a genre fail and keeps flags during playback', () => {
+    let state = playbackState();
+    state = command(
+      state,
+      id(1),
+      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
+      8000,
+    );
+    expect(state.round?.genreFailFlags[id(1)]).toEqual([videoId(2)]);
     expect(
-      command(state, id(1), { type: 'SET_RANKING', ranking: [own] }, 200000),
+      command(
+        state,
+        id(1),
+        { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: false },
+        8001,
+      ),
     ).toBe(state);
     expect(
       command(
         state,
         id(1),
-        { type: 'SET_RANKING', ranking: [videoId(9)] },
-        200000,
+        { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
+        8002,
       ),
     ).toBe(state);
-    const accepted = command(
-      state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      200000,
-    );
-    expect(accepted.round?.ballots[id(1)].ranking).toEqual([
-      videoId(2),
-      videoId(3),
-      videoId(4),
-    ]);
-    expect(validationError(accepted)).toBeNull();
-  });
-
-  it('copies the ranking array instead of aliasing the caller', () => {
-    const state = votingState();
-    const ranking = [videoId(2), videoId(3), videoId(4)];
-    const next = command(
-      state,
-      id(1),
-      { type: 'SET_RANKING', ranking },
-      200000,
-    );
-    expect(next.round?.ballots[id(1)].ranking).not.toBe(ranking);
-    expect(next.round?.ballots[id(1)].ranking).toEqual(ranking);
   });
 
   it('allows a genre fail only once per player and song during playback', () => {
@@ -1081,95 +1068,63 @@ describe('voting', () => {
       ),
     ).toBe(flagged);
   });
-
-  it('retracts a genre fail during voting until voting is finished', () => {
-    let state = votingState();
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      200000,
-    );
-    expect(state.round?.genreFailFlags[id(1)]).toEqual([videoId(2)]);
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: false },
-      200001,
-    );
-    expect(state.round?.genreFailFlags[id(1)] ?? []).toEqual([]);
-    state = command(state, id(1), { type: 'FINISH_VOTING' }, 200002);
-    expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-        200003,
-      ),
-    ).toBe(state);
-  });
-
-  it('ends voting early when everyone is done', () => {
-    let state = votingState();
-    const participants = state.round?.participantIds ?? [];
-    participants.forEach((playerId, index) => {
-      state = command(
-        state,
-        playerId,
-        { type: 'FINISH_VOTING' },
-        200000 + index,
-      );
-    });
-    expect(state.phase.type).toBe('REVEAL');
-    expect(state.results[0].reason).toBe('normal');
-    expect(validationError(state)).toBeNull();
-  });
 });
 
 describe('scoring integration (AK-8)', () => {
-  it('scores C 11, A 7, B 5, D 3 and reveals with per-song timing', () => {
-    let state = votingState();
-    const rankings: [string, string[]][] = [
-      [id(1), [videoId(3), videoId(2), videoId(4)]],
-      [id(2), [videoId(3), videoId(1), videoId(4)]],
-      [id(3), [videoId(1), videoId(2), videoId(4)]],
-      [id(4), [videoId(3), videoId(1), videoId(2)]],
+  it('scores from live ratings and reveals with banger timing', () => {
+    let state = lastSongState();
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 1 : 0;
+    // [rater, song, value]: song 1 = 8.0, 2 = 5.0, 3 = 6.0, 4 = a banger.
+    const given: [number, number, number][] = [
+      [2, 1, 8],
+      [3, 1, 9],
+      [4, 1, 7],
+      [1, 2, 5],
+      [3, 2, 5],
+      [4, 2, 5],
+      [1, 3, 6],
+      [2, 3, 6],
+      [4, 3, 6],
+      [1, 4, 10],
+      [2, 4, 10],
+      [3, 4, 10],
     ];
-    rankings.forEach(([playerId, ranking], index) => {
+    for (const [rater, song, value] of given) {
       state = command(
         state,
-        playerId,
-        { type: 'SET_RANKING', ranking },
-        200000 + index,
+        id(rater),
+        { type: 'RATE', songId: videoId(song), value },
+        at,
       );
-    });
-    rankings.forEach(([playerId], index) => {
-      state = command(
-        state,
-        playerId,
-        { type: 'FINISH_VOTING' },
-        201000 + index,
-      );
-    });
+    }
+    const deadline =
+      state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt : 0;
+    state = fireDeadline(state);
     expect(state.phase).toEqual({
       type: 'REVEAL',
-      startedAt: 201003,
-      deadlineAt: 201003 + 4 * 2500 + 5000,
+      startedAt: deadline,
+      // Three normal slots, the banger's longer slot, then the hold.
+      deadlineAt: deadline + 3 * 2500 + 5000 + 5000,
     });
     expect(state.results[0].playerDeltas).toEqual({
-      [id(1)]: 7,
-      [id(2)]: 5,
-      [id(3)]: 11,
-      [id(4)]: 3,
+      [id(1)]: 80,
+      [id(2)]: 50,
+      [id(3)]: 60,
+      [id(4)]: 120,
     });
-    expect(state.players[id(3)].totalScore).toBe(11);
+    expect(state.players[id(4)].totalScore).toBe(120);
     expect(
       state.results[0].songs.find(
-        (scored) => scored.song.media.videoId === videoId(3),
+        (scored) => scored.song.media.videoId === videoId(4),
       ),
-    ).toMatchObject({ borda: 9, winner: true, bonus: 2 });
+    ).toMatchObject({
+      scoreTenths: 100,
+      banger: true,
+      winner: true,
+      bonus: 20,
+    });
     expect(validationError(state)).toBeNull();
-    const next = reducer(state, { type: 'DEADLINE', at: 240000 });
+    const next = reducer(state, { type: 'DEADLINE', at: deadline + 60000 });
     expect(next.phase.type).toBe('GENRE_SPIN');
     expect(next.round?.number).toBe(2);
     expect(next.results).toHaveLength(1);
@@ -1191,7 +1146,7 @@ describe('degenerate rounds', () => {
     expect(validationError(state)).toBeNull();
   });
 
-  it('reveals with zero points for a single deduplicated song', () => {
+  it('rates a single deduplicated song normally (FR-54)', () => {
     let state = submissionState();
     state = command(
       state,
@@ -1206,13 +1161,39 @@ describe('degenerate rounds', () => {
       5001,
     );
     state = fireDeadline(state, 94000);
+    expect(state.phase.type).toBe('PLAYBACK');
+    expect(state.round?.playbackOrder).toEqual([videoId(1)]);
+    state = command(
+      state,
+      id(3),
+      { type: 'RATE', songId: videoId(1), value: 8 },
+      94001,
+    );
+    state = command(
+      state,
+      id(4),
+      { type: 'RATE', songId: videoId(1), value: 9 },
+      94002,
+    );
+    state = fireDeadline(state);
     expect(state.phase.type).toBe('REVEAL');
     const result = state.results[0];
-    expect(result.reason).toBe('singleSong');
+    expect(result.reason).toBe('normal');
     expect(result.songs).toHaveLength(1);
     expect(result.songs[0].song.ownerIds).toEqual([id(1), id(2)]);
-    expect(Object.values(result.playerDeltas)).toEqual([0, 0, 0, 0]);
-    expect(result.songs[0].bonus).toBe(0);
+    // Mean 8.5 plus the +2.0 winner bonus, in tenths, for each linked owner.
+    expect(result.songs[0]).toMatchObject({
+      scoreTenths: 85,
+      ratingCount: 2,
+      winner: true,
+      bonus: 20,
+    });
+    expect(result.playerDeltas).toEqual({
+      [id(1)]: 105,
+      [id(2)]: 105,
+      [id(3)]: 0,
+      [id(4)]: 0,
+    });
     expect(validationError(state)).toBeNull();
   });
 
@@ -1518,17 +1499,24 @@ describe('host change', () => {
     ).toBe(state);
   });
 
-  it('preserves scores and deadlines when the host changes during voting', () => {
-    let state = votingState();
+  it('preserves scores, ratings and deadlines when the host changes during playback', () => {
+    let state = playbackState();
+    const song = state.round!.playbackOrder[0];
+    const owner = state.round!.songs.find(
+      (candidate) => candidate.media.videoId === song,
+    )!.ownerIds[0];
+    const rater = state.round!.participantIds.find(
+      (candidate) => candidate !== owner && candidate !== id(1),
+    )!;
     state = command(
       state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      200000,
+      rater,
+      { type: 'RATE', songId: song, value: 6 },
+      8000,
     );
     const phase = state.phase;
     const score = state.players[id(1)].totalScore;
-    state = presence(state, 200100, hostlessPresence);
+    state = presence(state, 8100, hostlessPresence);
     const changed = reducer(state, {
       type: 'HOST_CHANGED',
       at: 200200,
@@ -1625,9 +1613,9 @@ describe('immutability', () => {
 describe('final phase and rematch', () => {
   it('keeps settings, catalogue, game number and bans while clearing play state', () => {
     const state = scoredFinalState();
-    expect(state.players[id(1)].totalScore).toBe(6);
-    expect(state.players[id(2)].totalScore).toBe(3);
-    expect(state.players[id(3)].totalScore).toBe(2);
+    expect(state.players[id(1)].totalScore).toBe(105);
+    expect(state.players[id(2)].totalScore).toBe(65);
+    expect(state.players[id(3)].totalScore).toBe(45);
     const kicked = command(
       state,
       id(1),
@@ -1666,43 +1654,22 @@ describe('final phase and rematch', () => {
   });
 
   it('never scores the same round twice on replay or migration', () => {
-    let state = votingState();
-    state = command(
+    const state = lastSongState();
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 2 : 0;
+    const rateCommand = action(
       state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      140000,
+      { type: 'RATE', songId: videoId(2), value: 8 },
+      { actorId: id(1), connectionId: state.players[id(1)].connectionId, at },
     );
-    state = command(
-      state,
-      id(2),
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-      140001,
-    );
-    state = command(
-      state,
-      id(3),
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(2), videoId(4)] },
-      140002,
-    );
-    state = command(state, id(1), { type: 'FINISH_VOTING' }, 150000);
-    state = command(state, id(2), { type: 'FINISH_VOTING' }, 150001);
-    state = command(state, id(3), { type: 'FINISH_VOTING' }, 150002);
-    const revealCommand = action(
-      state,
-      { type: 'FINISH_VOTING' },
-      {
-        actorId: id(4),
-        connectionId: state.players[id(4)].connectionId,
-        at: 150003,
-      },
-    );
-    const revealed = reducer(state, revealCommand);
+    const rated = reducer(state, rateCommand);
+    expect(rated.phase.type).toBe('PLAYBACK');
+    expect(rated.round?.ratings[id(1)]?.[videoId(2)]).toBe(8);
+    // Replaying the accepted command id is a no-op.
+    expect(reducer(rated, rateCommand)).toBe(rated);
+    const revealed = fireDeadline(rated);
     expect(revealed.phase.type).toBe('REVEAL');
     expect(revealed.results).toHaveLength(1);
     const score = revealed.players[id(1)].totalScore;
-    expect(score).toBe(8);
-    expect(reducer(revealed, revealCommand)).toBe(revealed);
     const peers = Object.values(revealed.players)
       .filter((player) => player.connected && player.id !== revealed.hostId)
       .map((player) => player.connectionId);
@@ -1747,7 +1714,6 @@ describe('migration in every phase', () => {
     ['GENRE_SPIN', () => startedGame()],
     ['SUBMISSION', () => submissionState()],
     ['PLAYBACK', () => playbackState()],
-    ['VOTING', () => votingState()],
     ['REVEAL', () => revealState()],
     ['FINAL hostEnded', () => finalState()],
     ['FINAL completed', () => completedFinalState()],
@@ -1790,7 +1756,6 @@ describe('pause cycles in every timed phase', () => {
     ['GENRE_SPIN', () => startedGame()],
     ['SUBMISSION', () => submissionState()],
     ['PLAYBACK', () => playbackState()],
-    ['VOTING', () => votingState()],
     ['REVEAL', () => revealState()],
   ];
 
@@ -1828,9 +1793,6 @@ describe('pause cycles in every timed phase', () => {
       if (state.phase.type === 'PLAYBACK' && shifted.type === 'PLAYBACK') {
         expect(shifted.startAt).toBe(state.phase.startAt + 5000);
       }
-      if (state.phase.type === 'VOTING' && shifted.type === 'VOTING') {
-        expect(shifted.deadlineAt).toBe(state.phase.deadlineAt + 5000);
-      }
       if (state.phase.type === 'REVEAL' && shifted.type === 'REVEAL') {
         expect(shifted.startedAt).toBe(state.phase.startedAt + 5000);
       }
@@ -1839,26 +1801,34 @@ describe('pause cycles in every timed phase', () => {
   }
 
   it('lets a due deadline win over a command that arrives with it', () => {
-    const state = votingState();
-    const deadline = state.phase.type === 'VOTING' ? state.phase.deadlineAt : 0;
-    expect(deadline).toBe(236203);
+    const state = playbackState();
+    const deadline =
+      state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt : 0;
+    expect(deadline).toBe(47203);
+    const song = state.round!.playbackOrder[0];
+    const owner = state.round!.songs.find(
+      (candidate) => candidate.media.videoId === song,
+    )!.ownerIds[0];
+    const rater = state.round!.participantIds.find(
+      (candidate) => candidate !== owner,
+    )!;
     const late = command(
       state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
+      rater,
+      { type: 'RATE', songId: song, value: 5 },
       deadline,
     );
-    expect(late.phase.type).toBe('REVEAL');
-    expect(late.round?.ballots[id(1)]).toBeUndefined();
-    expect(late.results).toHaveLength(1);
+    expect(late.phase).toMatchObject({ type: 'PLAYBACK', index: 1 });
+    expect(late.round?.ratings[rater]).toBeUndefined();
+    expect(late.results).toHaveLength(0);
     expect(validationError(late)).toBeNull();
     const inTime = command(
       state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
+      rater,
+      { type: 'RATE', songId: song, value: 5 },
       deadline - 1,
     );
-    expect(inTime.round?.ballots[id(1)].ranking).toHaveLength(3);
+    expect(inTime.round?.ratings[rater]?.[song]).toBe(5);
   });
 });
 
@@ -2010,31 +1980,35 @@ describe('connection binding and guard edges', () => {
   });
 
   it('rejects fresh round commands while paused and accepts them after resume', () => {
-    const paused = command(votingState(), id(1), { type: 'PAUSE' }, 200000);
-    expect(paused.pause).toEqual({ at: 200000, reason: 'host' });
-    const rankingWhilePaused = action(
+    const playing = playbackState();
+    const song = playing.round!.playbackOrder[0];
+    const owner = playing.round!.songs.find(
+      (candidate) => candidate.media.videoId === song,
+    )!.ownerIds[0];
+    const rater = playing.round!.participantIds.find(
+      (candidate) => candidate !== owner,
+    )!;
+    const paused = command(playing, id(1), { type: 'PAUSE' }, 8000);
+    expect(paused.pause).toEqual({ at: 8000, reason: 'host' });
+    const rateWhilePaused = action(
       paused,
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-      { actorId: id(2), connectionId: id(102), at: 200001 },
+      { type: 'RATE', songId: song, value: 5 },
+      {
+        actorId: rater,
+        connectionId: paused.players[rater].connectionId,
+        at: 8001,
+      },
     );
-    expect(classifyCommand(paused, rankingWhilePaused)).toBe('WRONG_PHASE');
-    expect(reducer(paused, rankingWhilePaused)).toBe(paused);
-    expect(command(paused, id(2), { type: 'FINISH_VOTING' }, 200002)).toBe(
-      paused,
-    );
+    expect(classifyCommand(paused, rateWhilePaused)).toBe('WRONG_PHASE');
+    expect(reducer(paused, rateWhilePaused)).toBe(paused);
     const resumed = command(
       paused,
       id(1),
       { type: 'RESUME', forceBelowMinimum: false },
-      205000,
+      13000,
     );
     expect(
-      command(
-        resumed,
-        id(2),
-        { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-        205001,
-      ),
+      command(resumed, rater, { type: 'RATE', songId: song, value: 5 }, 13001),
     ).not.toBe(resumed);
     const submissionPaused = command(
       submissionState(),
@@ -2054,33 +2028,43 @@ describe('connection binding and guard edges', () => {
   });
 
   it('guards empty, duplicated and absent round inputs', () => {
-    const state = votingState();
-    const empty = command(
+    const state = playbackState();
+    const song = state.round!.playbackOrder[0];
+    const owner = state.round!.songs.find(
+      (candidate) => candidate.media.videoId === song,
+    )!.ownerIds[0];
+    const rater = state.round!.participantIds.find(
+      (candidate) => candidate !== owner,
+    )!;
+    const rated = command(
       state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [] },
-      200000,
+      rater,
+      { type: 'RATE', songId: song, value: 5 },
+      8000,
     );
-    expect(empty.round?.ballots[id(1)].ranking).toEqual([]);
-    const duplicated = action(
-      empty,
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(2)] },
-      { actorId: id(1), connectionId: id(101), at: 200001 },
+    expect(rated.round?.ratings[rater]).toEqual({ [song]: 5 });
+    // The same rating again is a no-op rejected as NOT_READY.
+    const repeated = action(
+      rated,
+      { type: 'RATE', songId: song, value: 5 },
+      {
+        actorId: rater,
+        connectionId: rated.players[rater].connectionId,
+        at: 8001,
+      },
     );
-    expect(classifyCommand(empty, duplicated)).toBe('INVALID');
-    expect(reducer(empty, duplicated)).toBe(empty);
+    expect(classifyCommand(rated, repeated)).toBe('NOT_READY');
+    expect(reducer(rated, repeated)).toBe(rated);
+    // Unknown songs are invalid input.
     expect(
       command(
-        empty,
-        id(1),
-        { type: 'SET_RANKING', ranking: [videoId(9)] },
-        200002,
+        rated,
+        rater,
+        { type: 'RATE', songId: videoId(9), value: 5 },
+        8002,
       ),
-    ).toBe(empty);
-    expect(command(empty, id(1), { type: 'FINISH_VOTING' }, 200003)).not.toBe(
-      empty,
-    );
-    expect(validationError(empty)).toBeNull();
+    ).toBe(rated);
+    expect(validationError(rated)).toBeNull();
     const submission = submissionState();
     const absentRemoval = action(
       submission,
@@ -2123,11 +2107,11 @@ describe('host election', () => {
   });
 
   it('prefers participants over spectators and falls back to spectators', () => {
-    let state = votingState();
+    let state = playbackState();
     state = send(
       state,
       { type: 'JOIN', nickname: 'Late' },
-      { actorId: id(9), connectionId: id(109), at: 190000 },
+      { actorId: id(9), connectionId: id(109), at: 8000 },
     );
     expect(electHost(state, allConnections(state))).toBe(id(1));
     const spectatorOnly = presence(state, 195000, [id(109)]);
@@ -2270,9 +2254,8 @@ describe('submission order and completion', () => {
     );
   });
 
-  it('does not auto-finish voters that still have foreign songs', () => {
-    const state = votingState();
-    expect(state.round?.votingDoneIds).toEqual([]);
+  it('keeps one song per participant, so every participant has foreign songs', () => {
+    const state = playbackState();
     for (const playerId of state.round?.participantIds ?? []) {
       const foreign =
         state.round?.songs.filter(
@@ -2284,7 +2267,7 @@ describe('submission order and completion', () => {
 });
 
 describe('linked ownership', () => {
-  it('forbids linked owners from ranking and flagging their shared song', () => {
+  it('forbids linked owners from rating and flagging their shared song', () => {
     let state = submissionState();
     state = command(
       state,
@@ -2322,141 +2305,118 @@ describe('linked ownership', () => {
         95001,
       ),
     ).toBe(state);
-    for (let step = 0; step < 4; step += 1) {
-      if (state.phase.type !== 'PLAYBACK') {
-        break;
-      }
+    const last = state.round!.playbackOrder.length - 1;
+    for (
+      let step = 0;
+      step < 4 && state.phase.type === 'PLAYBACK' && state.phase.index < last;
+      step += 1
+    ) {
       state = fireDeadline(state);
     }
-    expect(state.phase.type).toBe('VOTING');
+    expect(state.phase.type).toBe('PLAYBACK');
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 1 : 0;
+    // Owners of the shared song can never rate it.
     expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_RANKING', ranking: [videoId(5)] },
-        200000,
-      ),
+      command(state, id(1), { type: 'RATE', songId: videoId(5), value: 5 }, at),
     ).toBe(state);
     expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(5), flagged: true },
-        200001,
-      ),
+      command(state, id(2), { type: 'RATE', songId: videoId(5), value: 5 }, at),
     ).toBe(state);
+    // A non-owner can.
     expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_RANKING', ranking: [videoId(6)] },
-        200002,
-      ),
+      command(state, id(4), { type: 'RATE', songId: videoId(5), value: 5 }, at),
     ).not.toBe(state);
     expect(validationError(state)).toBeNull();
   });
 });
 
 describe('frozen eligibility and departures', () => {
-  it('freezes the genre-fail denominator and keeps departed votes and flags', () => {
-    let state = votingState(5);
+  it('freezes the genre-fail denominator and keeps departed ratings and flags', () => {
+    let state = lastSongState(5);
+    const at =
+      state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 10 : 0;
     state = command(
       state,
       id(2),
-      {
-        type: 'SET_RANKING',
-        ranking: [videoId(1), videoId(3), videoId(4), videoId(5)],
-      },
-      220000,
+      { type: 'RATE', songId: videoId(1), value: 7 },
+      at,
     );
     state = command(
       state,
       id(3),
-      {
-        type: 'SET_RANKING',
-        ranking: [videoId(1), videoId(2), videoId(4), videoId(5)],
-      },
-      220001,
+      { type: 'RATE', songId: videoId(1), value: 8 },
+      at,
     );
     state = command(
       state,
       id(4),
-      {
-        type: 'SET_RANKING',
-        ranking: [videoId(1), videoId(2), videoId(3), videoId(5)],
-      },
-      220002,
+      { type: 'RATE', songId: videoId(1), value: 9 },
+      at,
     );
     state = command(
       state,
       id(2),
       { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-      220003,
+      at + 1,
     );
     state = command(
       state,
       id(3),
       { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-      220004,
+      at + 2,
     );
     state = command(
       state,
       id(4),
       { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      220005,
+      at + 3,
     );
-    state = command(state, id(4), { type: 'LEAVE' }, 229000);
+    state = command(state, id(4), { type: 'LEAVE' }, at + 4);
     expect(state.round?.participantIds).toContain(id(4));
-    expect(state.round?.ballots[id(4)].ranking).toHaveLength(4);
+    expect(state.round?.ratings[id(4)]?.[videoId(1)]).toBe(9);
     expect(state.round?.genreFailFlags[id(4)]).toEqual([videoId(2)]);
-    for (const playerId of [id(1), id(2), id(3), id(5)]) {
-      state = command(state, playerId, { type: 'FINISH_VOTING' }, 230000);
-    }
-    expect(state.phase.type).toBe('REVEAL');
+    const revealed = fireDeadline(state);
+    expect(revealed.phase.type).toBe('REVEAL');
+    const song1 = revealed.results[0].songs.find(
+      (entry) => entry.song.media.videoId === videoId(1),
+    )!;
+    expect(song1).toMatchObject({ scoreTenths: 80, genreFailed: false });
+    expect(song1.flaggerIds).toEqual([id(2), id(3)]);
     expect(
-      state.results[0].songs.find(
-        (entry) => entry.song.media.videoId === videoId(1),
-      ),
-    ).toMatchObject({ genreFailed: false, flaggerIds: [id(2), id(3)] });
-    expect(
-      state.results[0].songs.find(
+      revealed.results[0].songs.find(
         (entry) => entry.song.media.videoId === videoId(2),
       )?.flaggerIds,
     ).toEqual([id(4)]);
-    expect(validationError(state)).toBeNull();
+    expect(validationError(revealed)).toBeNull();
   });
 
-  it('keeps a kicked vote and flag and does not block the early end', () => {
-    let state = votingState();
+  it('keeps a kicked rating and flag and does not block the reveal', () => {
+    let state = lastSongState();
+    const at =
+      state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 10 : 0;
     state = command(
       state,
       id(3),
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(2), videoId(4)] },
-      200000,
+      { type: 'RATE', songId: videoId(1), value: 9 },
+      at,
     );
     state = command(
       state,
       id(3),
       { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-      200001,
+      at + 1,
     );
-    state = command(state, id(1), { type: 'KICK', playerId: id(3) }, 200002);
+    state = command(state, id(1), { type: 'KICK', playerId: id(3) }, at + 2);
     expect(state.players[id(3)].status).toBe('kicked');
-    expect(state.round?.ballots[id(3)].ranking).toEqual([
-      videoId(1),
-      videoId(2),
-      videoId(4),
-    ]);
-    for (const playerId of [id(1), id(2), id(4)]) {
-      state = command(state, playerId, { type: 'FINISH_VOTING' }, 201000);
-    }
-    expect(state.phase.type).toBe('REVEAL');
+    expect(state.round?.ratings[id(3)]?.[videoId(1)]).toBe(9);
+    const revealed = fireDeadline(state);
+    expect(revealed.phase.type).toBe('REVEAL');
     expect(
-      state.results[0].songs.find(
+      revealed.results[0].songs.find(
         (entry) => entry.song.media.videoId === videoId(1),
       )?.flaggerIds,
     ).toEqual([id(3)]);
-    expect(validationError(state)).toBeNull();
+    expect(validationError(revealed)).toBeNull();
   });
 
   it('makes a rejoining participant immediately eligible again', () => {
@@ -2485,34 +2445,27 @@ describe('frozen eligibility and departures', () => {
   });
 
   it('keeps a late join out of the running round entirely', () => {
-    let state = votingState();
+    let state = playbackState();
     state = send(
       state,
       { type: 'JOIN', nickname: 'Late' },
-      { actorId: id(9), connectionId: id(109), at: 190000 },
+      { actorId: id(9), connectionId: id(109), at: 8000 },
     );
     expect(state.players[id(9)].status).toBe('spectator');
     expect(state.round?.participantIds).not.toContain(id(9));
+    const song = state.round!.playbackOrder[0];
     expect(
-      command(
-        state,
-        id(9),
-        { type: 'SET_RANKING', ranking: [videoId(1)] },
-        190100,
-      ),
+      command(state, id(9), { type: 'RATE', songId: song, value: 5 }, 8001),
     ).toBe(state);
     expect(
       command(
         state,
         id(9),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-        190200,
+        { type: 'SET_GENRE_FAIL', videoId: song, flagged: true },
+        8002,
       ),
     ).toBe(state);
-    expect(command(state, id(9), { type: 'FINISH_VOTING' }, 190300)).toBe(
-      state,
-    );
-    expect(state.round?.votingDoneIds).not.toContain(id(9));
+    expect(state.round?.ratings[id(9)]).toBeUndefined();
     expect(validationError(state)).toBeNull();
   });
 });
@@ -2614,24 +2567,6 @@ describe('payload isolation', () => {
       videoId: videoId(1),
       title: `Song ${videoId(1)}`,
     });
-  });
-
-  it('isolates the stored ranking from later array mutation', () => {
-    const voting = votingState();
-    const ranking = [videoId(2), videoId(3), videoId(4)];
-    const state = command(
-      voting,
-      id(1),
-      { type: 'SET_RANKING', ranking },
-      200000,
-    );
-    ranking[0] = videoId(4);
-    ranking.push(videoId(1));
-    expect(state.round?.ballots[id(1)].ranking).toEqual([
-      videoId(2),
-      videoId(3),
-      videoId(4),
-    ]);
   });
 });
 

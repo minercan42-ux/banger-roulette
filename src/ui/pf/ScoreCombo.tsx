@@ -1,9 +1,10 @@
 import { animate as runAnimation } from 'motion/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { formatTenths } from '../format';
 import { usePrefersReducedMotion } from '../motion';
 import { cx } from './cx';
 
-/** Votes count up over `--dur-count` (900 ms), then the bonus, then the sum. */
+/** The average rating counts up over `--dur-count` (900 ms), then the bonus, then the sum. */
 export const COMBO_VOTES_S = 0.9;
 export const COMBO_ADJUST_S = 0.3;
 export const COMBO_TOTAL_S = 0.6;
@@ -11,10 +12,11 @@ export const COMBO_TOTAL_S = 0.6;
 export const COMBO_DURATION_MS =
   (COMBO_VOTES_S + COMBO_ADJUST_S + COMBO_TOTAL_S) * 1000;
 
+/** All values are integer tenths of a point (73 shows as 7.3). */
 export interface ComboValues {
-  /** Borda points of the song. */
+  /** Average rating of the song. */
   votes: number;
-  /** Signed change between the votes and the round score (jackpot bonus, genre-fail penalty, linked share). */
+  /** Signed change between the average and the round score (jackpot bonus, genre-fail penalty, linked share). */
   adjust: number;
   /** Round score, exactly the engine's value. */
   total: number;
@@ -26,12 +28,12 @@ export interface ComboValues {
  * when a genre fail or a linked song shares the points.
  */
 export function comboValues(entry: {
-  borda: number;
+  scoreTenths: number;
   roundPoints: number;
 }): ComboValues {
   return {
-    votes: entry.borda,
-    adjust: entry.roundPoints - entry.borda,
+    votes: entry.scoreTenths,
+    adjust: entry.roundPoints - entry.scoreTenths,
     total: entry.roundPoints,
   };
 }
@@ -44,7 +46,7 @@ export type ComboKind = 'jackpot' | 'penalty' | 'shared';
  * jackpot bonus (0 for a song that did not win).
  */
 export function comboKind(entry: {
-  borda: number;
+  scoreTenths: number;
   bonus: number;
   roundPoints: number;
   genreFailed: boolean;
@@ -52,7 +54,9 @@ export function comboKind(entry: {
   if (entry.genreFailed) {
     return 'penalty';
   }
-  return entry.roundPoints === entry.borda + entry.bonus ? 'jackpot' : 'shared';
+  return entry.roundPoints === entry.scoreTenths + entry.bonus
+    ? 'jackpot'
+    : 'shared';
 }
 
 interface ScoreComboProps extends ComboValues {
@@ -187,7 +191,7 @@ export function ScoreCombo({
           data-testid="score-combo-votes"
           className="br-combo__box br-combo__box--votes"
         >
-          {display.votes}
+          {formatTenths(display.votes)}
         </span>
         <span className="br-combo__op">{signed(adjust)}</span>
         <span
@@ -195,7 +199,7 @@ export function ScoreCombo({
           data-testid="score-combo-adjust"
           className="br-combo__box br-combo__box--bonus"
         >
-          {Math.abs(display.adjust)}
+          {formatTenths(Math.abs(display.adjust))}
         </span>
         <span className="br-combo__op">=</span>
         <span
@@ -203,7 +207,7 @@ export function ScoreCombo({
           data-testid="score-combo-total"
           className="br-combo__box br-combo__box--total"
         >
-          {display.total}
+          {formatTenths(display.total)}
         </span>
       </div>
       <div className="br-combo__caption br-label">

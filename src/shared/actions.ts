@@ -4,9 +4,9 @@ import {
   Int,
   MediaSchema,
   Nickname,
+  Rating,
   Time,
   VideoId,
-  VideoIds,
 } from './primitives.js';
 import { RequiredSettingsSchema } from './settings.js';
 
@@ -23,8 +23,11 @@ export const ClientActionSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('SUBMIT_SONG'), media: MediaSchema }),
   z.strictObject({ type: z.literal('REMOVE_SUBMISSION') }),
   z.strictObject({ type: z.literal('FINISH_SUBMISSION') }),
-  z.strictObject({ type: z.literal('SET_RANKING'), ranking: VideoIds }),
-  z.strictObject({ type: z.literal('FINISH_VOTING') }),
+  z.strictObject({
+    type: z.literal('RATE'),
+    songId: VideoId,
+    value: Rating,
+  }),
   z.strictObject({
     type: z.literal('SET_GENRE_FAIL'),
     videoId: VideoId,

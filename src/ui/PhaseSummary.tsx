@@ -25,8 +25,8 @@ export function PhaseSummary({
   self,
 }: PhaseSummaryProps) {
   const { t, i18n } = useTranslation();
-  // Submission and voting carry their own timer in the panel header.
-  const showTimer = room.phase !== 'SUBMISSION' && room.phase !== 'VOTING';
+  // Submission carries its own timer in the panel header.
+  const showTimer = room.phase !== 'SUBMISSION';
 
   return (
     <Panel

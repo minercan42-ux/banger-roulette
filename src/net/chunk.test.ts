@@ -54,35 +54,30 @@ function playRounds(rounds: number, players: number): GameState {
       );
       state = command(state, playerId, { type: 'FINISH_SUBMISSION' }, submitAt);
     });
-    for (
-      let step = 0;
-      step < 20 && state.phase.type === 'PLAYBACK';
-      step += 1
-    ) {
+    while (state.phase.type === 'PLAYBACK') {
+      const { index, startAt } = state.phase;
+      const current = state.round!.playbackOrder[index];
+      const owners = state.round!.songs.find(
+        (song) => song.media.videoId === current,
+      )!.ownerIds;
+      for (const playerId of state.round!.participantIds) {
+        if (!owners.includes(playerId)) {
+          state = command(
+            state,
+            playerId,
+            { type: 'RATE', songId: current, value: 7 },
+            startAt,
+          );
+        }
+      }
       state = fireDeadline(state);
     }
-    if (state.phase.type !== 'VOTING') {
+    if (state.phase.type !== 'REVEAL') {
       throw new Error(
-        `round ${round} did not reach voting: ${state.phase.type}`,
+        `round ${round} did not reach the reveal: ${state.phase.type}`,
       );
     }
-    const voteAt = phaseDeadline(state) - 2;
-    const songs = state.round!.songs;
-    for (const playerId of state.round!.participantIds) {
-      const foreign = songs
-        .filter((song) => !song.ownerIds.includes(playerId))
-        .map((song) => song.media.videoId);
-      state = command(
-        state,
-        playerId,
-        { type: 'SET_RANKING', ranking: foreign },
-        voteAt,
-      );
-      state = command(state, playerId, { type: 'FINISH_VOTING' }, voteAt);
-    }
-    if (state.phase.type === 'REVEAL') {
-      state = fireDeadline(state);
-    }
+    state = fireDeadline(state);
   }
   return state;
 }

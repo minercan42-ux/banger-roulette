@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { GameState } from '../src/shared/game';
 import type { Media } from '../src/shared/primitives';
 import {
   assembleRoom,
@@ -12,15 +11,16 @@ import {
   snapshot,
   stateOf,
   submitSongViaUi,
+  unlockSound,
   waitForPhase,
   type Stage,
 } from './m3-support';
 import {
-  advanceToVoting,
-  finishVoting,
   mediaFor,
   playToPlayback,
-  submitSongsAndFinish,
+  rateCurrentSong,
+  ratePlayback,
+  type RatingFn,
 } from './m5-support';
 import {
   FIXTURE_CHANNEL,
@@ -29,16 +29,16 @@ import {
 } from './youtube-fixture';
 
 /**
- * M5 consumer coverage: the first completely playable game. Voting (FR-40..42),
- * genre-fail (FR-34/41/52), scoring (FR-50..54) and reveal/leaderboard/finale
- * (FR-60..62) are driven through the real UI on top of the real `GameSession`
- * and engine; only the external YouTube edge is replaced by the fixture.
+ * M5 consumer coverage: the first completely playable game. Live 0-10 rating
+ * (FR-40..42), genre-fail (FR-34/41/52), scoring (FR-50..54) and
+ * reveal/leaderboard/finale (FR-60..62) are driven through the real UI on top
+ * of the real `GameSession` and engine; only the external YouTube edge is
+ * replaced by the fixture.
  *
- * The voting/reveal/final assertions target the documented data-testid contract;
- * rankings are entered through `voting-song-add` / `voting-rank-up|down` with one
- * real drag-and-drop (`locator.dragTo`) for desktop coverage. Phase timing is
- * skipped with the host `ADVANCE` where it is irrelevant, so every scenario is
- * deterministic and fully-parallel safe.
+ * The rating/reveal/final assertions target the documented data-testid
+ * contract (`rating-bar`, `rating-chip-<n>`, `rating-summary`, ...). Phase
+ * timing is skipped with the host `ADVANCE` where it is irrelevant, so every
+ * scenario is deterministic and fully-parallel safe.
  */
 
 const SONG_A = 'm5songA0001';
@@ -62,39 +62,11 @@ function mediaOf(videoId: string, startSeconds = 0): Media {
   };
 }
 
-function rankItem(page: Page, videoId: string) {
-  return page.locator(
-    `[data-testid="voting-rank-item"][data-video-id="${videoId}"]`,
-  );
-}
-
-function flagItem(page: Page, videoId: string) {
-  return page.locator(
-    `[data-testid="voting-flag"][data-video-id="${videoId}"]`,
-  );
-}
-
-function poolItem(page: Page, videoId: string) {
-  return page.locator(
-    `[data-testid="voting-song"][data-video-id="${videoId}"]`,
-  );
-}
-
-async function rankedIds(page: Page): Promise<string[]> {
-  return page
-    .locator('[data-testid="voting-rank-item"]')
-    .evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute('data-video-id') ?? ''),
-    );
-}
+/** `values[rater][song]`: what each player gives each song; `null` = none. */
+type RatingMatrix = ReadonlyArray<ReadonlyArray<number | null>>;
 
 async function playerId(page: Page): Promise<string> {
   return (await snapshot(page)).clientId;
-}
-
-async function ballotOf(page: Page, id: string): Promise<string[]> {
-  const state = await stateOf(page);
-  return state?.round?.ballots?.[id]?.ranking ?? [];
 }
 
 async function flagsOf(page: Page, id: string): Promise<string[]> {
@@ -102,72 +74,95 @@ async function flagsOf(page: Page, id: string): Promise<string[]> {
   return state?.round?.genreFailFlags?.[id] ?? [];
 }
 
-/** Adds every missing song, then reorders to `desired` with up/down buttons. */
-async function ensureRanking(
-  page: Page,
-  desired: readonly string[],
-): Promise<void> {
-  for (const videoId of desired) {
-    const item = rankItem(page, videoId);
-    if ((await item.count()) === 0) {
-      await poolItem(page, videoId).getByTestId('voting-song-add').click();
-      await expect(item).toHaveCount(1);
-    }
-  }
-  for (let target = 0; target < desired.length; target += 1) {
-    const videoId = desired[target]!;
-    const item = rankItem(page, videoId);
-    const rank = async () => Number(await item.getAttribute('data-rank'));
-    let current = await rank();
-    while (current > target + 1) {
-      await item.getByTestId('voting-rank-up').click();
-      await expect.poll(rank, { timeout: 5000 }).toBe(current - 1);
-      current -= 1;
-    }
-    while (current < target + 1) {
-      await item.getByTestId('voting-rank-down').click();
-      await expect.poll(rank, { timeout: 5000 }).toBe(current + 1);
-      current += 1;
-    }
-  }
-  await expect.poll(() => rankedIds(page)).toEqual([...desired]);
-}
-
-/** Ranks exactly `desired` through the UI and asserts engine/UI agreement. */
-async function setBallot(
+async function ratingOf(
   page: Page,
   id: string,
-  desired: readonly string[],
-): Promise<void> {
-  await ensureRanking(page, desired);
-  await expect.poll(() => ballotOf(page, id)).toEqual([...desired]);
+  videoId: string,
+): Promise<number | undefined> {
+  const state = await stateOf(page);
+  return state?.round?.ratings?.[id]?.[videoId];
 }
 
-async function finishVotingUi(page: Page): Promise<void> {
-  const id = await playerId(page);
-  await page.getByTestId('voting-finish').click();
-  // The last voter leaves VOTING immediately, so accept either the done marker
-  // or the phase transition.
-  await expect
-    .poll(
-      async () => {
-        const state = await stateOf(page);
-        if (state?.phase.type !== 'VOTING') {
-          return 'left';
-        }
-        return state.round?.votingDoneIds.includes(id) === true
-          ? 'done'
-          : 'wait';
-      },
-      { timeout: 10_000 },
-    )
-    .not.toBe('wait');
+/** Clicks one chip of the playing song's bar and waits for it to be pressed. */
+async function rateByUi(page: Page, value: number): Promise<void> {
+  const chip = page.getByTestId(`rating-chip-${value}`);
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+}
+
+/**
+ * Moves PLAYBACK to the song with `videoId` with the host `ADVANCE` (the clips
+ * themselves are not under test) and waits until every page renders it. Songs
+ * that are skipped on the way are rated with `rating`, so they still score.
+ */
+async function advanceToSong(
+  pages: Page[],
+  videoId: string,
+  rating?: { medias: readonly Media[]; value: RatingFn },
+): Promise<void> {
+  const [host] = pages as [Page];
+  for (let guard = 0; guard < 12; guard += 1) {
+    const state = await stateOf(host);
+    if (state?.phase.type !== 'PLAYBACK') {
+      throw new Error(`PLAYBACK ended before ${videoId} played`);
+    }
+    if (state.round?.playbackOrder[state.phase.index] === videoId) {
+      for (const page of pages) {
+        await expect(page.getByTestId('playback-phase')).toHaveAttribute(
+          'data-index',
+          String(state.phase.index),
+        );
+      }
+      return;
+    }
+    if (rating !== undefined) {
+      await rateCurrentSong(pages, rating.medias, rating.value);
+    }
+    expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
+  }
+  throw new Error(`Song ${videoId} never became the current song`);
+}
+
+/**
+ * Plays every song of the round. Player `uiRater` rates through the visible
+ * chip bar, everybody else through the session; the host skips each clip.
+ */
+async function ratePlaybackWithUi(
+  stages: readonly Stage[],
+  medias: readonly Media[],
+  values: RatingMatrix,
+  uiRater = 0,
+): Promise<void> {
+  const pages = stages.map((stage) => stage.page);
+  const [host, ...rest] = pages as [Page, ...Page[]];
+  for (;;) {
+    const state = await stateOf(host);
+    if (state?.phase.type !== 'PLAYBACK') {
+      break;
+    }
+    const playing = state.phase.index;
+    await expect(pages[uiRater]!.getByTestId('playback-phase')).toHaveAttribute(
+      'data-index',
+      String(playing),
+    );
+    const songIndex = await rateCurrentSong(pages, medias, (rater, song) =>
+      rater === uiRater ? null : (values[rater]?.[song] ?? null),
+    );
+    const given = values[uiRater]?.[songIndex] ?? null;
+    if (given !== null) {
+      await rateByUi(pages[uiRater]!, given);
+    }
+    expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
+  }
+  await waitForPhase(host, 'REVEAL');
+  await Promise.all(rest.map((page) => waitForPhase(page, 'REVEAL')));
 }
 
 interface RevealEntry {
   videoId: string;
   winner: boolean;
   genreFailed: boolean;
+  banger: boolean;
   owners: string;
   points: string;
 }
@@ -178,6 +173,7 @@ async function revealEntries(page: Page): Promise<RevealEntry[]> {
       videoId: element.getAttribute('data-video-id') ?? '',
       winner: element.getAttribute('data-winner') === 'true',
       genreFailed: element.getAttribute('data-genre-failed') === 'true',
+      banger: element.getAttribute('data-banger') === 'true',
       owners:
         element
           .querySelector('[data-testid="reveal-entry-owners"]')
@@ -191,12 +187,13 @@ async function revealEntries(page: Page): Promise<RevealEntry[]> {
 }
 
 /**
- * FR-60 reveals worst-first against server time, one entry every 2500ms, so the
- * full list (and the leaderboard) only appears after the last entry's revealAt.
+ * FR-60 reveals worst-first against server time (2500 ms per entry, 5000 ms for
+ * a banger), so the full list (and the leaderboard) only appears after the last
+ * entry's revealAt.
  */
 async function waitForFullReveal(page: Page, count: number): Promise<void> {
   await expect(page.getByTestId('reveal-entry')).toHaveCount(count, {
-    timeout: count * 2500 + 10_000,
+    timeout: count * 2500 + 15_000,
   });
   await expect(page.getByTestId('leaderboard')).toBeVisible();
 }
@@ -216,15 +213,13 @@ async function rankedRowMap(
   return Object.fromEntries(rows.map((row) => [row.id, row.rank]));
 }
 
-function songsById(state: GameState | null): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const song of state?.round?.songs ?? []) {
-    map.set(song.media.videoId, song.ownerIds[0] ?? '');
-  }
-  return map;
+function entryOf(page: Page, videoId: string) {
+  return page.locator(
+    `[data-testid="reveal-entry"][data-video-id="${videoId}"]`,
+  );
 }
 
-test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
+test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
   browser,
 }) => {
   test.setTimeout(180_000);
@@ -235,7 +230,7 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     newStage(browser, { nickname: 'Dana' }),
   ]);
   try {
-    const [host, bob, cara, dana] = stages as [Stage, Stage, Stage, Stage];
+    const [host, bob] = stages as [Stage, Stage, Stage, Stage];
     const all = stages.map((stage) => stage.page);
     await assembleRoom(host, stages.slice(1));
     await setSettings(host.page, { rounds: 1 });
@@ -249,14 +244,14 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     await expect(host.page.getByTestId('phase-timer')).toHaveCount(1);
 
     // Every player submits a distinct song through the visible submission flow.
-    const urls = [SONG_A, SONG_B, SONG_C, SONG_D].map(
-      (id) => `https://www.youtube.com/watch?v=${id}`,
-    );
+    const songs = [SONG_A, SONG_B, SONG_C, SONG_D];
+    const urls = songs.map((id) => `https://www.youtube.com/watch?v=${id}`);
     for (const [index, page] of all.entries()) {
       await submitSongViaUi(page, urls[index]!);
       await page.getByTestId('finish-submission').click();
     }
     await waitForPhase(host.page, 'PLAYBACK');
+    await Promise.all(all.map((page) => waitForPhase(page, 'PLAYBACK')));
     await expect(host.page.getByTestId('playback-timer')).toHaveAttribute(
       'role',
       'timer',
@@ -266,75 +261,60 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
       'progressbar',
     );
 
-    // Skip every clip; the reveal/leaderboard timing is asserted via ADVANCE.
-    const songCount = (await stateOf(host.page))?.round?.songs.length ?? 0;
-    for (let index = 0; index < songCount; index += 1) {
-      expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
-        'accepted',
-      );
-    }
-    await waitForPhase(host.page, 'VOTING');
-    await Promise.all(
-      stages.map((stage) => waitForPhase(stage.page, 'VOTING')),
-    );
-
-    await expect(
-      host.page.getByTestId('voting-phase').getByTestId('phase-timer'),
-    ).toHaveAttribute('role', 'timer');
-
-    const owner = songsById(await stateOf(host.page));
     const [aId, bId, cId, dId] = await Promise.all(all.map(playerId));
+    const owner = new Map(
+      ((await stateOf(host.page))?.round?.songs ?? []).map((song) => [
+        song.media.videoId,
+        song.ownerIds[0] ?? '',
+      ]),
+    );
     expect(owner.get(SONG_A)).toBe(aId);
     expect(owner.get(SONG_C)).toBe(cId);
 
-    // AK-8 ballots: A: C>B>D, B: C>A>D, C: A>B>D, D: C>A>B.
-    const ballots: Array<[Page, string, string[]]> = [
-      [host.page, aId!, [SONG_C, SONG_B, SONG_D]],
-      [bob.page, bId!, [SONG_C, SONG_A, SONG_D]],
-      [cara.page, cId!, [SONG_A, SONG_B, SONG_D]],
-      [dana.page, dId!, [SONG_C, SONG_A, SONG_B]],
-    ];
-
-    // Real desktop drag-and-drop: move the last rank onto the first.
-    await setBallot(host.page, aId!, [SONG_C, SONG_B, SONG_D]);
-    await rankItem(host.page, SONG_D).dragTo(rankItem(host.page, SONG_C));
-    await expect
-      .poll(() => rankedIds(host.page), { timeout: 5000 })
-      .toEqual([SONG_D, SONG_C, SONG_B]);
-    await expect
-      .poll(() => ballotOf(host.page, aId!))
-      .toEqual([SONG_D, SONG_C, SONG_B]);
-    // Restore the planned ballot with the deterministic reorder controls.
-    await setBallot(host.page, aId!, [SONG_C, SONG_B, SONG_D]);
-
-    for (const [page, id, ranking] of ballots.slice(1)) {
-      await setBallot(page, id, ranking);
-    }
-
-    // Every player finishes; the room must end voting early into REVEAL.
-    for (const [index, page] of all.entries()) {
-      await finishVotingUi(page);
-      if (index < all.length - 1) {
-        const id = ballots[index]![1];
-        await expect
-          .poll(() =>
-            host.page
-              .locator(
-                `[data-testid="voting-progress-player"][data-player-id="${id}"]`,
-              )
-              .getAttribute('data-done'),
-          )
-          .toBe('true');
+    // The chip bar under the playing song: 11 round chips, the owner sees
+    // "your song" instead; nothing is rated or summarised yet.
+    const firstSong = (await stateOf(host.page))?.round?.playbackOrder[0] ?? '';
+    for (const [index, stage] of stages.entries()) {
+      const ownsIt = owner.get(firstSong) === [aId, bId, cId, dId][index];
+      await expect(stage.page.getByTestId('rating-bar')).toHaveCount(
+        ownsIt ? 0 : 1,
+      );
+      await expect(stage.page.getByTestId('rating-own')).toHaveCount(
+        ownsIt ? 1 : 0,
+      );
+      if (!ownsIt) {
+        await expect(
+          stage.page.locator('[data-testid^="rating-chip-"]'),
+        ).toHaveCount(11);
       }
+      await expect(stage.page.getByTestId('rating-summary')).toHaveCount(0);
     }
-    await waitForPhase(host.page, 'REVEAL');
-    await Promise.all(
-      stages.map((stage) => waitForPhase(stage.page, 'REVEAL')),
+
+    // Ratings [rater][song]: A 7.3 (7,8,7), B 4.7 (5,5,4), D 2.7 (3,3,2) and
+    // Cara's song C is a banger (all 10). Alice rates through the UI.
+    const values: RatingMatrix = [
+      [null, 5, 10, 3],
+      [7, null, 10, 3],
+      [8, 5, null, 2],
+      [7, 4, 10, null],
+    ];
+    await ratePlaybackWithUi(
+      stages,
+      songs.map((id) => mediaOf(id)),
+      values,
     );
+
+    // Alice's own ratings, as stored by the engine.
+    const hostRatings = (await stateOf(host.page))?.round?.ratings[aId!];
+    expect(hostRatings).toEqual({
+      [SONG_B]: 5,
+      [SONG_C]: 10,
+      [SONG_D]: 3,
+    });
     await waitForFullReveal(host.page, 4);
 
     const entries = await revealEntries(host.page);
-    // Ascending Borda: D(3), B(5), A(7), C(9 + 2 bonus = 11).
+    // Ascending score: D 2.7, B 4.7, A 7.3, C 10.0 + 2.0 bonus = 12.0.
     expect(entries.map((entry) => entry.videoId)).toEqual([
       SONG_D,
       SONG_B,
@@ -343,37 +323,38 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     ]);
     const byVideo = Object.fromEntries(entries.map((e) => [e.videoId, e]));
     expect(byVideo[SONG_C]?.winner).toBe(true);
-    expect(byVideo[SONG_C]?.points).toMatch(/(?:^|\D)11(?:\D|$)/);
-    expect(byVideo[SONG_A]?.points).toMatch(/(?:^|\D)7(?:\D|$)/);
-    expect(byVideo[SONG_B]?.points).toMatch(/(?:^|\D)5(?:\D|$)/);
-    expect(byVideo[SONG_D]?.points).toMatch(/(?:^|\D)3(?:\D|$)/);
+    expect(byVideo[SONG_C]?.banger).toBe(true);
+    expect(byVideo[SONG_A]?.banger).toBe(false);
+    expect(byVideo[SONG_C]?.points).toContain('12.0');
+    expect(byVideo[SONG_A]?.points).toContain('7.3');
+    expect(byVideo[SONG_B]?.points).toContain('4.7');
+    expect(byVideo[SONG_D]?.points).toContain('2.7');
+    expect(byVideo[SONG_A]?.points).toMatch(/3 ratings|3 Bewertungen/);
     expect(entries.filter((entry) => entry.genreFailed)).toEqual([]);
-    // The counted-up combo settles on the engine's numbers (votes + bonus = score).
-    for (const [videoId, votes, bonus, total] of [
-      [SONG_D, 3, 0, 3],
-      [SONG_B, 5, 0, 5],
-      [SONG_A, 7, 0, 7],
-      [SONG_C, 9, 2, 11],
+    await expect(host.page.getByTestId('reveal-entry-banger')).toHaveCount(1);
+    await expect(
+      entryOf(host.page, SONG_C).getByTestId('reveal-entry-banger'),
+    ).toBeVisible();
+    await expect(
+      entryOf(host.page, SONG_A).getByTestId('reveal-entry-rating'),
+    ).toContainText('7.3');
+    // The counted-up combo settles on the engine's numbers: average + bonus = score.
+    for (const [videoId, average, bonus, total] of [
+      [SONG_D, '2.7', '0.0', '2.7'],
+      [SONG_B, '4.7', '0.0', '4.7'],
+      [SONG_A, '7.3', '0.0', '7.3'],
+      [SONG_C, '10.0', '2.0', '12.0'],
     ] as const) {
-      const combo = host.page
-        .locator(`[data-testid="reveal-entry"][data-video-id="${videoId}"]`)
-        .getByTestId('score-combo');
-      await expect(combo.getByTestId('score-combo-votes')).toHaveText(
-        String(votes),
-        { timeout: 5_000 },
-      );
-      await expect(combo.getByTestId('score-combo-adjust')).toHaveText(
-        String(bonus),
-      );
-      await expect(combo.getByTestId('score-combo-total')).toHaveText(
-        String(total),
-      );
+      const combo = entryOf(host.page, videoId).getByTestId('score-combo');
+      await expect(combo.getByTestId('score-combo-votes')).toHaveText(average, {
+        timeout: 5_000,
+      });
+      await expect(combo.getByTestId('score-combo-adjust')).toHaveText(bonus);
+      await expect(combo.getByTestId('score-combo-total')).toHaveText(total);
     }
     await expect(host.page.getByTestId('reveal-jackpot')).toHaveCount(1);
     await expect(
-      host.page
-        .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_C}"]`)
-        .getByTestId('reveal-jackpot'),
+      entryOf(host.page, SONG_C).getByTestId('reveal-jackpot'),
     ).toHaveCount(1);
 
     // Scoring matches the engine's own result, not just the rendered text.
@@ -383,26 +364,31 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
     const scored = new Map(
       (result?.songs ?? []).map((song) => [song.song.media.videoId, song]),
     );
-    expect(scored.get(SONG_C)?.borda).toBe(9);
-    expect(scored.get(SONG_C)?.bonus).toBe(2);
-    expect(scored.get(SONG_C)?.winner).toBe(true);
-    expect(scored.get(SONG_A)?.borda).toBe(7);
-    expect(scored.get(SONG_B)?.borda).toBe(5);
-    expect(scored.get(SONG_D)?.borda).toBe(3);
-    expect(scored.get(SONG_C)?.ownerDeltas[cId!]).toBe(11);
-    expect(scored.get(SONG_A)?.ownerDeltas[aId!]).toBe(7);
+    expect(scored.get(SONG_C)).toMatchObject({
+      scoreTenths: 100,
+      ratingCount: 3,
+      banger: true,
+      bonus: 20,
+      winner: true,
+      basis: 'ratings',
+    });
+    expect(scored.get(SONG_A)).toMatchObject({ scoreTenths: 73 });
+    expect(scored.get(SONG_B)).toMatchObject({ scoreTenths: 47 });
+    expect(scored.get(SONG_D)).toMatchObject({ scoreTenths: 27 });
+    expect(scored.get(SONG_C)?.ownerDeltas[cId!]).toBe(120);
+    expect(scored.get(SONG_A)?.ownerDeltas[aId!]).toBe(73);
 
-    // Interim leaderboard ranks mirror the round totals.
+    // Interim leaderboard ranks mirror the round totals (shown with one decimal).
     const ranks = await rankedRowMap(host.page, 'leaderboard-row');
     expect(ranks[cId!]).toBe('1');
     expect(ranks[aId!]).toBe('2');
     expect(ranks[bId!]).toBe('3');
     expect(ranks[dId!]).toBe('4');
-    await expect(
-      host.page
-        .locator(`[data-testid="leaderboard-row"][data-player-id="${cId}"]`)
-        .getByTestId('leaderboard-delta'),
-    ).toHaveCount(1);
+    const cRow = host.page.locator(
+      `[data-testid="leaderboard-row"][data-player-id="${cId}"]`,
+    );
+    await expect(cRow).toContainText('12.0');
+    await expect(cRow.getByTestId('leaderboard-delta')).toHaveCount(1);
 
     // Host skips the reveal hold and lands on the finale.
     expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
@@ -446,7 +432,7 @@ test('full game: voting, scoring, reveal, leaderboard and rematch', async ({
   }
 });
 
-test('AK-2: a duplicated song is hidden from both owners during voting', async ({
+test('AK-2: a duplicated song cannot be rated by its owners, who both score it', async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -458,9 +444,9 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
   try {
     const [host, bob, cara] = stages as [Stage, Stage, Stage];
     const pages = stages.map((stage) => stage.page);
+    const medias = [mediaOf(DUP), mediaOf(DUP), mediaOf(OTHER)];
     await assembleRoom(host, [bob, cara]);
-    await playToPlayback(pages, [mediaOf(DUP), mediaOf(DUP), mediaOf(OTHER)]);
-    await advanceToVoting(pages);
+    await playToPlayback(pages, medias);
 
     const state = await stateOf(host.page);
     const dup = state?.round?.songs.find((song) => song.media.videoId === DUP);
@@ -469,46 +455,101 @@ test('AK-2: a duplicated song is hidden from both owners during voting', async (
     expect(new Set(dup?.ownerIds)).toEqual(new Set([aId, bId]));
     expect(dup?.ownerIds).not.toContain(cId);
 
-    // Both owners neither see nor flag their shared song...
-    for (const page of [host.page, bob.page]) {
-      await expect(poolItem(page, DUP)).toHaveCount(0);
-      await expect(rankItem(page, DUP)).toHaveCount(0);
-      await expect(flagItem(page, DUP)).toHaveCount(0);
-      await expect(flagItem(page, OTHER)).toHaveCount(1);
-    }
-    // ...the uninvolved third player sees it and may flag it.
-    await expect(poolItem(cara.page, DUP)).toHaveCount(1);
-    await expect(flagItem(cara.page, DUP)).toHaveCount(1);
-    await expect(flagItem(cara.page, OTHER)).toHaveCount(0);
+    // The two songs play in a shuffled order; each gets its own checks.
+    let dupPlayed = false;
+    for (;;) {
+      const now = await stateOf(host.page);
+      if (now?.phase.type !== 'PLAYBACK') {
+        break;
+      }
+      const playing = now.round?.playbackOrder[now.phase.index];
+      for (const page of pages) {
+        await expect(page.getByTestId('playback-phase')).toHaveAttribute(
+          'data-index',
+          String(now.phase.index),
+        );
+      }
+      if (playing === DUP) {
+        // Both owners see "your song" and cannot flag it; the uninvolved
+        // third player gets the bar and may flag it.
+        for (const page of pages) {
+          await page.getByTestId('playback-consent').check();
+        }
+        for (const page of [host.page, bob.page]) {
+          await expect(page.getByTestId('rating-own')).toBeVisible();
+          await expect(page.getByTestId('rating-bar')).toHaveCount(0);
+          await expect(page.getByTestId('playback-flag')).toBeDisabled();
+        }
+        await expect(cara.page.getByTestId('rating-bar')).toBeVisible();
+        await expect(cara.page.getByTestId('rating-own')).toHaveCount(0);
+        await expect(cara.page.getByTestId('playback-flag')).toBeEnabled();
 
-    // A pause keeps the songs visible read-only instead of "nothing to rank";
-    // a voter who already finished keeps the plain done view.
-    await bob.page.getByTestId('voting-finish').click();
-    await expect(bob.page.getByTestId('voting-done')).toBeVisible();
-    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
-    expect((await dispatch(host.page, { type: 'PAUSE' })).status).toBe(
-      'accepted',
+        // A pause freezes rating: the chips stay visible but cannot be pressed.
+        expect((await dispatch(host.page, { type: 'PAUSE' })).status).toBe(
+          'accepted',
+        );
+        await expect(cara.page.getByTestId('rating-chip-5')).toBeDisabled();
+        expect(
+          (await dispatch(cara.page, { type: 'RATE', songId: DUP, value: 5 }))
+            .status,
+        ).toBe('rejected');
+        expect(
+          (
+            await dispatch(host.page, {
+              type: 'RESUME',
+              forceBelowMinimum: false,
+            })
+          ).status,
+        ).toBe('accepted');
+        await expect(cara.page.getByTestId('rating-chip-5')).toBeEnabled();
+
+        // The owners cannot rate their own song even by raw event.
+        for (const page of [host.page, bob.page]) {
+          expect(
+            (await dispatch(page, { type: 'RATE', songId: DUP, value: 10 }))
+              .status,
+          ).toBe('rejected');
+        }
+        await rateByUi(cara.page, 8);
+        await expect.poll(() => ratingOf(host.page, cId!, DUP)).toBe(8);
+        dupPlayed = true;
+      } else {
+        // Alice and Bob rate Cara's song 6 through the bar, Cara owns it.
+        await expect(cara.page.getByTestId('rating-own')).toBeVisible();
+        await expect(host.page.getByTestId('rating-bar')).toBeVisible();
+        await rateByUi(host.page, 6);
+        await rateByUi(bob.page, 6);
+        if (dupPlayed) {
+          // The shared song is summarised for everybody who saw it.
+          await expect(cara.page.getByTestId('rating-summary')).toContainText(
+            '8',
+          );
+          await expect(host.page.getByTestId('rating-summary')).toBeVisible();
+        }
+      }
+      expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+        'accepted',
+      );
+    }
+    expect(dupPlayed).toBe(true);
+    await waitForPhase(host.page, 'REVEAL');
+    const result = (await stateOf(host.page))?.results[0];
+    const scored = new Map(
+      (result?.songs ?? []).map((song) => [song.song.media.videoId, song]),
     );
-    await expect(cara.page.getByTestId('voting-paused')).toBeVisible();
-    await expect(cara.page.getByTestId('voting-no-songs')).toHaveCount(0);
-    await expect(poolItem(cara.page, DUP)).toHaveCount(1);
-    await expect(poolItem(cara.page, OTHER)).toHaveCount(0);
-    await expect(flagItem(cara.page, DUP)).toHaveCount(0);
+    // Shared song 8.0 + 2.0 bonus (the winner), full points for both owners.
+    expect(scored.get(DUP)).toMatchObject({
+      scoreTenths: 80,
+      winner: true,
+      bonus: 20,
+    });
+    expect(scored.get(DUP)?.ownerDeltas[aId!]).toBe(100);
+    expect(scored.get(DUP)?.ownerDeltas[bId!]).toBe(100);
+    expect(scored.get(OTHER)).toMatchObject({ scoreTenths: 60, winner: false });
+    await waitForFullReveal(host.page, 2);
     await expect(
-      poolItem(cara.page, DUP).getByTestId('voting-song-add'),
-    ).toBeDisabled();
-    await expect(bob.page.getByTestId('voting-paused')).toHaveCount(0);
-    await expect(poolItem(bob.page, OTHER)).toHaveCount(0);
-    expect(
-      (
-        await dispatch(host.page, {
-          type: 'RESUME',
-          forceBelowMinimum: false,
-        })
-      ).status,
-    ).toBe('accepted');
-    await expect(cara.page.getByTestId('voting-paused')).toHaveCount(0);
-    await expect(flagItem(cara.page, DUP)).toHaveCount(1);
+      entryOf(host.page, DUP).getByTestId('reveal-entry-points'),
+    ).toContainText('10.0');
   } finally {
     await closeStages(stages);
   }
@@ -530,31 +571,30 @@ test('AK-3: anonymity hides owners until the reveal names them', async ({
     await assembleRoom(host, stages.slice(1));
     await playToPlayback(pages, medias);
 
-    // No owner is named while songs are playing and while voting.
-    for (const [index, stage] of stages.entries()) {
-      const playback = await stage.page
-        .getByTestId('playback-phase')
-        .innerText();
-      for (const [other, competitor] of stages.entries()) {
-        if (other !== index)
-          expect(playback).not.toContain(competitor.nickname);
-      }
-    }
-    await advanceToVoting(pages);
-    for (const [index, stage] of stages.entries()) {
-      // The progress list names players; the song cards must not.
-      await expect(stage.page.getByTestId('voting-song-owners')).toHaveCount(0);
-      const cards = stage.page.locator(
-        '[data-testid="voting-song"], [data-testid="voting-rank-item"]',
-      );
-      for (const text of await cards.allInnerTexts()) {
+    // No owner is named while songs play and are rated, including the
+    // summary of the songs that already played.
+    for (let step = 0; step < medias.length; step += 1) {
+      for (const [index, stage] of stages.entries()) {
+        const playback = await stage.page
+          .getByTestId('playback-phase')
+          .innerText();
         for (const [other, competitor] of stages.entries()) {
-          if (other !== index) expect(text).not.toContain(competitor.nickname);
+          if (other !== index) {
+            expect(playback).not.toContain(competitor.nickname);
+          }
         }
       }
+      await rateCurrentSong(pages, medias, () => 5);
+      if (step < medias.length - 1) {
+        expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+          'accepted',
+        );
+        await expect(host.page.getByTestId('rating-summary')).toBeVisible();
+      }
     }
-
-    await finishVoting(pages, medias);
+    expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+      'accepted',
+    );
     await waitForPhase(host.page, 'REVEAL');
     await waitForFullReveal(host.page, 3);
     const entries = await revealEntries(host.page);
@@ -569,7 +609,7 @@ test('AK-3: anonymity hides owners until the reveal names them', async ({
   }
 });
 
-test('FR-41/FR-52: a voting flag retracts and a majority fails the song', async ({
+test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async ({
   browser,
 }) => {
   test.setTimeout(150_000);
@@ -582,80 +622,72 @@ test('FR-41/FR-52: a voting flag retracts and a majority fails the song', async 
   try {
     const [host, bob] = stages as [Stage, Stage, Stage, Stage];
     const pages = stages.map((stage) => stage.page);
+    const songs = [SONG_A, SONG_B, SONG_C, SONG_D];
+    const medias = songs.map((id) => mediaOf(id));
     await assembleRoom(host, stages.slice(1));
-    await playToPlayback(
-      pages,
-      [SONG_A, SONG_B, SONG_C, SONG_D].map((id) => mediaOf(id)),
-    );
-    await advanceToVoting(pages);
+    await playToPlayback(pages, medias);
 
     const [aId, bId] = await Promise.all([
       playerId(host.page),
       playerId(bob.page),
     ]);
 
-    // FR-41: a flag can be retracted before voting finishes.
-    const flagBobSong = flagItem(host.page, SONG_B);
-    await flagBobSong.click();
-    await expect(flagBobSong).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => flagsOf(host.page, aId)).toContain(SONG_B);
-    await flagBobSong.click();
-    await expect(flagBobSong).toHaveAttribute('aria-pressed', 'false');
-    await expect.poll(() => flagsOf(host.page, aId)).not.toContain(SONG_B);
-
-    // FR-52: two of the three non-owners flagging is a strict majority.
-    await flagItem(host.page, SONG_D).click();
-    await flagItem(bob.page, SONG_D).click();
-    await expect(flagItem(host.page, SONG_D)).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(flagItem(bob.page, SONG_D)).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-
-    const ballots: Array<[Page, string, string[]]> = [
-      [host.page, aId, [SONG_C, SONG_B, SONG_D]],
-      [bob.page, bId, [SONG_C, SONG_A, SONG_D]],
-      [
-        stages[2]!.page,
-        await playerId(stages[2]!.page),
-        [SONG_A, SONG_B, SONG_D],
-      ],
-      [
-        stages[3]!.page,
-        await playerId(stages[3]!.page),
-        [SONG_C, SONG_A, SONG_B],
-      ],
+    // FR-52: two of the three non-owners flagging is a strict majority. The
+    // flag is set once per song and cannot be taken back.
+    // Everyone gives the foreign songs 5, Cara's song 9 and the flagged one 3.
+    const values: RatingMatrix = [
+      [null, 5, 9, 3],
+      [5, null, 9, 3],
+      [5, 5, null, 3],
+      [5, 5, 9, null],
     ];
-    for (const [page, id, ranking] of ballots) {
-      await setBallot(page, id, ranking);
-    }
-    for (const page of pages) {
-      await finishVotingUi(page);
-    }
-    await waitForPhase(host.page, 'REVEAL');
+    const rate: RatingFn = (rater, song) => values[rater]?.[song] ?? null;
+    await advanceToSong(pages, SONG_D, { medias, value: rate });
+    // The genre-fail button lives behind the per-tab embedding consent.
+    await host.page.getByTestId('playback-consent').check();
+    await bob.page.getByTestId('playback-consent').check();
+    const flagHost = host.page.getByTestId('playback-flag');
+    await flagHost.click();
+    await expect(flagHost).toHaveAttribute('data-flagged', 'true');
+    await expect(flagHost).toBeDisabled();
+    await expect.poll(() => flagsOf(host.page, aId)).toContain(SONG_D);
+    await bob.page.getByTestId('playback-flag').click();
+    await expect(bob.page.getByTestId('playback-flag')).toHaveAttribute(
+      'data-flagged',
+      'true',
+    );
+    await expect.poll(() => flagsOf(bob.page, bId)).toContain(SONG_D);
+    expect(
+      (
+        await dispatch(host.page, {
+          type: 'SET_GENRE_FAIL',
+          videoId: SONG_D,
+          flagged: false,
+        })
+      ).status,
+    ).toBe('rejected');
+
+    await ratePlayback(pages, medias, rate);
     await waitForFullReveal(host.page, 4);
 
     const entries = await revealEntries(host.page);
     const failed = entries.find((entry) => entry.videoId === SONG_D);
     expect(failed?.genreFailed).toBe(true);
-    // borda 3 + penalty (-3) = 0 for the flagged owner.
-    expect(failed?.points).toMatch(/(?:^|\D)0(?:\D|$)/);
-    // The combo shows the penalty as "3 - 3 = 0".
-    const failedCombo = host.page
-      .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_D}"]`)
-      .getByTestId('score-combo');
-    await expect(failedCombo.getByTestId('score-combo-total')).toHaveText('0', {
-      timeout: 5_000,
-    });
-    await expect(failedCombo.getByTestId('score-combo-adjust')).toHaveText('3');
-    await expect(failedCombo).toHaveAttribute('data-adjust', '-3');
+    // Average 3.0 plus the -3.0 penalty is 0.0 for the flagged owner.
+    expect(failed?.points).toContain('0.0');
+    const failedCombo = entryOf(host.page, SONG_D).getByTestId('score-combo');
+    await expect(failedCombo.getByTestId('score-combo-total')).toHaveText(
+      '0.0',
+      { timeout: 5_000 },
+    );
+    await expect(failedCombo.getByTestId('score-combo-adjust')).toHaveText(
+      '3.0',
+    );
+    await expect(failedCombo).toHaveAttribute('data-adjust', '-30');
     // Two of the three non-owners flagged it; the count is rendered, not a placeholder.
-    const failNote = host.page
-      .locator(`[data-testid="reveal-entry"][data-video-id="${SONG_D}"]`)
-      .getByTestId('reveal-entry-genre-fail');
+    const failNote = entryOf(host.page, SONG_D).getByTestId(
+      'reveal-entry-genre-fail',
+    );
     await expect(failNote).toHaveText(/(?:^|\D)2(?:\D|$)/);
     await expect(failNote).not.toContainText('{{');
 
@@ -663,17 +695,21 @@ test('FR-41/FR-52: a voting flag retracts and a majority fails the song', async 
     const scored = new Map(
       (result?.songs ?? []).map((song) => [song.song.media.videoId, song]),
     );
-    expect(scored.get(SONG_D)?.genreFailed).toBe(true);
-    expect(scored.get(SONG_D)?.borda).toBe(3);
-    expect(scored.get(SONG_D)?.winner).toBe(false);
-    expect(scored.get(SONG_C)?.winner).toBe(true);
-    expect(scored.get(SONG_C)?.borda).toBe(9);
+    expect(scored.get(SONG_D)).toMatchObject({
+      genreFailed: true,
+      scoreTenths: 30,
+      winner: false,
+    });
+    expect(scored.get(SONG_C)).toMatchObject({
+      winner: true,
+      scoreTenths: 90,
+    });
   } finally {
     await closeStages(stages);
   }
 });
 
-test('FR-42: partial rankings are accepted and voting ends when everyone is done', async ({
+test('FR-40/FR-50: unrated songs score 0.0 with a note, ratings close with PLAYBACK', async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -685,66 +721,68 @@ test('FR-42: partial rankings are accepted and voting ends when everyone is done
   try {
     const [host] = stages as [Stage, Stage, Stage];
     const pages = stages.map((stage) => stage.page);
+    const medias = [mediaOf(PART_A), mediaOf(PART_B), mediaOf(PART_C)];
     await assembleRoom(host, stages.slice(1));
-    await playToPlayback(pages, [
-      mediaOf(PART_A),
-      mediaOf(PART_B),
-      mediaOf(PART_C),
-    ]);
-    await advanceToVoting(pages);
+    await playToPlayback(pages, medias);
 
     const [aId, bId, cId] = await Promise.all(pages.map(playerId));
-    // A ranks only one of the two foreign songs; partial ranking is allowed.
-    await setBallot(host.page, aId, [PART_C]);
-    await finishVotingUi(host.page);
-    const afterPartial = await stateOf(host.page);
-    expect(afterPartial?.phase.type).toBe('VOTING');
-    expect(afterPartial?.round?.ballots?.[aId]?.ranking).toEqual([PART_C]);
-    await expect
-      .poll(() =>
-        host.page
-          .locator(
-            `[data-testid="voting-progress-player"][data-player-id="${aId}"]`,
-          )
-          .getAttribute('data-done'),
-      )
-      .toBe('true');
-
-    await setBallot(stages[1]!.page, bId, [PART_A, PART_C]);
-    await finishVotingUi(stages[1]!.page);
-    await setBallot(stages[2]!.page, cId, [PART_A, PART_B]);
-    const started = Date.now();
-    await finishVotingUi(stages[2]!.page);
-
-    // Everyone is done, so the room leaves VOTING long before its 60s deadline.
-    await waitForPhase(host.page, 'REVEAL', 20_000);
-    expect(Date.now() - started).toBeLessThan(60_000);
-    const votingSeconds =
-      (await stateOf(host.page))?.settings.votingSeconds ?? 60;
-    expect(Date.now() - started).toBeLessThan(votingSeconds * 1000);
-    await waitForFullReveal(host.page, 3);
+    // Cara rates nothing; B's song is rated by nobody, A's by Bob only.
+    const values: RatingMatrix = [
+      [null, null, 4],
+      [7, null, 6],
+      [null, null, null],
+    ];
+    await ratePlayback(pages, medias, (rater, song) => values[rater]![song]!);
 
     const result = (await stateOf(host.page))?.results[0];
     const scored = new Map(
       (result?.songs ?? []).map((song) => [song.song.media.videoId, song]),
     );
-    // A ranked one (2-point ballot + 3-point ballot): PART_A 4, PART_C 2, PART_B 1.
-    expect(scored.get(PART_A)?.borda).toBe(4);
-    expect(scored.get(PART_C)?.borda).toBe(2);
-    expect(scored.get(PART_B)?.borda).toBe(1);
-    expect(scored.get(PART_A)?.winner).toBe(true);
+    // A: one rating of 7 = 7.0 (winner, +2.0); B: no rating = 0.0; C: 4 and 6 = 5.0.
+    expect(scored.get(PART_A)).toMatchObject({
+      scoreTenths: 70,
+      ratingCount: 1,
+      winner: true,
+    });
+    expect(scored.get(PART_B)).toMatchObject({
+      scoreTenths: 0,
+      ratingCount: 0,
+      basis: 'noRating',
+    });
+    expect(scored.get(PART_C)).toMatchObject({
+      scoreTenths: 50,
+      ratingCount: 2,
+    });
+    expect(result?.playerDeltas).toEqual({
+      [aId!]: 90,
+      [bId!]: 0,
+      [cId!]: 50,
+    });
+    await waitForFullReveal(host.page, 3);
     const entries = await revealEntries(host.page);
     expect(entries.map((entry) => entry.videoId)).toEqual([
       PART_B,
       PART_C,
       PART_A,
     ]);
+    await expect(
+      entryOf(host.page, PART_B).getByTestId('reveal-entry-note'),
+    ).toBeVisible();
+    await expect(
+      entryOf(host.page, PART_B).getByTestId('score-combo-total'),
+    ).toHaveText('0.0', { timeout: 5_000 });
+
+    // The window closed with PLAYBACK: a late RATE is rejected.
+    expect(
+      (await dispatch(pages[2]!, { type: 'RATE', songId: PART_A, value: 9 }))
+        .status,
+    ).toBe('rejected');
   } finally {
     await closeStages(stages);
   }
 });
 
-test('FR-54: a single deduplicated song skips voting with a notice', async ({
+test('FR-54: 3 players, one skips: the remaining songs are rated and scored', async ({
   browser,
 }) => {
   test.setTimeout(120_000);
@@ -757,21 +795,112 @@ test('FR-54: a single deduplicated song skips voting with a notice', async ({
     const [host] = stages as [Stage, Stage, Stage];
     const pages = stages.map((stage) => stage.page);
     await assembleRoom(host, stages.slice(1));
-    await submitSongsAndFinish(pages, [
-      mediaOf(DUP),
-      mediaOf(DUP),
-      mediaOf(DUP),
-    ]);
+    for (const page of pages) {
+      await unlockSound(page);
+    }
+    expect((await dispatch(host.page, { type: 'START_GAME' })).status).toBe(
+      'accepted',
+    );
+    await waitForPhase(host.page, 'GENRE_SPIN');
+    expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+      'accepted',
+    );
+    await waitForPhase(host.page, 'SUBMISSION');
+    await Promise.all(pages.map((page) => waitForPhase(page, 'SUBMISSION')));
+    // Alice and Bob submit; Cara skips the round by finishing without a song.
+    for (const [index, page] of pages.slice(0, 2).entries()) {
+      expect(
+        (
+          await dispatch(page, {
+            type: 'SUBMIT_SONG',
+            media: mediaFor(5, index),
+          })
+        ).status,
+      ).toBe('accepted');
+      expect((await dispatch(page, { type: 'FINISH_SUBMISSION' })).status).toBe(
+        'accepted',
+      );
+    }
+    expect(
+      (await dispatch(pages[2]!, { type: 'FINISH_SUBMISSION' })).status,
+    ).toBe('accepted');
+    await waitForPhase(host.page, 'PLAYBACK');
 
-    // One aggregated song skips PLAYBACK/VOTING and reveals directly.
-    await waitForPhase(host.page, 'REVEAL');
+    const medias = [mediaFor(5, 0), mediaFor(5, 1)];
+    expect((await stateOf(host.page))?.round?.songs).toHaveLength(2);
+    // Bob rates Alice 6, Alice rates Bob 6, Cara rates Alice 9 and Bob 8.
+    const values: RatingMatrix = [
+      [null, 6],
+      [6, null],
+      [9, 8],
+    ];
+    await ratePlayback(pages, medias, (rater, song) => values[rater]![song]!);
+
+    const result = (await stateOf(host.page))?.results[0];
+    expect(result?.reason).toBe('normal');
+    expect(result?.songs).toHaveLength(2);
+    const scored = new Map(
+      (result?.songs ?? []).map((song) => [song.song.media.videoId, song]),
+    );
+    // Alice: (6 + 9) / 2 = 7.5 and the winner bonus; Bob: (6 + 8) / 2 = 7.0.
+    expect(scored.get(medias[0]!.videoId)).toMatchObject({
+      scoreTenths: 75,
+      winner: true,
+    });
+    expect(scored.get(medias[1]!.videoId)).toMatchObject({
+      scoreTenths: 70,
+      winner: false,
+    });
+    const aId = await playerId(host.page);
+    expect(result?.playerDeltas[aId]).toBe(95);
+    await waitForFullReveal(host.page, 2);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('FR-50/FR-54: a song every player owns is rated normally and pays a fixed 5.0', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const stages = await Promise.all([
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bob' }),
+    newStage(browser, { nickname: 'Cara' }),
+  ]);
+  try {
+    const [host] = stages as [Stage, Stage, Stage];
+    const pages = stages.map((stage) => stage.page);
+    const medias = [mediaOf(DUP), mediaOf(DUP), mediaOf(DUP)];
+    await assembleRoom(host, stages.slice(1));
+    await playToPlayback(pages, medias);
+
+    // One aggregated song, owned by everyone: nobody gets a chip bar.
     const state = await stateOf(host.page);
-    expect(state?.results[0]?.reason).toBe('singleSong');
-    const deltas = Object.values(state?.results[0]?.playerDeltas ?? {});
+    expect(state?.round?.songs).toHaveLength(1);
+    expect(state?.round?.playbackOrder).toEqual([DUP]);
+    for (const page of pages) {
+      await expect(page.getByTestId('rating-own')).toBeVisible();
+      await expect(page.getByTestId('rating-bar')).toHaveCount(0);
+    }
+    await ratePlayback(pages, medias, () => null);
+
+    const result = (await stateOf(host.page))?.results[0];
+    expect(result?.reason).toBe('normal');
+    expect(result?.songs[0]).toMatchObject({
+      basis: 'noRaters',
+      scoreTenths: 50,
+      winner: false,
+      bonus: 0,
+    });
+    const deltas = Object.values(result?.playerDeltas ?? {});
     expect(deltas).toHaveLength(3);
-    expect(deltas.every((delta) => delta === 0)).toBe(true);
-    await expect(host.page.getByTestId('single-song')).toBeVisible();
-    await expect(host.page.getByTestId('single-song-notice')).toBeVisible();
+    expect(deltas.every((delta) => delta === 50)).toBe(true);
+    await waitForFullReveal(host.page, 1);
+    await expect(host.page.getByTestId('reveal-entry-note')).toBeVisible();
+    await expect(host.page.getByTestId('score-combo-total')).toHaveText('5.0', {
+      timeout: 5_000,
+    });
   } finally {
     await closeStages(stages);
   }
