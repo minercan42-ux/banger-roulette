@@ -2508,6 +2508,7 @@ body {
     grid-area: side;
     min-width: 0;
   }
+  /* The stage is also a `br-panel`: the jackpot show shakes the nearest panel. */
   .br-table__stage {
     grid-area: stage;
     flex: 1 1 auto;

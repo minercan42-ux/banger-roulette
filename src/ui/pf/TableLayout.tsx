@@ -182,7 +182,7 @@ export function TableLayout({
             {side}
           </aside>
         )}
-        <main className="br-table__stage">
+        <main className="br-panel br-table__stage">
           {notices}
           {stage}
         </main>
