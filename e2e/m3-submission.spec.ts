@@ -240,6 +240,107 @@ test('four players see one deterministic wheel and the same localized genre', as
   }
 });
 
+test('an 80-character custom genre is shown whole on the plate and in two whole lines on the reel', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const stages = await Promise.all([
+    newStage(browser, {
+      nickname: 'Alice',
+      locale: 'en-US',
+      viewport: { width: 360, height: 740 },
+    }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [host, ...rest] = stages;
+    await assembleRoom(host, rest);
+    const wide = 'W'.repeat(80);
+    const wideM = 'M'.repeat(80);
+    await setSettings(host.page, {
+      genre: {
+        mode: 'custom',
+        items: [
+          { id: 'long-wide', de: wide, en: wide },
+          { id: 'long-m', de: wideM, en: wideM },
+        ],
+      },
+    });
+    for (const stage of stages) {
+      await unlockSound(stage.page);
+    }
+    await host.page.getByTestId('start-game').click();
+    await waitForPhase(host.page, 'GENRE_SPIN');
+
+    // The stopped reel: every row holds at most two whole lines (the name box
+    // is an exact multiple of the line height and sits inside the fixed row).
+    const hold = host.page.getByTestId('genre-spin').getByTestId('genre-plate');
+    await expect(hold).toBeVisible({ timeout: 6000 });
+    const reel = await host.page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.br-reel__row')].map(
+        (row) => {
+          const name = row.querySelector<HTMLElement>('.br-reel__name')!;
+          const lineHeight = parseFloat(getComputedStyle(name).lineHeight);
+          return {
+            lines: name.clientHeight / lineHeight,
+            fontSize: parseFloat(getComputedStyle(name).fontSize),
+            nameHeight: name.offsetHeight,
+            rowHeight: row.clientHeight,
+            text: name.textContent,
+          };
+        },
+      ),
+    );
+    expect(reel.length).toBeGreaterThan(0);
+    for (const row of reel) {
+      expect(row.lines).toBeLessThanOrEqual(2.05);
+      expect(Math.abs(row.lines - Math.round(row.lines))).toBeLessThan(0.05);
+      expect(row.nameHeight).toBeLessThanOrEqual(row.rowHeight);
+      expect(row.fontSize).toBeGreaterThanOrEqual(12);
+      // The whole name stays in the DOM, the ellipsis is only visual.
+      expect([wide, wideM]).toContain(row.text);
+    }
+
+    // The plate in the hold and the one in SUBMISSION show the full name.
+    const plateFits = (page: Page, scope: string) =>
+      page.evaluate((testId) => {
+        const plate = document
+          .querySelector(`[data-testid="${testId}"]`)!
+          .querySelector<HTMLElement>('[data-testid="genre-plate"]')!;
+        const name = plate.querySelector<HTMLElement>('.br-genre__name')!;
+        return {
+          nameFits: name.scrollHeight <= name.clientHeight + 1,
+          plateFits: plate.scrollHeight <= plate.clientHeight + 1,
+          text: name.textContent,
+          lines:
+            name.clientHeight / parseFloat(getComputedStyle(name).lineHeight),
+        };
+      }, scope);
+    const held = await plateFits(host.page, 'genre-spin');
+    expect(held.nameFits).toBe(true);
+    expect(held.plateFits).toBe(true);
+    expect([wide, wideM]).toContain(held.text);
+    const heldWidths = await host.page.evaluate(() => ({
+      inner: window.innerWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(heldWidths.scroll).toBeLessThanOrEqual(heldWidths.inner);
+    await waitForPhase(host.page, 'SUBMISSION');
+    const kept = await plateFits(host.page, 'submission-panel');
+    expect(kept.nameFits).toBe(true);
+    expect(kept.plateFits).toBe(true);
+    expect(kept.text).toBe(held.text);
+    const widths = await host.page.evaluate(() => ({
+      inner: window.innerWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.inner);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
 test('duplicate links collapse to one song with the first start and stay anonymous', async ({
   browser,
 }) => {

@@ -164,7 +164,7 @@ export function GenreSpin({ session, state }: GenreSpinProps) {
                         }
                         style={style}
                       >
-                        {name}
+                        <span className="br-reel__name">{name}</span>
                       </div>
                     );
                   })}

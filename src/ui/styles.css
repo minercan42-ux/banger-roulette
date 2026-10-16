@@ -901,11 +901,18 @@
     transform: translateZ(calc(var(--reel-radius) * -1));
   }
   .br-reel__row {
-    /* Largest size at which `--len` characters (about half an em wide) fit
-       between the pointers, capped at `--reel-fs`, never below 18px. */
+    /* Largest size at which `--len` characters (about half an em wide) fit on
+       one line between the pointers, capped at `--reel-fs`. Below 18px the
+       name moves to two lines (twice the characters per line) and shrinks
+       further, never below 12px; what still does not fit is cut with an
+       ellipsis by `.br-reel__name`. */
+    --w: calc(100cqw - 56px);
     --fs: max(
-      18px,
-      min(var(--reel-fs), calc((100cqw - 56px) * 2.2 / var(--len)))
+      12px,
+      max(
+        min(var(--reel-fs), calc(var(--w) * 2.2 / var(--len))),
+        min(18px, calc(var(--w) * 4.4 / var(--len)))
+      )
     );
     position: absolute;
     inset-inline: 0;
@@ -913,13 +920,9 @@
     height: var(--reel-row);
     padding-inline: 28px;
     overflow: hidden;
-    /* One line while it fits; at the font floor a long name wraps onto a
-       second line instead of being cut. */
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow-wrap: anywhere;
-    text-wrap: balance;
     text-align: center;
     text-transform: uppercase;
     font: 400 var(--fs) / 1.05 var(--font-pixel);
@@ -931,6 +934,20 @@
       inset 0 3px 0 rgba(255, 246, 227, 0.08);
     transform: rotateX(var(--phi)) translateZ(var(--reel-radius));
     backface-visibility: hidden;
+  }
+  /* The row keeps its height; the name takes at most two whole lines and ends
+     in an ellipsis rather than a half-cut line. The full text stays in the DOM
+     (and in the wheel's label and `genre-result`). */
+  .br-reel__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    max-width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    text-overflow: ellipsis;
   }
   .br-reel__row[data-picked='true'] {
     color: var(--color-gold);
@@ -2635,6 +2652,12 @@ body {
     gap: var(--space-2);
     min-width: 0;
     padding: 2px var(--space-3);
+  }
+  /* A custom genre may be 80 characters of one word: wrap it inside the bar. */
+  .br-table__summary [data-testid='phase-genre'] {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
   .br-table__summary .br-stat__value {
     font-size: 32px;
