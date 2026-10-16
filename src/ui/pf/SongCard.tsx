@@ -120,7 +120,7 @@ export function SongCard({
         <span className="br-card__back" />
         {song !== undefined && (
           <span className="br-card__face br-card__face--front">
-            <span className="br-card__corner">{number}</span>
+            <span className="br-card__corner">{number}</span>{' '}
             <span className="br-card__mid">
               {showThumbnail && song.thumbnail !== '' ? (
                 <img
@@ -135,9 +135,9 @@ export function SongCard({
               ) : (
                 <span className="br-card__thumb" />
               )}
-              <span className="br-card__title">{song.title}</span>
+              <span className="br-card__title">{song.title}</span>{' '}
               <span className="br-card__sub">{song.channel}</span>
-            </span>
+            </span>{' '}
             <span className="br-card__corner br-card__corner--end">
               {number}
             </span>

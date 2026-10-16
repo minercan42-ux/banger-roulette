@@ -95,16 +95,28 @@ export function HomeView({
         <p className="br-read">{t('home.intro')}</p>
       </div>
 
-      {joining && (
-        <p data-testid="route-joining" className="br-notice">
-          {t('home.rejoining')}
-        </p>
-      )}
+      {/*
+        The forms keep their place while a deep link reconnects: hidden, inert
+        and without a test id, so they only reserve their height. Swapping a
+        short "Reconnecting" line for the forms moved the footer and, through
+        the scrollbar that appeared, the whole panel (CLS on /r/:code, #53).
+      */}
+      <div className="relative">
+        {joining && (
+          <p
+            data-testid="route-joining"
+            className="br-notice absolute inset-x-0 top-0"
+          >
+            {t('home.rejoining')}
+          </p>
+        )}
 
-      {!joining && (
         <div
-          data-testid={prefillCode ? 'route-join-view' : 'home-forms'}
-          className="space-y-5"
+          data-testid={
+            joining ? undefined : prefillCode ? 'route-join-view' : 'home-forms'
+          }
+          inert={joining}
+          className={joining ? 'invisible space-y-5' : 'space-y-5'}
         >
           {identityMissing && (
             <p
@@ -203,7 +215,7 @@ export function HomeView({
             </Button>
           </Panel>
         </div>
-      )}
+      </div>
 
       <p className="br-label">
         {t('home.genreCatalogue', { count: genres.length })}

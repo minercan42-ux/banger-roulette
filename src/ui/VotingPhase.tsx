@@ -665,7 +665,11 @@ export function VotingPhase({
                     onClick={() => addSong(song)}
                     disabled={!editable}
                     tooltip={song.title}
-                    label={t('voting.addAria', { title: song.title })}
+                    label={t('voting.addAria', {
+                      number: songNumber(song),
+                      title: song.title,
+                      channel: song.channel,
+                    })}
                   />
                   <span aria-hidden="true" className="br-label text-gold">
                     {t('voting.add')}
