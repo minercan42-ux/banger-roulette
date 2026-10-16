@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectLobbyReadiness,
@@ -13,11 +13,12 @@ import { useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
-import { PhaseAnnouncer, PhaseSummary } from './PhaseSummary';
+import { PhaseAnnouncer, PhaseNotices, PhaseSummary } from './PhaseSummary';
 import { Button } from './pf/Button';
 import { Chip } from './pf/Chip';
 import { Field } from './pf/Field';
 import { Panel, PanelTitle } from './pf/Panel';
+import { TableLayout } from './pf/TableLayout';
 import { PlaybackPhase } from './PlaybackPhase';
 import {
   PlaybackControllerContext,
@@ -29,6 +30,7 @@ import { SettingsForm } from './SettingsForm';
 import { SfxDirector } from './SfxDirector';
 import { SoundControl } from './SoundControl';
 import { SubmissionPanel } from './SubmissionPanel';
+import { useSoundUnlock } from './useSoundUnlock';
 
 interface RoomViewProps {
   session: GameSession;
@@ -36,6 +38,11 @@ interface RoomViewProps {
   state: GameState;
   roster: PlayerView[];
   onLeave: () => void;
+  /** Shell chrome the table frame places: wordmark, SFX/language, banners, privacy. */
+  brand: ReactNode;
+  controls: ReactNode;
+  notices: ReactNode;
+  footer: ReactNode;
 }
 
 export function RoomView({
@@ -44,6 +51,10 @@ export function RoomView({
   state,
   roster,
   onLeave,
+  brand,
+  controls,
+  notices,
+  footer,
 }: RoomViewProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -75,6 +86,15 @@ export function RoomView({
     hostRef: playbackHostRef,
   });
 
+  // FR-07: the unlock state and AudioContext belong to the room view, not to
+  // the SoundControl that the layout moves between the stage and the drawer.
+  const canWriteSelf = self !== undefined && permissions.canWrite;
+  const sound = useSoundUnlock(
+    session,
+    canWriteSelf,
+    self?.soundUnlocked ?? false,
+  );
+
   async function copyLink() {
     try {
       if (!navigator.clipboard) {
@@ -95,58 +115,25 @@ export function RoomView({
     }
   }
 
-  return (
-    <div data-testid="room-view" data-phase={room.phase} className="space-y-5">
+  const lobby = room.phase === 'LOBBY';
+  const soundControl = <SoundControl sound={sound} canWrite={canWriteSelf} />;
+
+  const stage = (
+    <div data-testid="room-view" data-phase={room.phase} className="space-y-4">
       {/* SPEC §6: one effect director for the room, driven by the shared state
           instead of the phase components. */}
       <SfxDirector session={session} state={state} />
       {/* SPEC §6: the phase live region is mounted for the whole room lifecycle
           (LOBBY included) so the lobby boundary is announced too. */}
       <PhaseAnnouncer room={room} />
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <PanelTitle as="h1" className="flex items-center gap-2">
-            <Chip tone="gold" />
-            {t('lobby.heading')}
-          </PanelTitle>
-          <p className="br-label flex flex-wrap items-center gap-2">
-            {t('lobby.roomCodeLabel')}:
-            <span data-testid="room-code" className="br-code">
-              {room.roomCode}
-            </span>
-          </p>
-        </div>
-        <Button tone="slate" data-testid="leave-room" onClick={onLeave}>
-          {t('lobby.leave')}
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          tone="blue"
-          size="sm"
-          data-testid="copy-link"
-          onClick={() => {
-            void copyLink();
-          }}
-        >
-          {t('lobby.copyLink')}
-        </Button>
-        <span data-testid="copy-status" role="status" className="br-read">
-          {copied === 'copied' ? t('common.copied') : ''}
-        </span>
-        {copied === 'failed' && (
-          <Field
-            type="text"
-            data-testid="copy-link-fallback"
-            label={t('lobby.copyFailed')}
-            readOnly
-            value={shareUrl}
-            onFocus={(event) => event.target.select()}
-            className="min-w-0 flex-1"
-          />
-        )}
-      </div>
+      {lobby ? (
+        <PanelTitle as="h1" className="flex items-center gap-2">
+          <Chip tone="gold" />
+          {t('lobby.heading')}
+        </PanelTitle>
+      ) : (
+        <h1 className="sr-only">{t('lobby.heading')}</h1>
+      )}
 
       {self && !permissions.canWrite && (
         <p
@@ -174,28 +161,14 @@ export function RoomView({
         </p>
       )}
 
-      <HostControls
-        session={session}
-        state={state}
-        permissions={permissions}
-        readiness={readiness}
-      />
-
-      {room.phase === 'LOBBY' && (
+      {lobby && (
         <p data-testid="lobby-start-hint" className="br-notice">
           {t('lobby.startHint')}
         </p>
       )}
 
       <PlaybackControllerContext.Provider value={playback}>
-        {room.phase !== 'LOBBY' && (
-          <PhaseSummary
-            session={session}
-            state={state}
-            room={room}
-            self={self}
-          />
-        )}
+        {!lobby && <PhaseNotices room={room} self={self} />}
 
         {room.phase === 'GENRE_SPIN' && (
           <GenreSpin session={session} state={state} />
@@ -263,12 +236,66 @@ export function RoomView({
         )}
       </PlaybackControllerContext.Provider>
 
-      <SoundControl
-        session={session}
-        canWrite={self !== undefined && permissions.canWrite}
-        unlocked={self?.soundUnlocked ?? false}
-      />
+      {lobby && soundControl}
 
+      {lobby && (
+        <SettingsForm
+          session={session}
+          state={state}
+          canEdit={permissions.canEditSettings}
+        />
+      )}
+    </div>
+  );
+
+  const actions = (
+    <div className="br-table__actions-inner">
+      <HostControls
+        session={session}
+        state={state}
+        permissions={permissions}
+        readiness={readiness}
+      />
+      <div className="br-table__share">
+        <Button
+          tone="blue"
+          size="sm"
+          data-testid="copy-link"
+          onClick={() => {
+            void copyLink();
+          }}
+        >
+          {t('lobby.copyLink')}
+        </Button>
+        <span data-testid="copy-status" role="status" className="br-read">
+          {copied === 'copied' ? t('common.copied') : ''}
+        </span>
+      </div>
+      <Button
+        tone="slate"
+        size="sm"
+        data-testid="leave-room"
+        className="br-table__leave"
+        onClick={onLeave}
+      >
+        {t('lobby.leave')}
+      </Button>
+      {copied === 'failed' && (
+        <Field
+          type="text"
+          data-testid="copy-link-fallback"
+          label={t('lobby.copyFailed')}
+          readOnly
+          value={shareUrl}
+          onFocus={(event) => event.target.select()}
+          className="br-table__fallback"
+        />
+      )}
+    </div>
+  );
+
+  const drawer = (
+    <>
       <Panel
         as="section"
         data-testid="lobby-readiness"
@@ -296,22 +323,44 @@ export function RoomView({
           </p>
         )}
       </Panel>
+      {!lobby && soundControl}
+    </>
+  );
 
-      <RosterList
-        roster={roster}
-        canKick={permissions.canKick}
-        onKick={(playerId) => {
-          void kick(playerId);
-        }}
-      />
-
-      {room.phase === 'LOBBY' && (
-        <SettingsForm
-          session={session}
-          state={state}
-          canEdit={permissions.canEditSettings}
+  return (
+    <TableLayout
+      top={
+        <>
+          {brand}
+          <div className="br-table__meta">
+            <span className="br-label">{t('lobby.roomCodeLabel')}:</span>
+            <span data-testid="room-code" className="br-code br-code--bar">
+              {room.roomCode}
+            </span>
+          </div>
+          {controls}
+        </>
+      }
+      phaseBar={
+        lobby ? undefined : (
+          <PhaseSummary session={session} state={state} room={room} />
+        )
+      }
+      notices={notices}
+      side={
+        <RosterList
+          roster={roster}
+          phase={room.phase}
+          canKick={permissions.canKick}
+          onKick={(playerId) => {
+            void kick(playerId);
+          }}
         />
-      )}
-    </div>
+      }
+      stage={stage}
+      actions={actions}
+      drawer={drawer}
+      footer={footer}
+    />
   );
 }

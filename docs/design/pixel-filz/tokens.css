@@ -1,14 +1,14 @@
 /* Banger Roulette, generated from tokens.json. Do not edit by hand. */
 :root,
 [data-theme='felt'] {
-  --felt-950: #0b1f1c;
-  --felt-900: #123a33;
-  --swirl-green: #0f4f45;
+  --felt-950: #240a0d;
+  --felt-900: #3d1016;
+  --swirl-wine: #5c1420;
   --swirl-red: #b8322f;
   --swirl-blue: #165a8c;
-  --panel: #24312f;
-  --well: #0f1a18;
-  --edge: #0a1312;
+  --panel: #1d1f24;
+  --well: #121317;
+  --edge: #0a0a0c;
   --cream: #fff6e3;
   --cream-muted: #c9bfa8;
   --ink-disabled: #7e8c89;
@@ -28,8 +28,8 @@
   --slate: #4a5856;
   --slate-deep: #2c3634;
   --focus: var(--gold);
-  --drop-edge: 0 5px 0 #0a1312;
-  --drop-edge-sm: 0 3px 0 #0a1312;
+  --drop-edge: 0 5px 0 #0a0a0c;
+  --drop-edge-sm: 0 3px 0 #0a0a0c;
   --press-gold: 0 5px 0 #a8730f;
   --press-blue: 0 5px 0 #0d4778;
   --press-red: 0 5px 0 #8c2420;

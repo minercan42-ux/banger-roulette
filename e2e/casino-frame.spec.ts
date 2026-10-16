@@ -302,9 +302,10 @@ test('Page background renders a visible felt weave', async ({ browser }) => {
     reducedMotion: 'reduce',
   });
   try {
-    // Bare page margin left of the panel: only the body background is drawn.
+    // The gutter left of the table (16 px at 1280 px): only the backdrop is
+    // drawn there, the top bar, roster and stage all start inside it.
     const png = await host.page.screenshot({
-      clip: { x: 0, y: 0, width: 96, height: 96 },
+      clip: { x: 0, y: 160, width: 12, height: 480 },
     });
     const stddev = await host.page.evaluate(async (base64) => {
       const image = new Image();

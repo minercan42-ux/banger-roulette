@@ -214,7 +214,7 @@ const WheelFace = memo(function WheelFace({ pool, language }: WheelFaceProps) {
               d={segmentPath(index, count)}
               fill={
                 index === 0
-                  ? 'var(--color-swirl-green)'
+                  ? 'var(--color-swirl-wine)'
                   : dark
                     ? 'var(--color-well)'
                     : 'var(--color-red)'

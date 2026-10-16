@@ -21,14 +21,14 @@
  */
 
 @theme static {
-  --color-felt-950: #0b1f1c;
-  --color-felt-900: #123a33;
-  --color-swirl-green: #0f4f45;
+  --color-felt-950: #240a0d;
+  --color-felt-900: #3d1016;
+  --color-swirl-wine: #5c1420;
   --color-swirl-red: #b8322f;
   --color-swirl-blue: #165a8c;
-  --color-panel: #24312f;
-  --color-well: #0f1a18;
-  --color-edge: #0a1312;
+  --color-panel: #1d1f24;
+  --color-well: #121317;
+  --color-edge: #0a0a0c;
   --color-cream: #fff6e3;
   --color-cream-muted: #c9bfa8;
   --color-ink-disabled: #7e8c89;
@@ -49,8 +49,8 @@
   --color-slate-deep: #2c3634;
   --color-focus: var(--color-gold);
 
-  --drop-edge: 0 5px 0 #0a1312;
-  --drop-edge-sm: 0 3px 0 #0a1312;
+  --drop-edge: 0 5px 0 #0a0a0c;
+  --drop-edge-sm: 0 3px 0 #0a0a0c;
   --press-gold: 0 5px 0 #a8730f;
   --press-blue: 0 5px 0 #0d4778;
   --press-red: 0 5px 0 #8c2420;
@@ -186,13 +186,13 @@
     filter: blur(38px) saturate(1.2);
     background: conic-gradient(
       from 0deg,
-      var(--color-swirl-green),
+      var(--color-swirl-wine),
       var(--color-swirl-red) 18%,
-      var(--color-swirl-green) 33%,
+      var(--color-swirl-wine) 33%,
       var(--color-swirl-blue) 52%,
-      var(--color-swirl-green) 68%,
+      var(--color-swirl-wine) 68%,
       var(--color-swirl-red) 84%,
-      var(--color-swirl-green)
+      var(--color-swirl-wine)
     );
     animation: br-swirl var(--dur-swirl) linear infinite;
     transition:
@@ -1272,8 +1272,8 @@ body {
 
 @media (max-width: 639px) {
   .shell-logo {
-    font-size: 40px;
-    line-height: 36px;
+    font-size: 28px;
+    line-height: 28px;
   }
 }
 
@@ -2400,5 +2400,355 @@ body {
     .br-banger__sub {
       animation: br-banger-fade 240ms linear both !important;
     }
+  }
+}
+
+/*
+ * Spieltisch frame (issue #86, `pf/TableLayout.tsx`): the full-width table
+ * replaces the single centred column. Text always sits on a panel or on the
+ * `felt-900` stage, never on the swirling backdrop, so contrast stays
+ * computable. Breakpoints: >= 1024 grid with a 240px roster column, 640-1023
+ * roster strip above the stage, < 640 sticky bars and a drawer dialog.
+ */
+@layer components {
+  .br-table {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-height: 100dvh;
+    max-width: 1920px;
+    margin-inline: auto;
+    padding: var(--space-3);
+  }
+
+  .br-table__top {
+    background: var(--color-panel);
+    border-radius: var(--radius-md);
+    box-shadow: var(--drop-edge);
+    padding: var(--space-2) var(--space-3);
+  }
+  .br-table__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+  }
+  .br-table__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .br-table__brand .br-logo {
+    font-size: 36px;
+    line-height: 34px;
+    text-shadow:
+      0 3px 0 var(--color-red),
+      0 6px 0 var(--color-edge);
+  }
+  .br-table__chips,
+  .br-home__chips {
+    display: flex;
+  }
+  .br-table__chips > * + *,
+  .br-home__chips > * + * {
+    margin-inline-start: -8px;
+  }
+  .br-table__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .br-code--bar {
+    padding: 0 var(--space-2);
+    font-size: 26px;
+    line-height: 28px;
+  }
+  .br-table__controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-start: auto;
+  }
+  .br-table__menu {
+    display: none;
+  }
+  .br-table__phase {
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 3px solid var(--color-edge);
+  }
+  .br-table__summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+  }
+  .br-table__summary .br-stat {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 2px var(--space-3);
+  }
+  .br-table__summary .br-stat__value {
+    font-size: 32px;
+    line-height: 30px;
+  }
+
+  .br-table__body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  .br-table__side {
+    grid-area: side;
+    min-width: 0;
+  }
+  /* The stage is also a `br-panel`: the jackpot show shakes the nearest panel. */
+  .br-table__stage {
+    grid-area: stage;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-felt-900);
+    box-shadow: inset 0 0 0 3px var(--color-edge);
+  }
+  .br-table__notices {
+    display: grid;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .br-table__actions {
+    grid-area: actions;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-panel);
+    box-shadow: var(--drop-edge);
+  }
+  .br-table__actions-inner,
+  .br-table__host,
+  .br-table__host-row,
+  .br-table__share {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+  .br-table__share {
+    flex-wrap: nowrap;
+  }
+  .br-table__leave {
+    margin-inline-start: auto;
+  }
+  .br-table__fallback {
+    flex: 1 1 100%;
+  }
+  .br-table__drawer {
+    grid-area: drawer;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+  .br-table__drawer[hidden] {
+    display: none;
+  }
+  .br-table__drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .br-table__footer {
+    font: 400 13px/18px var(--font-text);
+    color: var(--color-cream-muted);
+  }
+  .br-table__privacy {
+    display: grid;
+    gap: var(--space-1);
+    margin: var(--space-2) 0 0;
+    padding-left: var(--space-4);
+    list-style: disc;
+    overflow-wrap: anywhere;
+  }
+
+  /* Roster: a column on the table, a swipeable strip below 1024 px. */
+  .br-roster {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .br-roster__score {
+    font: 400 22px/24px var(--font-pixel);
+    color: var(--color-gold);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Home: hero over the create and join forms. */
+  .br-home__hero {
+    text-align: center;
+  }
+  .br-home__mark {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+  .br-home__logo {
+    font-size: 40px;
+    line-height: 38px;
+  }
+  .br-home__forms {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+  .br-home__form {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  @media (min-width: 640px) {
+    .br-home__logo {
+      font-size: 64px;
+      line-height: 56px;
+    }
+  }
+  @media (min-width: 768px) {
+    .br-home__forms {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+    .br-home__forms > .br-notice {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .br-table {
+      padding: var(--space-4);
+      gap: var(--space-4);
+    }
+    .br-table__body:not(.is-solo) {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      grid-template-areas:
+        'side stage'
+        'drawer stage'
+        'drawer actions';
+      grid-template-rows: auto 1fr auto;
+      align-items: start;
+      gap: var(--space-4);
+    }
+    .br-table__body:not(.is-solo) .br-table__stage {
+      align-self: stretch;
+    }
+    .br-table__stage .br-wheel {
+      width: clamp(300px, 34vw, 460px);
+    }
+    .br-table__privacy {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-6);
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .br-table__side .br-roster {
+      flex-direction: row;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scroll-snap-type: x proximity;
+      padding-bottom: var(--space-2);
+    }
+    .br-table__side .br-roster__row {
+      flex: 0 0 min(15rem, 78%);
+      align-content: flex-start;
+      scroll-snap-align: start;
+    }
+  }
+
+  @media (max-width: 639px) {
+    .br-table {
+      gap: var(--space-2);
+      padding: var(--space-2);
+    }
+    .br-table__top {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    .br-table__bar {
+      gap: var(--space-1) var(--space-3);
+    }
+    .br-table__brand {
+      order: 1;
+    }
+    .br-table__chips {
+      display: none;
+    }
+    .br-table__menu {
+      display: inline-flex;
+      order: 2;
+      margin-inline-start: auto;
+    }
+    .br-table__meta {
+      order: 3;
+    }
+    .br-table__controls {
+      order: 4;
+      margin-inline-start: auto;
+    }
+    .br-table__meta .br-label,
+    .br-table__controls .br-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .br-table__actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 30;
+    }
+    .br-table__stage {
+      padding: var(--space-2);
+    }
+    .br-table__drawer {
+      position: fixed;
+      inset-block: 0;
+      inset-inline-end: 0;
+      z-index: 50;
+      width: min(22rem, 92%);
+      padding: var(--space-3);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--color-felt-900);
+      box-shadow: -5px 0 0 var(--color-edge);
+    }
+    .br-table__scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: rgba(0, 0, 0, 0.65);
+    }
+  }
+}
+
+/* Sticky bars must never hide a focused or scrolled-to control. */
+@media (max-width: 639px) {
+  html {
+    scroll-padding-block: 9rem 8rem;
   }
 }

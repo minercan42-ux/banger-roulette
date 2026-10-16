@@ -9,7 +9,6 @@ import type { GameSession } from '../net/session';
 import type { ClientAction } from '../shared/actions';
 import type { GameState } from '../shared/game';
 import { Button } from './pf/Button';
-import { Panel } from './pf/Panel';
 
 interface HostControlsProps {
   session: GameSession;
@@ -67,11 +66,10 @@ export function HostControls({
   const startDisabled = !permissions.canStartGame || !readiness.ready || busy;
 
   return (
-    <Panel
-      as="section"
+    <div
       data-testid="host-controls"
       data-phase={phase}
-      className="space-y-2"
+      className="br-table__host"
     >
       {errorKey && (
         <p
@@ -84,7 +82,7 @@ export function HostControls({
       )}
 
       {lobby && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="br-table__host-row">
           <Button
             data-testid="start-game"
             disabled={startDisabled}
@@ -105,7 +103,7 @@ export function HostControls({
       )}
 
       {timed && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="br-table__host-row">
           {permissions.canPause && (
             <Button
               tone="blue"
@@ -165,6 +163,6 @@ export function HostControls({
           )}
         </div>
       )}
-    </Panel>
+    </div>
   );
 }

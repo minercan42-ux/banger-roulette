@@ -104,7 +104,8 @@
     "startHint": "The host starts the round once 3–10 players are ready (sound enabled).",
     "settingsHeading": "Game rules",
     "settingsHostOnly": "Only the host can change the rules.",
-    "backHome": "Back to start"
+    "backHome": "Back to start",
+    "doneBadge": "done"
   },
   "sound": {
     "consentButton": "Enable sound",
@@ -162,7 +163,6 @@
     "PLAYBACK": "Playback",
     "REVEAL": "Reveal",
     "FINAL": "Finale",
-    "runningHeading": "Game in progress",
     "genreLabel": "Genre: {{genre}}",
     "timerLabel": "Time left",
     "paused": "Paused",
@@ -354,5 +354,13 @@
     "penalty": "Penalty",
     "shared": "Shared",
     "total": "Round"
+  },
+  "table": {
+    "drawerOpen": "Menu",
+    "drawerClose": "Close",
+    "drawerTitle": "Table menu",
+    "rosterLabel": "Players at the table",
+    "actionsLabel": "Actions",
+    "infoLabel": "Room info"
   }
 }

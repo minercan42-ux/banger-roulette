@@ -2,7 +2,7 @@
 
 Das Genre-Rad: Pixel-Roulette mit Glühbirnenkranz, Zeiger, der an jedem Segment zuckt, und einem Shake beim Stillstand (FR-10, AK-1).
 
-**Aufbau:** `div.br-wheel > div.br-wheel__pointer + svg.br-wheel__disc + div.br-wheel__hub`. Segmente im SVG: abwechselnd `red` (Text `card-ink`) und `well` (Text `cream`), Segment 0 in `swirl-green` wie die Null beim Roulette. Rand `edge` + `gold-deep`, Glühbirnen `gold` (blinken mit `ease-pixel`).
+**Aufbau:** `div.br-wheel > div.br-wheel__pointer + svg.br-wheel__disc + div.br-wheel__hub`. Segmente im SVG: abwechselnd `red` (Text `card-ink`) und `well` (Text `cream`), Segment 0 in `swirl-wine` wie die Null beim Roulette. Rand `edge` + `gold-deep`, Glühbirnen `gold` (blinken mit `ease-pixel`).
 
 **Consumer liefert:** Genre-Liste (Reihenfolge = Segmentreihenfolge, für alle Clients identisch), Ziel-Index und Jitter vom Host (injizierte RNG, vor Start festgelegt), Startzeit.
 
