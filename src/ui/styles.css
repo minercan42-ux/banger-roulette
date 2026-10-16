@@ -1908,3 +1908,497 @@ body {
     transform-origin: left center;
   }
 }
+
+/* THIS IS A BANGER show (FR-60, issue #87): a full-viewport overlay for a 10.0
+   song, portalled to <body> like the jackpot. Every time below is a point on
+   one 5000 ms timeline (BANGER_SHOW_MS, 120 bpm): the stamp lands at 300 ms, a
+   beat every 500 ms, the finale at 3800 ms. Under full motion at most two
+   flashes a second (WCAG 2.3.1). Own block, br- prefixed, tokens only. */
+@layer components {
+  .br-banger {
+    --s: 1.5;
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    overflow: hidden;
+    pointer-events: none;
+    animation: br-banger-out 300ms linear 4700ms both;
+  }
+  @media (max-width: 520px) {
+    .br-banger {
+      --s: 1.2;
+    }
+  }
+  .br-banger__scrim {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(10, 19, 18, 0.74) 0,
+      rgba(10, 19, 18, 0.93) 100%
+    );
+    animation: br-banger-fade 300ms linear both;
+  }
+  /* The shaken layer: its edges reach past the viewport so the jolt never
+     shows a seam. */
+  .br-banger__world {
+    position: absolute;
+    inset: 0;
+  }
+  .br-banger__world::after {
+    content: '';
+    position: absolute;
+    inset: -24px;
+    z-index: 5;
+    opacity: 0;
+    background: radial-gradient(
+      circle,
+      rgba(255, 246, 227, 0.9) 0,
+      rgba(245, 182, 48, 0.55) 38%,
+      transparent 72%
+    );
+    animation: br-banger-flash 500ms ease-out 3800ms forwards;
+  }
+
+  /* Light sweep: gold rays turning around the card, two searchlights swinging
+     against each other. */
+  .br-banger__rays {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 1;
+    width: 190vmax;
+    height: 190vmax;
+    translate: -50% -50%;
+    background: repeating-conic-gradient(
+      rgba(245, 182, 48, 0.4) 0 7.5deg,
+      transparent 7.5deg 15deg
+    );
+    mask-image: radial-gradient(circle, #000 0, transparent 52%);
+    animation:
+      br-banger-spin 5000ms linear both,
+      br-banger-fade 500ms linear both;
+  }
+  .br-banger__rays::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-conic-gradient(
+      rgba(242, 80, 75, 0.34) 3.75deg 11.25deg,
+      transparent 11.25deg 15deg
+    );
+    animation: br-banger-spin 5000ms linear reverse both;
+  }
+  .br-banger__beam {
+    position: absolute;
+    bottom: -8vh;
+    z-index: 1;
+    width: 34vmin;
+    height: 150vmax;
+    margin-left: -17vmin;
+    transform-origin: 50% 100%;
+    clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+    background: linear-gradient(
+      to top,
+      rgba(255, 246, 227, 0.62),
+      rgba(245, 182, 48, 0.28) 45%,
+      transparent 85%
+    );
+    animation: br-banger-sweep 1000ms ease-in-out infinite alternate;
+  }
+  .br-banger__beam--left {
+    left: 16%;
+    --from: -38deg;
+    --to: 22deg;
+  }
+  .br-banger__beam--right {
+    left: 84%;
+    --from: 38deg;
+    --to: -22deg;
+    background: linear-gradient(
+      to top,
+      rgba(255, 140, 130, 0.58),
+      rgba(242, 80, 75, 0.28) 45%,
+      transparent 85%
+    );
+  }
+  /* A gold or a red flash on every beat, alternating: two a second. */
+  .br-banger__strobe {
+    position: absolute;
+    inset: -24px;
+    z-index: 3;
+    opacity: 0;
+    background-color: var(--color-gold);
+    animation: br-banger-strobe 1000ms linear 300ms 4;
+  }
+  .br-banger__ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 3;
+    width: 26vmin;
+    height: 26vmin;
+    translate: -50% -50%;
+    border: 8px solid var(--color-gold);
+    border-radius: var(--radius-round);
+    opacity: 0;
+    animation: br-banger-ring 700ms ease-out 300ms forwards;
+  }
+  .br-banger__ring--finale {
+    border-color: var(--color-red);
+    animation-delay: 3800ms;
+  }
+
+  /* Dense chip rain, behind the card. */
+  .br-banger__rain {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+  }
+  .br-banger__rain .br-chip {
+    position: absolute;
+    top: -60px;
+    animation: br-banger-fall var(--fall, 1500ms) cubic-bezier(0.4, 0, 0.9, 0.6)
+      var(--delay, 0ms) both;
+  }
+
+  .br-banger__content {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6);
+    padding: var(--space-4);
+  }
+  .br-banger__word {
+    max-width: 96vw;
+    rotate: -2deg;
+    text-align: center;
+    text-wrap: balance;
+    font: 400 clamp(56px, 22vw, 160px) / 0.9 var(--font-pixel);
+    letter-spacing: 2px;
+    color: var(--color-gold);
+    text-shadow:
+      0 6px 0 var(--color-red-deep),
+      0 12px 0 var(--color-edge),
+      0 0 40px rgba(245, 182, 48, 0.75);
+    animation:
+      br-banger-stamp 320ms cubic-bezier(0.2, 1.5, 0.4, 1) both,
+      br-banger-beat 500ms ease-out 300ms 7;
+  }
+  .br-banger__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-6) var(--space-12);
+    max-width: 100%;
+  }
+  /* Room for the card at its show size; the card itself scales inside. */
+  .br-banger__cardwrap {
+    position: relative;
+    flex: none;
+    width: calc(124px * var(--s));
+    height: calc(172px * var(--s));
+  }
+  .br-banger__card {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    animation:
+      br-banger-fly 900ms cubic-bezier(0.2, 0.9, 0.3, 1.1) 500ms both,
+      br-banger-bob 1000ms ease-in-out 1400ms infinite alternate;
+  }
+  .br-banger__card .br-card {
+    scale: var(--s);
+    rotate: -3deg;
+  }
+  .br-banger__stamps {
+    position: absolute;
+    inset-inline: -14%;
+    bottom: 12%;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .br-banger__stamp {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px var(--space-3);
+    border: 3px solid var(--color-red-deep);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 246, 227, 0.94);
+    color: var(--color-red-deep);
+    font: 400 calc(18px * var(--s)) / 1.1 var(--font-pixel);
+    letter-spacing: 1px;
+    rotate: calc(-8deg + var(--i, 0) * 9deg);
+    box-shadow: var(--drop-edge-sm);
+    animation: br-banger-owner 300ms cubic-bezier(0.3, 1.6, 0.5, 1)
+      calc(1600ms + var(--i, 0) * 220ms) both;
+  }
+  .br-banger__result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: min(92vw, 420px);
+  }
+  .br-banger__score {
+    rotate: 2deg;
+    font: 400 clamp(96px, 20vw, 180px) / 0.85 var(--font-pixel);
+    color: var(--color-cream);
+    text-shadow:
+      0 6px 0 var(--color-gold-deep),
+      0 12px 0 var(--color-edge),
+      0 0 30px rgba(245, 182, 48, 0.7);
+    animation:
+      br-banger-stamp 320ms cubic-bezier(0.2, 1.5, 0.4, 1) 1900ms both,
+      br-banger-beat 500ms ease-out 2300ms 3;
+  }
+  .br-banger__sub {
+    max-width: 100%;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-panel);
+    box-shadow: var(--drop-edge-sm);
+    color: var(--color-cream);
+    font: 400 16px / 20px var(--font-label);
+    text-align: center;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+    animation: br-fade-up var(--dur-base) var(--ease-out) 2300ms both;
+  }
+  .br-banger__sub--bonus {
+    color: var(--color-gold);
+    animation-delay: 2500ms;
+  }
+
+  /* Confetti burst at the finale. */
+  .br-banger__confetti {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+  }
+  .br-banger__piece {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    opacity: 0;
+    background: var(--color-gold);
+    animation: br-banger-confetti 850ms cubic-bezier(0.1, 0.7, 0.3, 1)
+      var(--delay, 3800ms) forwards;
+  }
+  .br-banger__piece.is-strip {
+    width: 8px;
+    height: 22px;
+  }
+  .br-banger__piece--1 {
+    background: var(--color-red);
+  }
+  .br-banger__piece--2 {
+    background: var(--color-blue);
+  }
+  .br-banger__piece--3 {
+    background: var(--color-cream);
+  }
+  .br-banger__piece--4 {
+    background: var(--color-green);
+  }
+
+  /* Reduced motion: a static gold burst. */
+  .br-banger__burst {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 150vmax;
+    height: 150vmax;
+    translate: -50% -50%;
+    background:
+      radial-gradient(
+        circle,
+        rgba(245, 182, 48, 0.55) 0,
+        rgba(245, 182, 48, 0.22) 16%,
+        transparent 42%
+      ),
+      repeating-conic-gradient(
+        rgba(245, 182, 48, 0.3) 0 6deg,
+        transparent 6deg 12deg
+      );
+    mask-image: radial-gradient(circle, #000 0, transparent 55%);
+    animation: br-banger-fade 240ms linear both;
+  }
+
+  @keyframes br-banger-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes br-banger-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes br-banger-spin {
+    to {
+      transform: rotate(720deg);
+    }
+  }
+  @keyframes br-banger-sweep {
+    from {
+      rotate: var(--from);
+    }
+    to {
+      rotate: var(--to);
+    }
+  }
+  @keyframes br-banger-strobe {
+    0% {
+      background-color: var(--color-gold);
+      opacity: 0.32;
+    }
+    12%,
+    49.9% {
+      background-color: var(--color-gold);
+      opacity: 0;
+    }
+    50% {
+      background-color: var(--color-red);
+      opacity: 0.3;
+    }
+    62%,
+    100% {
+      background-color: var(--color-red);
+      opacity: 0;
+    }
+  }
+  @keyframes br-banger-ring {
+    from {
+      scale: 0.2;
+      opacity: 1;
+    }
+    to {
+      scale: 7;
+      opacity: 0;
+    }
+  }
+  @keyframes br-banger-flash {
+    from {
+      opacity: 0.85;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes br-banger-stamp {
+    0% {
+      transform: scale(5) rotate(-10deg);
+      opacity: 0;
+    }
+    70% {
+      transform: scale(0.93) rotate(2deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1) rotate(0);
+      opacity: 1;
+    }
+  }
+  @keyframes br-banger-beat {
+    from {
+      scale: 1.07;
+    }
+    to {
+      scale: 1;
+    }
+  }
+  @keyframes br-banger-owner {
+    from {
+      transform: scale(3);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes br-banger-fly {
+    0% {
+      transform: translate(-70vw, 80vh) rotate(-720deg) scale(0.3);
+    }
+    100% {
+      transform: translate(0, 0) rotate(0) scale(1);
+    }
+  }
+  @keyframes br-banger-bob {
+    from {
+      translate: 0 0;
+    }
+    to {
+      translate: 0 -8px;
+    }
+  }
+  @keyframes br-banger-fall {
+    from {
+      transform: translate(0, 0) rotate(0deg);
+    }
+    to {
+      transform: translate(var(--drift, 0px), calc(100dvh + 140px))
+        rotate(var(--spin, 540deg));
+    }
+  }
+  @keyframes br-banger-confetti {
+    0% {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+    }
+    55% {
+      opacity: 1;
+      transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+        scale(1) rotate(calc(var(--spin) * 0.6));
+    }
+    100% {
+      opacity: 0;
+      transform: translate(
+          calc(-50% + var(--dx) * 1.1),
+          calc(-50% + var(--dy) + 22vmin)
+        )
+        scale(1) rotate(var(--spin));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .br-banger__rays,
+    .br-banger__beam,
+    .br-banger__strobe,
+    .br-banger__ring,
+    .br-banger__rain,
+    .br-banger__confetti,
+    .br-banger__world::after {
+      display: none;
+    }
+    .br-banger__word,
+    .br-banger__card,
+    .br-banger__stamp,
+    .br-banger__score,
+    .br-banger__sub {
+      animation: br-banger-fade 240ms linear both !important;
+    }
+  }
+}

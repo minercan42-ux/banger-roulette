@@ -8,8 +8,10 @@
 import { MASTER_GAIN, renderEvents, type SfxEvent } from '../src/ui/sfx';
 import { useSfxStore } from '../src/ui/sfx-store';
 
-/** Render window in seconds; the longest recipe (the finale) ends at 1.15 s. */
+/** Render window in seconds; the longest short recipe (the finale) ends at 1.15 s. */
 const WINDOW_SECONDS = 1.5;
+/** Window of the banger recipe, which fills the 5 s banger reveal slot. */
+const BANGER_WINDOW_SECONDS = 5.5;
 /** Extra window after a mute so the 10 ms fade is fully inside the "after" range. */
 const MUTE_SETTLE_SECONDS = 0.05;
 /** Sample rate of every render. */
@@ -33,6 +35,11 @@ export interface SfxRenderProbe {
   setEnabled(enabled: boolean): void;
   /** Render one batch with the toggle as it currently stands. */
   render(events: SfxEvent[]): Promise<SfxMeasurement>;
+  /**
+   * Render the banger recipe alone over its 5 s slot (plus a 0.5 s tail) and
+   * measure each `[from, to]` second range of that one buffer.
+   */
+  renderBanger(ranges: [number, number][]): Promise<SfxMeasurement[]>;
   /**
    * Render a batch with the toggle switched off `muteAt` seconds in, and
    * measure the buffer before and after that switch. Engines without
@@ -91,6 +98,19 @@ async function render(events: SfxEvent[]): Promise<SfxMeasurement> {
   renderEvents(context, events);
   const buffer = await context.startRendering();
   return measure(buffer.getChannelData(0), 0, WINDOW_SECONDS);
+}
+
+async function renderBanger(
+  ranges: [number, number][],
+): Promise<SfxMeasurement[]> {
+  const context = new OfflineAudioContext(
+    1,
+    Math.ceil(BANGER_WINDOW_SECONDS * SAMPLE_RATE),
+    SAMPLE_RATE,
+  );
+  renderEvents(context, ['banger']);
+  const data = (await context.startRendering()).getChannelData(0);
+  return ranges.map(([from, to]) => measure(data, from, to));
 }
 
 /** Flips the in-memory toggle exactly like the header button does. */
@@ -159,5 +179,6 @@ window.__sfxRender = {
     useSfxStore.setState({ enabled });
   },
   render,
+  renderBanger,
   renderWithMuteAt,
 };

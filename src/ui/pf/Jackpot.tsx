@@ -39,7 +39,7 @@ export interface JackpotChip {
 }
 
 /** FNV-1a: stable 32-bit hash of a string. */
-function hashSeed(seed: string): number {
+export function hashSeed(seed: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < seed.length; index += 1) {
     hash ^= seed.charCodeAt(index);
@@ -49,7 +49,7 @@ function hashSeed(seed: string): number {
 }
 
 /** mulberry32: tiny seeded PRNG in [0, 1). */
-function seededRandom(seed: number): () => number {
+export function seededRandom(seed: number): () => number {
   let state = seed;
   return () => {
     state = (state + 0x6d2b79f5) | 0;

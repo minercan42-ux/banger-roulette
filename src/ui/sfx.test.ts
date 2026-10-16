@@ -4,7 +4,13 @@ import {
   releaseAudioContext,
   unlockAudioContext,
 } from './audio-context';
-import { MASTER_GAIN, playEvents, type SfxEvent } from './sfx';
+import {
+  BANGER_BOOST,
+  MASTER_GAIN,
+  playEvents,
+  recipeTones,
+  type SfxEvent,
+} from './sfx';
 import { useSfxStore } from './sfx-store';
 
 const ALL_EVENTS: SfxEvent[] = [
@@ -13,6 +19,7 @@ const ALL_EVENTS: SfxEvent[] = [
   'linked',
   'revealEntry',
   'jackpot',
+  'banger',
   'phaseChange',
   'final',
 ];
@@ -258,4 +265,42 @@ test('the release closes the shared context', async () => {
   playEvents(ALL_EVENTS);
   expect(created).toEqual([context]);
   expect(context.oscillators).toHaveLength(0);
+});
+
+test('the banger recipe fits the engine banger slot and the master ceiling', () => {
+  const tones = recipeTones('banger');
+  // 5000 ms is the engine's BANGER_REVEAL_MS; the show ends with the slot.
+  const end = Math.max(...tones.map((tone) => tone.at + tone.duration));
+  expect(end).toBeLessThanOrEqual(5);
+  expect(end).toBeGreaterThan(4.5);
+  // The bus calls `onended` of the last tone to drop itself: that tone has to
+  // be the one that ends last.
+  const last = tones[tones.length - 1];
+  expect(last.at + last.duration).toBe(end);
+  // Upper bound of the envelopes at every instant: a tone counts with its peak
+  // gain while it sounds. The layers are written for a sum <= 1 and made up by
+  // the boost; the rendered peak itself is measured in e2e/sfx-render.spec.ts.
+  const instants = tones.flatMap((tone) => [tone.at, tone.at + 0.001]);
+  for (const instant of instants) {
+    const sum = tones
+      .filter((tone) => instant >= tone.at && instant < tone.at + tone.duration)
+      .reduce((total, tone) => total + tone.gain, 0);
+    expect(sum, `layers at ${instant.toFixed(3)} s`).toBeLessThanOrEqual(
+      BANGER_BOOST + 1e-9,
+    );
+  }
+  // The beat: a kick lands on the stamp (0.3 s) and the finale (3.8 s).
+  const kicks = tones.filter(
+    (tone) => tone.type === 'sine' && tone.sweepTo === 42,
+  );
+  expect(kicks.map((tone) => tone.at)).toContain(0.3);
+  expect(kicks.map((tone) => tone.at)).toContain(3.8);
+});
+
+test('the banger recipe is silent with the toggle off', async () => {
+  await unlockAudioContext();
+  useSfxStore.setState({ enabled: false });
+  playEvents(['banger']);
+  expect(lastContext().oscillators).toHaveLength(0);
+  expect(lastContext().gains).toHaveLength(0);
 });

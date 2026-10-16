@@ -9,6 +9,7 @@ function snapshot(overrides: Partial<SfxSnapshot> = {}): SfxSnapshot {
     spinTicks: 0,
     linkedEntries: 0,
     revealedEntries: 0,
+    bangerEntries: 0,
     winnerRevealed: false,
     ...overrides,
   };
@@ -87,6 +88,40 @@ describe('sfxEventsFor', () => {
     expect(sfxEventsFor(snapshot({ phase: 'REVEAL' }), next)).toEqual([
       'revealEntry',
       'jackpot',
+    ]);
+  });
+
+  test('banger instead of the plain blip and the jackpot for a 10.0 song', () => {
+    // The winning banger is on screen: bangerEntries counts it, the snapshot
+    // does not count it as a jackpot winner.
+    const next = snapshot({
+      phase: 'REVEAL',
+      revealedEntries: 3,
+      bangerEntries: 1,
+    });
+    const prev = snapshot({ phase: 'REVEAL', revealedEntries: 2 });
+    expect(sfxEventsFor(prev, next)).toEqual(['banger']);
+  });
+
+  test('a banger and a plain entry in one step each get their own sound', () => {
+    const prev = snapshot({ phase: 'REVEAL', revealedEntries: 1 });
+    const next = snapshot({
+      phase: 'REVEAL',
+      revealedEntries: 3,
+      bangerEntries: 1,
+    });
+    expect(sfxEventsFor(prev, next)).toEqual(['revealEntry', 'banger']);
+  });
+
+  test('a banger that was already revealed does not play again', () => {
+    const settled = snapshot({
+      phase: 'REVEAL',
+      revealedEntries: 3,
+      bangerEntries: 1,
+    });
+    expect(sfxEventsFor(settled, settled)).toEqual([]);
+    expect(sfxEventsFor(settled, { ...settled, revealedEntries: 4 })).toEqual([
+      'revealEntry',
     ]);
   });
 
