@@ -256,7 +256,7 @@ export function Shell({ session }: { session: GameSession }) {
               data-testid="session-status"
               data-status={snapshot.status}
               role="status"
-              className="rounded-lg border border-gold-400/30 bg-felt-800/60 px-3 py-2 text-sm text-gold-200"
+              className="br-notice"
             >
               {t(`status.${snapshot.status}`)}
               {snapshot.status === 'lost' && (
@@ -279,7 +279,7 @@ export function Shell({ session }: { session: GameSession }) {
             <section
               data-testid="config-error"
               role="alert"
-              className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-3 text-sm text-rose-100"
+              className="br-notice br-notice--error"
             >
               <p className="font-semibold">{t('config.title')}</p>
               <p className="mt-1">{t('config.body')}</p>
@@ -289,7 +289,7 @@ export function Shell({ session }: { session: GameSession }) {
               <p
                 data-testid="session-error"
                 role="alert"
-                className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
+                className="br-notice br-notice--error"
               >
                 {t(`errors.${bannerError}`)}
               </p>

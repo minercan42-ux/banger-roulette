@@ -411,6 +411,17 @@ test('invalid, missing, duplicate and full-room joins stay consumer visible', as
     await invalid.getByTestId('join-nickname').fill('Nope');
     await invalid.getByTestId('join-room').click();
     await expect(invalid.getByTestId('home-error')).toBeVisible();
+    // The banner is linked to the invalid field only (#74).
+    const bannerId = await invalid.getByTestId('home-error').getAttribute('id');
+    expect(bannerId).toBeTruthy();
+    await expect(invalid.getByTestId('join-code')).toHaveAttribute(
+      'aria-describedby',
+      new RegExp(`\\b${bannerId}\\b`),
+    );
+    await expect(invalid.getByTestId('join-nickname')).not.toHaveAttribute(
+      'aria-describedby',
+      new RegExp(`\\b${bannerId}\\b`),
+    );
 
     // Unknown room surfaces ROOM_NOT_FOUND.
     const missing = await openHarness(dupContext);

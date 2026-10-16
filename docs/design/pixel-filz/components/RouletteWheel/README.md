@@ -13,6 +13,6 @@ Das Genre-Rad: Pixel-Roulette mit Glühbirnenkranz, Zeiger, der an jedem Segment
 - Ändert sich `floor(winkel / segmentbreite)`, zuckt der Zeiger (`.is-tick`) und optional ein Klick-Sound.
 - Am Ende: `.br-shake` auf den Screen, `GenrePlate` poppt rein. Während des Spins läuft der Backdrop-Wirbel mit `1 + 4 × (1 - t)` facher Geschwindigkeit.
 
-**Motion 14:** `animate(rotate, target, { duration: 5.2, ease: [0.12, 0.62, 0.08, 1], onUpdate: checkTick })`.
+**Motion 14:** `animate(rotate, target, { duration: 2.58, ease: [0.12, 0.62, 0.08, 1], onUpdate: checkTick })` (`duration` = `--dur-spin`, 2580 ms).
 
 **Reduced motion:** kein Spin, Rad steht direkt auf dem Ziel, Plakette blendet ein.

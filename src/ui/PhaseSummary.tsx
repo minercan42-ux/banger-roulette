@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import type { PlayerView, RoomView } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
+import { Badge } from './pf/Badge';
+import { Panel, PanelTitle } from './pf/Panel';
 import { PhaseTimer, Stat } from './pf/Stat';
 
 interface PhaseSummaryProps {
@@ -27,24 +29,18 @@ export function PhaseSummary({
   const showTimer = room.phase !== 'SUBMISSION' && room.phase !== 'VOTING';
 
   return (
-    <section
+    <Panel
+      as="section"
       data-testid="phase-summary"
       data-phase={room.phase}
-      className="rounded-xl border border-gold-400/20 bg-felt-800/50 p-4"
+      className="space-y-3"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg text-gold-300">
-          {t('phase.runningHeading')}
-        </h2>
-        <span
-          data-testid="phase-name"
-          className="rounded-full border border-gold-400/30 px-3 py-0.5 text-xs text-gold-200 uppercase"
-        >
-          {t(`phase.${room.phase}`)}
-        </span>
+        <PanelTitle className="m-0">{t('phase.runningHeading')}</PanelTitle>
+        <Badge data-testid="phase-name">{t(`phase.${room.phase}`)}</Badge>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-stretch gap-3">
+      <div className="flex flex-wrap items-stretch gap-3">
         {room.roundNumber !== null && (
           <Stat
             data-testid="phase-round"
@@ -61,10 +57,7 @@ export function PhaseSummary({
           />
         )}
         {room.genre && (
-          <span
-            data-testid="phase-genre"
-            className="self-center text-sm text-cream-100/80"
-          >
+          <span data-testid="phase-genre" className="br-read self-center">
             {t('phase.genreLabel', {
               genre:
                 i18n.resolvedLanguage === 'en' ? room.genre.en : room.genre.de,
@@ -74,11 +67,7 @@ export function PhaseSummary({
       </div>
 
       {room.paused && (
-        <p
-          data-testid="pause-banner"
-          role="status"
-          className="mt-3 rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
-        >
+        <p data-testid="pause-banner" role="status" className="br-notice">
           <strong>{t('phase.paused')}</strong>{' '}
           {room.pauseReason === 'quorum'
             ? t('phase.pauseQuorum')
@@ -87,20 +76,17 @@ export function PhaseSummary({
       )}
 
       {room.phase === 'FINAL' && (
-        <p data-testid="phase-ended" className="mt-3 text-sm text-cream-100/80">
+        <p data-testid="phase-ended" className="br-read">
           {t('phase.ended')}
         </p>
       )}
 
       {self && !self.isParticipant && room.phase !== 'LOBBY' && (
-        <p
-          data-testid="spectator-notice"
-          className="mt-3 rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-100"
-        >
+        <p data-testid="spectator-notice" className="br-notice">
           {t('phase.spectator')}
         </p>
       )}
-    </section>
+    </Panel>
   );
 }
 

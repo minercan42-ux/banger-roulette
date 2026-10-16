@@ -273,7 +273,7 @@ export function RoomView({
             tabIndex={room.phase === 'SUBMISSION' ? -1 : undefined}
             className={
               room.phase === 'PLAYBACK'
-                ? 'overflow-hidden rounded-lg border border-gold-400/20 bg-black/60'
+                ? 'br-panel br-panel--well overflow-hidden p-0'
                 : 'pointer-events-none fixed top-0 left-0 h-[200px] w-[200px] overflow-hidden opacity-0'
             }
             style={room.phase === 'PLAYBACK' ? { minHeight: '1px' } : undefined}
