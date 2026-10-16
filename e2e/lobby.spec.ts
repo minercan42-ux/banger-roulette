@@ -253,6 +253,84 @@ test('the genre-fail penalty switches off to 0 and back on to -3', async ({
   }
 });
 
+test('custom genre list saves with one language and shows live validation', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const hostContext = await harnessContext(browser, { locale: 'de-DE' });
+  const memberContext = await harnessContext(browser, { locale: 'en-US' });
+  try {
+    const host = await openHarness(hostContext);
+    const code = await createRoom(host, 'Host');
+    const member = await openHarness(memberContext);
+    await joinRoom(member, code, 'Member');
+
+    const save = host.getByTestId('settings-save');
+    const message = host.getByTestId('settings-validation');
+    const rows = host.getByTestId('settings-custom-row');
+    await host.getByTestId('settings-genre-mode').selectOption('custom');
+
+    // Zero or one row: not savable, the live message points at the add button.
+    await expect(message).toHaveText('Mindestens 2 Genres nötig.');
+    await expect(save).toBeDisabled();
+    await host.getByTestId('settings-custom-add').click();
+    await host.getByTestId('settings-custom-de').fill('Techno');
+    await host.getByTestId('settings-custom-en').fill('Techno');
+    await expect(message).toHaveText('Mindestens 2 Genres nötig.');
+    await expect(save).toBeDisabled();
+    await expect(host.getByTestId('settings-custom-add')).toHaveAttribute(
+      'data-invalid',
+      'true',
+    );
+    await expect(
+      host.getByTestId('settings-custom-add'),
+    ).toHaveAccessibleDescription('Mindestens 2 Genres nötig.');
+
+    // Duplicate DE name (case-insensitive): second row's DE field is marked.
+    await host.getByTestId('settings-custom-add').click();
+    await rows.nth(1).getByTestId('settings-custom-de').fill('techno');
+    await rows.nth(1).getByTestId('settings-custom-en').fill('Techno 2');
+    await expect(message).toHaveText('Genre-Namen müssen eindeutig sein.');
+    await expect(save).toBeDisabled();
+    await expect(rows.nth(1).getByTestId('settings-custom-de')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await expect(
+      rows.nth(1).getByTestId('settings-custom-en'),
+    ).not.toHaveAttribute('aria-invalid', 'true');
+    await expect(
+      rows.nth(0).getByTestId('settings-custom-de'),
+    ).not.toHaveAttribute('aria-invalid', 'true');
+
+    // "Techno/Techno" plus "House/" (EN empty) is valid and saves.
+    await rows.nth(1).getByTestId('settings-custom-de').fill('House');
+    await rows.nth(1).getByTestId('settings-custom-en').fill('');
+    await expect(message).toHaveText('');
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect(host.getByTestId('settings-status')).toHaveAttribute(
+      'data-state',
+      'saved',
+    );
+    for (const page of [host, member]) {
+      await expect
+        .poll(async () => {
+          const genre = (await stateOf(page))?.settings.genre;
+          return genre?.mode === 'custom'
+            ? genre.items.map((item) => [item.de, item.en])
+            : null;
+        })
+        .toEqual([
+          ['Techno', 'Techno'],
+          ['House', 'House'],
+        ]);
+    }
+  } finally {
+    await Promise.all([hostContext.close(), memberContext.close()]);
+  }
+});
+
 test('a late join after START_GAME becomes a spectator', async ({
   browser,
 }) => {
