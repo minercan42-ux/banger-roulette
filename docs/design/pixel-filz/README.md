@@ -17,7 +17,7 @@
 
 ---
 
-Pixel-Filz: ein spielerischer Casino-Tisch im Pixel-Look. Dunkler Filz, ein langsam wirbelnder Hintergrund, Songs als Spielkarten, Punkte als Chips und Combos. Alles fühlt sich anfassbar an: Karten wackeln, Buttons sinken ein, Zahlen springen. Lustig ist das Spiel durch Timing und Tonfall, nicht durch Deko.
+Pixel-Filz: ein spielerischer Casino-Tisch im Pixel-Look. Roter Filz (Owner-Entscheid 2026-10-16), ein langsam wirbelnder Hintergrund, Songs als Spielkarten, Punkte als Chips und Combos. Alles fühlt sich anfassbar an: Karten wackeln, Buttons sinken ein, Zahlen springen. Lustig ist das Spiel durch Timing und Tonfall, nicht durch Deko.
 
 ## Grundsätze
 
@@ -43,15 +43,15 @@ Kein Emoji in der UI. Englisch analog (gleicher Witz, nicht wörtlich übersetzt
 
 ## Farbe
 
-- Grund ist immer `felt-950`, darüber der Backdrop-Wirbel aus `swirl-green`, `swirl-red`, `swirl-blue`. Die drei Wirbelfarben nie für Inhalt oder Text benutzen.
-- Lesbare Flächen sind `panel` mit Text `cream`, Nebentext `cream-muted`. Werte in Mulden (`well`) sind `gold`.
+- Grund ist immer `felt-950` (roter Filz `#240a0d`, ruhige Flächen `felt-900` `#3d1016`; Owner-Entscheid 2026-10-16, kein Grün als Fläche), darüber der Backdrop-Wirbel aus `swirl-wine`, `swirl-red`, `swirl-blue`. Die drei Wirbelfarben nie für Inhalt oder Text benutzen.
+- Lesbare Flächen sind `panel` (Anthrazit `#1d1f24`, Mulden `well` `#121317`, Kante `edge` `#0a0a0c`) mit Text `cream`, Nebentext `cream-muted`. Werte in Mulden (`well`) sind `gold`.
 - **Gold** = Primäraktion, Summe, Gewinner, Fokus. Pro Bereich ein Gold-Button.
 - **Blau** = Stimmen und Sekundäraktionen. **Rot** = Bonus, Genre und Genre-Fail. Diese Zuordnung gilt überall gleich (Chips, Combo, Buttons).
 - **Grün** = Rang hoch, bereit, Sound an. `red-text` = Minuspunkte, Fehler, Zeit knapp. Status nie nur über Farbe: Pfeil, Wort oder Zahl kommt immer dazu.
 - Text auf farbigen Flächen: auf `gold`, `red` und `green` ist kleiner Text `card-ink`. `cream` auf `red` nur ab Display-Größe (`genre`, `score`).
 - Karten sind `card-face` mit `card-ink`, Eckziffern `card-red`, Nebentext `card-muted`.
 
-Kontraste (geprüft): `cream`/`panel` 12.6:1, `cream-muted`/`panel` 7.4:1, `gold`/`panel` 7.5:1, `card-ink`/`gold` 9.2:1, `card-ink`/`red` 4.8:1, `cream`/`blue` 4.7:1, `red-text`/`panel` 4.8:1, `cream`/`red` 3.2:1 (nur Display).
+Kontraste (geprüft): `cream`/`panel` 15.3:1, `cream-muted`/`panel` 9.0:1, `gold`/`panel` 9.1:1, `card-ink`/`gold` 9.2:1, `card-ink`/`red` 4.8:1, `cream`/`blue` 4.7:1, `red-text`/`panel` 5.9:1, `cream`/`red` 3.2:1 (nur Display).
 
 ## Typografie
 

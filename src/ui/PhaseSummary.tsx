@@ -4,68 +4,73 @@ import type { PlayerView, RoomView } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
 import { Badge } from './pf/Badge';
-import { Panel, PanelTitle } from './pf/Panel';
 import { PhaseTimer, Stat } from './pf/Stat';
 
 interface PhaseSummaryProps {
   session: GameSession;
   state: GameState;
   room: RoomView;
-  self: PlayerView | undefined;
 }
 
 /**
- * Honest running-room status: phase, bounded polite countdown and pause. The
- * M3 game views (roulette, submission) render below; the timer stays generic.
+ * Honest running-room status for the table's top bar: phase, round, bounded
+ * polite countdown and genre. The M3 game views (roulette, submission) render
+ * in the stage; the timer stays generic. Pause and spectator notes live in
+ * `PhaseNotices`, which the stage places.
  */
-export function PhaseSummary({
-  session,
-  state,
-  room,
-  self,
-}: PhaseSummaryProps) {
+export function PhaseSummary({ session, state, room }: PhaseSummaryProps) {
   const { t, i18n } = useTranslation();
   // Submission carries its own timer in the panel header.
   const showTimer = room.phase !== 'SUBMISSION';
 
   return (
-    <Panel
-      as="section"
+    <div
       data-testid="phase-summary"
       data-phase={room.phase}
-      className="space-y-3"
+      className="br-table__summary"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <PanelTitle className="m-0">{t('phase.runningHeading')}</PanelTitle>
-        <Badge data-testid="phase-name">{t(`phase.${room.phase}`)}</Badge>
-      </div>
+      <Badge data-testid="phase-name">{t(`phase.${room.phase}`)}</Badge>
+      {room.roundNumber !== null && (
+        <Stat
+          data-testid="phase-round"
+          label={t('phase.roundStat')}
+          value={`${room.roundNumber}/${room.totalRounds}`}
+        />
+      )}
+      {showTimer && (
+        <PhaseTimer
+          session={session}
+          state={state}
+          label={t('phase.timerLabel')}
+          announce={(time) => t('phase.timerAnnounce', { time })}
+        />
+      )}
+      {room.genre && (
+        <span data-testid="phase-genre" className="br-read">
+          {t('phase.genreLabel', {
+            genre:
+              i18n.resolvedLanguage === 'en' ? room.genre.en : room.genre.de,
+          })}
+        </span>
+      )}
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap items-stretch gap-3">
-        {room.roundNumber !== null && (
-          <Stat
-            data-testid="phase-round"
-            label={t('phase.roundStat')}
-            value={`${room.roundNumber}/${room.totalRounds}`}
-          />
-        )}
-        {showTimer && (
-          <PhaseTimer
-            session={session}
-            state={state}
-            label={t('phase.timerLabel')}
-            announce={(time) => t('phase.timerAnnounce', { time })}
-          />
-        )}
-        {room.genre && (
-          <span data-testid="phase-genre" className="br-read self-center">
-            {t('phase.genreLabel', {
-              genre:
-                i18n.resolvedLanguage === 'en' ? room.genre.en : room.genre.de,
-            })}
-          </span>
-        )}
-      </div>
+interface PhaseNoticesProps {
+  room: RoomView;
+  self: PlayerView | undefined;
+}
 
+/** Pause banner, end note and spectator hint above the running phase. */
+export function PhaseNotices({ room, self }: PhaseNoticesProps) {
+  const { t } = useTranslation();
+  const spectator = self && !self.isParticipant && room.phase !== 'LOBBY';
+  if (!room.paused && room.phase !== 'FINAL' && !spectator) {
+    return null;
+  }
+  return (
+    <div className="space-y-2">
       {room.paused && (
         <p data-testid="pause-banner" role="status" className="br-notice">
           <strong>{t('phase.paused')}</strong>{' '}
@@ -81,12 +86,12 @@ export function PhaseSummary({
         </p>
       )}
 
-      {self && !self.isParticipant && room.phase !== 'LOBBY' && (
+      {spectator && (
         <p data-testid="spectator-notice" className="br-notice">
           {t('phase.spectator')}
         </p>
       )}
-    </Panel>
+    </div>
   );
 }
 

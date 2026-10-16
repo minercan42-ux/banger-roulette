@@ -104,7 +104,9 @@
     "startHint": "Der Host startet die Runde, sobald 3–10 Spieler bereit sind (Sound aktiviert).",
     "settingsHeading": "Spielregeln",
     "settingsHostOnly": "Nur der Host kann die Regeln ändern.",
-    "backHome": "Zur Startseite"
+    "backHome": "Zur Startseite",
+    "score": "{{count}} Punkte",
+    "doneBadge": "fertig"
   },
   "sound": {
     "consentButton": "Sound aktivieren",
@@ -162,7 +164,6 @@
     "PLAYBACK": "Wiedergabe",
     "REVEAL": "Reveal",
     "FINAL": "Finale",
-    "runningHeading": "Laufendes Spiel",
     "genreLabel": "Genre: {{genre}}",
     "timerLabel": "Restzeit",
     "paused": "Pausiert",
@@ -354,5 +355,13 @@
     "penalty": "Strafe",
     "shared": "Geteilt",
     "total": "Runde"
+  },
+  "table": {
+    "drawerOpen": "Menü",
+    "drawerClose": "Schließen",
+    "drawerTitle": "Tisch-Menü",
+    "rosterLabel": "Spieler am Tisch",
+    "actionsLabel": "Aktionen",
+    "infoLabel": "Rauminfo"
   }
 }

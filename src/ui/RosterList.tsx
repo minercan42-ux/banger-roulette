@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import type { PlayerView } from '../engine/selectors';
+import type { PlayerView, RoomView } from '../engine/selectors';
 import { Badge } from './pf/Badge';
 import { Button } from './pf/Button';
 import { Chip } from './pf/Chip';
@@ -7,11 +7,17 @@ import { Panel, PanelTitle } from './pf/Panel';
 
 interface RosterListProps {
   roster: readonly PlayerView[];
+  phase: RoomView['phase'];
   canKick: boolean;
   onKick: (playerId: string) => void;
 }
 
-export function RosterList({ roster, canKick, onKick }: RosterListProps) {
+export function RosterList({
+  roster,
+  phase,
+  canKick,
+  onKick,
+}: RosterListProps) {
   const { t } = useTranslation();
   const connected = roster.filter(
     (player) => player.connected && player.status !== 'left',
@@ -25,7 +31,12 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
           {t('lobby.rosterCount', { count: connected })}
         </span>
       </div>
-      <ul data-testid="roster" className="space-y-2">
+      <ul
+        data-testid="roster"
+        tabIndex={0}
+        aria-label={t('lobby.rosterHeading')}
+        className="br-roster"
+      >
         {roster.map((player) => (
           <li
             key={player.id}
@@ -42,6 +53,11 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
             <span data-testid="player-nickname" className="br-roster__name">
               {player.nickname}
             </span>
+            {phase !== 'LOBBY' && (
+              <span data-testid="player-score" className="br-roster__score">
+                {t('lobby.score', { count: player.totalScore })}
+              </span>
+            )}
             <span className="br-roster__badges">
               {player.isSelf && (
                 <Badge data-testid="player-self-badge">{t('lobby.you')}</Badge>
@@ -69,6 +85,11 @@ export function RosterList({ roster, canKick, onKick }: RosterListProps) {
                   isNew
                 >
                   {t('lobby.disconnectedBadge')}
+                </Badge>
+              )}
+              {phase === 'SUBMISSION' && player.submissionDone && (
+                <Badge data-testid="player-done-badge" tone="green" dot>
+                  {t('lobby.doneBadge')}
                 </Badge>
               )}
               <Badge

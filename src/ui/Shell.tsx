@@ -10,6 +10,7 @@ import { SUPPORTED_LANGUAGES, type Language } from './language';
 import { useLanguageStore } from './language-store';
 import { Backdrop } from './pf/Backdrop';
 import { Chip } from './pf/Chip';
+import { TableLayout } from './pf/TableLayout';
 import { RoomView } from './RoomView';
 import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
 import { useSfxStore } from './sfx-store';
@@ -194,117 +195,144 @@ export function Shell({ session }: { session: GameSession }) {
   const showStatus =
     snapshot.status !== 'idle' && snapshot.status !== 'connected';
 
-  return (
-    <div
-      data-testid="app-shell"
-      className="relative flex min-h-dvh justify-center px-4 py-10 sm:px-6"
-    >
-      <Backdrop />
-      <div className="br-panel relative w-full max-w-2xl p-5 sm:p-8">
-        <header className="flex flex-wrap items-center justify-between gap-3 pb-4">
-          <div className="flex items-center gap-3">
-            <span aria-hidden="true" className="flex -space-x-2">
-              <Chip tone="red" />
-              <Chip tone="gold" />
-              <Chip tone="blue" />
-            </span>
-            <span
-              data-testid="app-title"
-              className="br-logo shell-logo uppercase"
-            >
-              {t('app.title')}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              data-testid="sfx-toggle"
-              aria-pressed={sfxEnabled}
-              onClick={() => {
-                setSfxEnabled(!sfxEnabled);
-              }}
-              className={`br-btn br-btn--sm br-btn--slate${sfxEnabled ? ' is-on' : ''}`}
-            >
-              {sfxEnabled ? t('sfx.on') : t('sfx.off')}
-            </button>
-            <label htmlFor="language-switch" className="br-label">
-              {t('language.label')}
-            </label>
-            <select
-              id="language-switch"
-              data-testid="language-switch"
-              aria-label={t('language.label')}
-              value={language}
-              onChange={(event) => {
-                setLanguage(event.target.value as Language);
-              }}
-              className="br-field__input px-2 py-1 text-[20px] leading-[22px]"
-            >
-              {SUPPORTED_LANGUAGES.map((code) => (
-                <option key={code} value={code}>
-                  {t(`language.options.${code}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </header>
-        <div aria-hidden="true" className="h-[3px] rounded-full bg-edge" />
+  const brand = (
+    <div className="br-table__brand">
+      <span aria-hidden="true" className="br-table__chips">
+        <Chip tone="red" />
+        <Chip tone="gold" />
+        <Chip tone="blue" />
+      </span>
+      <span data-testid="app-title" className="br-logo shell-logo uppercase">
+        {t('app.title')}
+      </span>
+    </div>
+  );
 
-        <div className="space-y-4 pt-6">
-          {showStatus && (
+  const controls = (
+    <div className="br-table__controls">
+      <button
+        type="button"
+        data-testid="sfx-toggle"
+        aria-pressed={sfxEnabled}
+        onClick={() => {
+          setSfxEnabled(!sfxEnabled);
+        }}
+        className={`br-btn br-btn--sm br-btn--slate${sfxEnabled ? ' is-on' : ''}`}
+      >
+        {sfxEnabled ? t('sfx.on') : t('sfx.off')}
+      </button>
+      <label htmlFor="language-switch" className="br-label">
+        {t('language.label')}
+      </label>
+      <select
+        id="language-switch"
+        data-testid="language-switch"
+        aria-label={t('language.label')}
+        value={language}
+        onChange={(event) => {
+          setLanguage(event.target.value as Language);
+        }}
+        className="br-field__input px-2 py-1 text-[20px] leading-[22px]"
+      >
+        {SUPPORTED_LANGUAGES.map((code) => (
+          <option key={code} value={code}>
+            {t(`language.options.${code}`)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
+  const notices =
+    showStatus || bannerError !== null ? (
+      <div className="br-table__notices">
+        {showStatus && (
+          <p
+            data-testid="session-status"
+            data-status={snapshot.status}
+            role="status"
+            className="br-notice"
+          >
+            {t(`status.${snapshot.status}`)}
+            {snapshot.status === 'lost' && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  data-testid="session-lost-home"
+                  onClick={leaveToHome}
+                  className="underline"
+                >
+                  {t('lobby.backHome')}
+                </button>
+              </>
+            )}
+          </p>
+        )}
+
+        {bannerError === 'CONFIGURATION' ? (
+          <section
+            data-testid="config-error"
+            role="alert"
+            className="br-notice br-notice--error"
+          >
+            <p className="font-semibold">{t('config.title')}</p>
+            <p className="mt-1">{t('config.body')}</p>
+          </section>
+        ) : (
+          bannerError !== null && (
             <p
-              data-testid="session-status"
-              data-status={snapshot.status}
-              role="status"
-              className="br-notice"
-            >
-              {t(`status.${snapshot.status}`)}
-              {snapshot.status === 'lost' && (
-                <>
-                  {' '}
-                  <button
-                    type="button"
-                    data-testid="session-lost-home"
-                    onClick={leaveToHome}
-                    className="underline"
-                  >
-                    {t('lobby.backHome')}
-                  </button>
-                </>
-              )}
-            </p>
-          )}
-
-          {bannerError === 'CONFIGURATION' ? (
-            <section
-              data-testid="config-error"
+              data-testid="session-error"
               role="alert"
               className="br-notice br-notice--error"
             >
-              <p className="font-semibold">{t('config.title')}</p>
-              <p className="mt-1">{t('config.body')}</p>
-            </section>
-          ) : (
-            bannerError !== null && (
-              <p
-                data-testid="session-error"
-                role="alert"
-                className="br-notice br-notice--error"
-              >
-                {t(`errors.${bannerError}`)}
-              </p>
-            )
-          )}
+              {t(`errors.${bannerError}`)}
+            </p>
+          )
+        )}
+      </div>
+    ) : null;
 
-          {inRoom && state !== null && roster !== null ? (
-            <RoomView
-              session={session}
-              snapshot={snapshot}
-              state={state}
-              roster={roster}
-              onLeave={leaveToHome}
-            />
-          ) : (
+  const footer = (
+    <footer
+      data-testid="privacy-notice"
+      aria-label={t('privacy.title')}
+      className="br-table__footer br-panel"
+    >
+      <p className="br-label">{t('privacy.title')}</p>
+      <ul className="br-table__privacy">
+        <li>{t('privacy.embed')}</li>
+        <li>{t('privacy.noTracking')}</li>
+        <li>{t('privacy.storage')}</li>
+      </ul>
+    </footer>
+  );
+
+  return (
+    <div data-testid="app-shell" className="relative min-h-dvh">
+      <Backdrop />
+      {inRoom && state !== null && roster !== null ? (
+        <RoomView
+          session={session}
+          snapshot={snapshot}
+          state={state}
+          roster={roster}
+          onLeave={leaveToHome}
+          brand={brand}
+          controls={controls}
+          notices={notices}
+          footer={footer}
+        />
+      ) : (
+        <TableLayout
+          top={
+            <>
+              {brand}
+              {controls}
+            </>
+          }
+          notices={notices}
+          stage={
             <HomeView
               key={routeCode ?? 'home'}
               prefillCode={routeCode}
@@ -317,22 +345,10 @@ export function Shell({ session }: { session: GameSession }) {
                 runEnter(() => session.joinRoom(code, nickname))
               }
             />
-          )}
-        </div>
-
-        <footer
-          data-testid="privacy-notice"
-          aria-label={t('privacy.title')}
-          className="mt-6 border-t-[3px] border-edge pt-4 font-text text-[13px] leading-[18px] text-cream-muted"
-        >
-          <p className="br-label">{t('privacy.title')}</p>
-          <ul className="mt-2 list-disc space-y-1 pl-4 break-words">
-            <li>{t('privacy.embed')}</li>
-            <li>{t('privacy.noTracking')}</li>
-            <li>{t('privacy.storage')}</li>
-          </ul>
-        </footer>
-      </div>
+          }
+          footer={footer}
+        />
+      )}
     </div>
   );
 }

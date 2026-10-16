@@ -79,13 +79,13 @@
   filter: blur(38px) saturate(1.2);
   background: conic-gradient(
     from 0deg,
-    var(--swirl-green),
+    var(--swirl-wine),
     var(--swirl-red) 18%,
-    var(--swirl-green) 33%,
+    var(--swirl-wine) 33%,
     var(--swirl-blue) 52%,
-    var(--swirl-green) 68%,
+    var(--swirl-wine) 68%,
     var(--swirl-red) 84%,
-    var(--swirl-green)
+    var(--swirl-wine)
   );
   animation: br-swirl var(--dur-swirl) linear infinite;
   transition:

@@ -92,11 +92,19 @@ export function HomeView({
   }
 
   return (
-    <div data-testid="home-view" className="space-y-5">
-      <div>
+    <div data-testid="home-view" className="space-y-4">
+      <Panel className="br-home__hero">
+        <div aria-hidden="true" className="br-home__mark">
+          <span className="br-home__chips">
+            <Chip tone="red" size="lg" />
+            <Chip tone="gold" size="lg" />
+            <Chip tone="blue" size="lg" />
+          </span>
+          <p className="br-logo br-home__logo uppercase">{t('app.title')}</p>
+        </div>
         <PanelTitle as="h1">{t('home.heading')}</PanelTitle>
         <p className="br-read">{t('home.intro')}</p>
-      </div>
+      </Panel>
 
       {/*
         The forms keep their place while a deep link reconnects: hidden, inert
@@ -119,7 +127,7 @@ export function HomeView({
             joining ? undefined : prefillCode ? 'route-join-view' : 'home-forms'
           }
           inert={joining}
-          className={joining ? 'invisible space-y-5' : 'space-y-5'}
+          className={joining ? 'br-home__forms invisible' : 'br-home__forms'}
         >
           {identityMissing && (
             <p
@@ -149,7 +157,7 @@ export function HomeView({
               event.preventDefault();
               void submitCreate();
             }}
-            className="space-y-3"
+            className="br-home__form"
           >
             <PanelTitle className="flex items-center gap-2">
               <Chip tone="gold" size="sm" />
@@ -181,7 +189,7 @@ export function HomeView({
               event.preventDefault();
               void submitJoin();
             }}
-            className="space-y-3"
+            className="br-home__form"
           >
             <PanelTitle className="flex items-center gap-2">
               <Chip tone="blue" size="sm" />
@@ -226,9 +234,11 @@ export function HomeView({
         </div>
       </div>
 
-      <p className="br-label">
-        {t('home.genreCatalogue', { count: genres.length })}
-      </p>
+      <Panel>
+        <p className="br-label">
+          {t('home.genreCatalogue', { count: genres.length })}
+        </p>
+      </Panel>
     </div>
   );
 }
