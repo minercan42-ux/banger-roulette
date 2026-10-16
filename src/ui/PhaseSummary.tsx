@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PlayerView, RoomView } from '../engine/selectors';
+import {
+  selectSettings,
+  type PlayerView,
+  type RoomView,
+} from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
 import { Badge } from './pf/Badge';
@@ -22,6 +26,9 @@ export function PhaseSummary({ session, state, room }: PhaseSummaryProps) {
   const { t, i18n } = useTranslation();
   // Submission carries its own timer in the panel header.
   const showTimer = room.phase !== 'SUBMISSION';
+  // The top bar must not give the drawn genre away while the reel still spins.
+  const spinning =
+    room.phase === 'GENRE_SPIN' && selectSettings(state).genreMode !== 'fixed';
 
   return (
     <div
@@ -45,7 +52,7 @@ export function PhaseSummary({ session, state, room }: PhaseSummaryProps) {
           announce={(time) => t('phase.timerAnnounce', { time })}
         />
       )}
-      {room.genre && (
+      {room.genre && !spinning && (
         <span data-testid="phase-genre" className="br-read">
           {t('phase.genreLabel', {
             genre:

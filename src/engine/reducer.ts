@@ -26,7 +26,11 @@ import {
   sortPlayers,
 } from './state';
 
-export const SPIN_MS = 3000;
+/**
+ * Genre phase: the reel spins about 3200 ms with deceleration (`REEL_SPIN_MS`
+ * in `src/ui/reel.ts`), then the result is held for at least 2000 ms.
+ */
+export const SPIN_MS = 5500;
 export const FIXED_INTRO_MS = 1000;
 export const PRE_ROLL_MS = 3000;
 export const REVEAL_PER_SONG_MS = 2500;

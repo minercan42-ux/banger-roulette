@@ -45,6 +45,7 @@ const STALE_B = 'RgKAFK5djSk';
 declare global {
   interface Window {
     __m3Token?: string;
+    __reelMarks?: { plateIn?: number; spinOut?: number };
   }
 }
 
@@ -126,13 +127,37 @@ test('four players see one deterministic wheel and the same localized genre', as
       await unlockSound(stage.page);
     }
     const initialPool = (await stateOf(host.page))?.remainingGenreIds ?? [];
+    await host.page.evaluate(() => {
+      const marks: { plateIn?: number; spinOut?: number } = {};
+      window.__reelMarks = marks;
+      const scan = () => {
+        const at = performance.now();
+        if (
+          marks.plateIn === undefined &&
+          document.querySelector('[data-testid="genre-plate"]')
+        ) {
+          marks.plateIn = at;
+        }
+        if (
+          marks.plateIn !== undefined &&
+          marks.spinOut === undefined &&
+          !document.querySelector('[data-testid="genre-spin"]')
+        ) {
+          marks.spinOut = at;
+        }
+      };
+      new MutationObserver(scan).observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    });
     await host.page.getByTestId('start-game').click();
     await waitForPhase(host.page, 'GENRE_SPIN');
     await Promise.all(
       stages.map((stage) => waitForPhase(stage.page, 'GENRE_SPIN')),
     );
 
-    // Read the wheel before the 3s spin deadline unmounts it.
+    // Read the reel before the 5.5s spin deadline unmounts it.
     const readGenreUi = async (stage: Stage) => {
       const wheel = stage.page.getByTestId('genre-wheel');
       const result = stage.page.getByTestId('genre-result');
@@ -180,6 +205,25 @@ test('four players see one deterministic wheel and the same localized genre', as
     await Promise.all(
       stages.map((stage) => waitForPhase(stage.page, 'SUBMISSION')),
     );
+
+    // The result stays visible for at least 2 s after the reel stops (the
+    // plate pops in at the stop) before the phase ends, and the chosen genre
+    // stays on the table as a plate at the top of SUBMISSION.
+    const marks = await host.page.evaluate(() => window.__reelMarks);
+    expect(marks?.plateIn).toBeDefined();
+    expect(marks?.spinOut).toBeDefined();
+    expect(
+      (marks?.spinOut ?? 0) - (marks?.plateIn ?? 0),
+    ).toBeGreaterThanOrEqual(2000);
+    for (const stage of stages) {
+      const plate = stage.page
+        .getByTestId('submission-panel')
+        .getByTestId('genre-plate');
+      await expect(plate).toBeVisible();
+      await expect(plate).toContainText(
+        stage === stages[3] ? genre.de : genre.en,
+      );
+    }
     const roomView = stages[0].page.getByTestId('room-view');
     const beforeText = await roomView.innerText();
     await stages[0].page.evaluate(() => {

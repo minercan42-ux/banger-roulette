@@ -5,9 +5,13 @@ import {
   createInitialState,
   electHost,
   reducer,
+  SPIN_MS,
 } from './index';
 import {
+  GAME_START,
   ROOM_ID,
+  SPIN_END,
+  SUBMISSION_END,
   action,
   activeCount,
   allConnections,
@@ -711,8 +715,8 @@ describe('starting a game', () => {
     const state = startedGame();
     expect(state.phase).toEqual({
       type: 'GENRE_SPIN',
-      startedAt: 1000,
-      deadlineAt: 4000,
+      startedAt: GAME_START,
+      deadlineAt: SPIN_END,
     });
     expect(state.gameNumber).toBe(1);
     expect(state.round?.number).toBe(1);
@@ -745,9 +749,12 @@ describe('starting a game', () => {
 describe('deadlines and host advance', () => {
   it('ignores an early deadline and fires at the boundary', () => {
     const state = startedGame();
-    expect(reducer(state, { type: 'DEADLINE', at: 3999 })).toBe(state);
-    const next = reducer(state, { type: 'DEADLINE', at: 4000 });
-    expect(next.phase).toEqual({ type: 'SUBMISSION', deadlineAt: 94000 });
+    expect(reducer(state, { type: 'DEADLINE', at: SPIN_END - 1 })).toBe(state);
+    const next = reducer(state, { type: 'DEADLINE', at: SPIN_END });
+    expect(next.phase).toEqual({
+      type: 'SUBMISSION',
+      deadlineAt: SPIN_END + 90000,
+    });
     expect(validationError(next)).toBeNull();
   });
 
@@ -772,7 +779,7 @@ describe('submission phase', () => {
     const submission = submissionState();
     const deadline =
       submission.phase.type === 'SUBMISSION' ? submission.phase.deadlineAt : 0;
-    expect(deadline).toBe(94000);
+    expect(deadline).toBe(SUBMISSION_END);
     const lateAction = action(
       submission,
       { type: 'SUBMIT_SONG', media: media(videoId(1)) },
@@ -852,7 +859,7 @@ describe('submission phase', () => {
       { type: 'JOIN', nickname: 'Late' },
       { actorId: id(9), connectionId: id(109), at: 1500 },
     );
-    state = fireDeadline(state, 4000);
+    state = fireDeadline(state, SPIN_END);
     expect(
       command(
         state,
@@ -888,7 +895,7 @@ describe('aggregation and playback', () => {
       },
       5002,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.phase.type).toBe('PLAYBACK');
     const linked = state.round?.songs.find(
       (song) => song.media.videoId === videoId(5),
@@ -989,7 +996,7 @@ describe('aggregation and playback', () => {
       { type: 'SUBMIT_SONG', media: media(videoId(2)) },
       5001,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.round?.songs[0]?.clipSeconds).toBeCloseTo(0.0005, 10);
     for (let step = 0; step < 4; step += 1) {
       if (state.phase.type !== 'PLAYBACK') {
@@ -1134,11 +1141,11 @@ describe('scoring integration (AK-8)', () => {
 
 describe('degenerate rounds', () => {
   it('reveals with zero points when nothing was submitted', () => {
-    const state = fireDeadline(submissionState(), 94000);
+    const state = fireDeadline(submissionState(), SUBMISSION_END);
     expect(state.phase).toEqual({
       type: 'REVEAL',
-      startedAt: 94000,
-      deadlineAt: 99000,
+      startedAt: SUBMISSION_END,
+      deadlineAt: SUBMISSION_END + 5000,
     });
     expect(state.results[0].reason).toBe('noSongs');
     expect(Object.values(state.results[0].playerDeltas)).toEqual([0, 0, 0, 0]);
@@ -1160,14 +1167,14 @@ describe('degenerate rounds', () => {
       { type: 'SUBMIT_SONG', media: media(videoId(1)) },
       5001,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.phase.type).toBe('PLAYBACK');
     expect(state.round?.playbackOrder).toEqual([videoId(1)]);
     state = command(
       state,
       id(3),
       { type: 'RATE', songId: videoId(1), value: 8 },
-      94001,
+      SUBMISSION_END + 1,
     );
     state = command(
       state,
@@ -1248,8 +1255,8 @@ describe('pause and quorum', () => {
     expect(state.forceBelowMinimum).toBe(true);
     expect(state.phase).toEqual({
       type: 'GENRE_SPIN',
-      startedAt: 11000,
-      deadlineAt: 14000,
+      startedAt: GAME_START + 10000,
+      deadlineAt: GAME_START + 10000 + SPIN_MS,
     });
     expect(validationError(state)).toBeNull();
   });
@@ -2168,7 +2175,7 @@ describe('submission order and completion', () => {
       4104,
     );
     expect(state.round?.submissions[id(1)].acceptedOrder).toBe(3);
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.phase.type).toBe('PLAYBACK');
     const shared = state.round?.songs.find(
       (song) => song.media.videoId === videoId(5),
@@ -2200,7 +2207,7 @@ describe('submission order and completion', () => {
       4102,
     );
     state = command(state, id(1), { type: 'REMOVE_SUBMISSION' }, 4103);
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(
       state.round?.songs.find((song) => song.media.videoId === videoId(5))
         ?.ownerIds,
@@ -2287,7 +2294,7 @@ describe('linked ownership', () => {
       { type: 'SUBMIT_SONG', media: media(videoId(6)) },
       4102,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.phase.type).toBe('PLAYBACK');
     expect(
       command(
@@ -2503,7 +2510,7 @@ describe('clip boundaries', () => {
       },
       4102,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     expect(state.phase.type).toBe('PLAYBACK');
     const clips: Record<string, number> = {};
     for (const song of state.round?.songs ?? []) {

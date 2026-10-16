@@ -9,6 +9,11 @@ interface GenrePlateProps {
    * readers do not hear it twice; the plate is then hidden from them.
    */
   live?: boolean;
+  /**
+   * Settled variant for later phases (the genre stays on the table): smaller,
+   * no repeating bump, and plain readable content instead of a live region.
+   */
+  calm?: boolean;
 }
 
 /** Names longer than this switch to the smaller plate type so they wrap. */
@@ -20,14 +25,23 @@ const LONG_NAME_CHARS = 16;
  * and bumps its name every 2.6 s; the reduced-motion block of the stylesheet
  * turns both into a plain fade.
  */
-export function GenrePlate({ kicker, name, live = true }: GenrePlateProps) {
+export function GenrePlate({
+  kicker,
+  name,
+  live = true,
+  calm = false,
+}: GenrePlateProps) {
+  // A calm plate is plain readable content: no live region, not hidden.
+  const a11y = calm
+    ? {}
+    : live
+      ? { role: 'status', 'aria-live': 'polite' as const }
+      : { 'aria-hidden': true };
   return (
     <div
       data-testid="genre-plate"
-      className="br-genre is-in"
-      {...(live
-        ? { role: 'status', 'aria-live': 'polite' as const }
-        : { 'aria-hidden': true })}
+      className={`br-genre is-in${calm ? ' br-genre--calm' : ''}`}
+      {...a11y}
     >
       <span className="br-genre__kicker">{kicker}</span>
       <strong

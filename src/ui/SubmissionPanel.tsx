@@ -27,6 +27,7 @@ import { useEmbedConsent } from './embed-consent';
 import { formatDuration, genreName } from './format';
 import { Button } from './pf/Button';
 import { Field } from './pf/Field';
+import { GenrePlate } from './pf/GenrePlate';
 import { Hand } from './pf/Hand';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
@@ -347,16 +348,14 @@ export function SubmissionPanel({
 
   return (
     <Panel as="section" data-testid="submission-panel" className="br-stack">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <PanelTitle>{t('submission.heading')}</PanelTitle>
-        {room.genre && (
-          <span className="br-label">
-            {t('phase.genreLabel', {
-              genre: genreName(room.genre, i18n.resolvedLanguage),
-            })}
-          </span>
-        )}
-      </div>
+      {room.genre && (
+        <GenrePlate
+          calm
+          kicker={t('genre.resultLabel')}
+          name={genreName(room.genre, i18n.resolvedLanguage)}
+        />
+      )}
+      <PanelTitle>{t('submission.heading')}</PanelTitle>
       <p className="br-read">{t('submission.intro')}</p>
       <div className="mt-3 flex">
         <PhaseTimer

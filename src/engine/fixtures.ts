@@ -3,7 +3,7 @@ import type { ClientAction, EngineAction } from '../shared/actions';
 import { GameStateSchema, type GameState } from '../shared/game';
 import type { Genre, Media } from '../shared/primitives';
 import { DEFAULT_SETTINGS, type Settings } from '../shared/settings';
-import { reducer } from './reducer';
+import { reducer, SPIN_MS } from './reducer';
 import { activePlayers, createInitialState, isActivePlayer } from './state';
 
 /**
@@ -143,7 +143,12 @@ export function newGame(options: GameOptions = {}): GameState {
   return state;
 }
 
-export function startGame(state: GameState, at = 1000): GameState {
+/** Server time the fixtures start a game at, when its spin ends and when an untouched submission phase (90 s) ends. */
+export const GAME_START = 1000;
+export const SPIN_END = GAME_START + SPIN_MS;
+export const SUBMISSION_END = SPIN_END + 90000;
+
+export function startGame(state: GameState, at = GAME_START): GameState {
   return command(state, state.hostId, { type: 'START_GAME' }, at);
 }
 
@@ -184,13 +189,13 @@ export function allConnections(state: GameState): string[] {
 }
 
 export function startedGame(count = 4, settings?: Settings): GameState {
-  const state = startGame(newGame({ players: count, settings }), 1000);
+  const state = startGame(newGame({ players: count, settings }), GAME_START);
   expect(validationError(state)).toBeNull();
   return state;
 }
 
 export function submissionState(count = 4, settings?: Settings): GameState {
-  const state = fireDeadline(startedGame(count, settings), 4000);
+  const state = fireDeadline(startedGame(count, settings), SPIN_END);
   expect(state.phase.type).toBe('SUBMISSION');
   return state;
 }
@@ -237,7 +242,7 @@ export function lastSongState(count = 4, settings?: Settings): GameState {
 
 /** Round with no submissions, already revealed as a noSongs result. */
 export function revealState(count = 4, settings?: Settings): GameState {
-  const state = fireDeadline(submissionState(count, settings), 94000);
+  const state = fireDeadline(submissionState(count, settings));
   expect(state.phase.type).toBe('REVEAL');
   expect(validationError(state)).toBeNull();
   return state;
@@ -276,7 +281,7 @@ export function scoredFinalState(): GameState {
       newGame({ players: 3, settings: makeSettings({ rounds: 1 }) }),
       1000,
     ),
-    4000,
+    SPIN_END,
   );
   for (let player = 1; player <= 3; player += 1) {
     state = command(

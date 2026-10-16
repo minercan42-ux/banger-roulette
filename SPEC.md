@@ -79,7 +79,7 @@ Jeder Übergang erfolgt über eine Deadline oder eine Host-Aktion. Jede Phase ze
 Die vordefinierte Genre-Liste umfasst mindestens 30 Genres und liegt als `src/content/genres.json` vor, je Genre mit stabiler ID und Bezeichnung auf Deutsch und Englisch. Eine Custom-Liste hat 2-50 Einträge.
 
 ### 5.3 Genre-Roulette
-- FR-10 Animiertes Roulette-Rad in Casino-Optik. Der Host bestimmt das Ergebnis per injizierter RNG vor Start der Animation, alle Clients animieren deterministisch auf dasselbe Segment. Im Modus "Ein Genre" gibt es statt des Spins eine kurze Einblendung.
+- FR-10 Animiertes Genre-Roulette als Walze in Casino-Optik (Slot-Drum, seitlich gesehen: Genrenamen laufen waagerecht, die mittlere Reihe ist das Auswahlfenster, Reihen darüber und darunter sind perspektivisch verkürzt). Der Host bestimmt das Ergebnis per injizierter RNG vor Start der Animation, alle Clients animieren deterministisch auf dasselbe Genre. Die Phase dauert 5,5 s (`SPIN_MS = 5500`): ca. 3,2 s Spin mit Abbremsen, danach bleibt das Ergebnis mindestens 2 s sichtbar (Genre-Plakette, Lichtstreif, goldenes Fenster) und steht anschließend als Genre-Plakette oben in der Einreichungsphase. Mit `prefers-reduced-motion` entfällt der Spin, das Ergebnis steht sofort. Im Modus "Ein Genre" gibt es statt des Spins eine kurze Einblendung.
 - FR-11 Kein Genre wird doppelt gezogen, bis die Liste erschöpft ist.
 
 ### 5.4 Song-Auswahl
