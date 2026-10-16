@@ -105,7 +105,6 @@
     "settingsHeading": "Spielregeln",
     "settingsHostOnly": "Nur der Host kann die Regeln ändern.",
     "backHome": "Zur Startseite",
-    "score": "{{count}} Punkte",
     "doneBadge": "fertig"
   },
   "sound": {

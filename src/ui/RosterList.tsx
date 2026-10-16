@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PlayerView, RoomView } from '../engine/selectors';
+import { formatTenths } from './format';
 import { Badge } from './pf/Badge';
 import { Button } from './pf/Button';
 import { Chip } from './pf/Chip';
@@ -55,7 +56,9 @@ export function RosterList({
             </span>
             {phase !== 'LOBBY' && (
               <span data-testid="player-score" className="br-roster__score">
-                {t('lobby.score', { count: player.totalScore })}
+                {t('leaderboard.score', {
+                  points: formatTenths(player.totalScore),
+                })}
               </span>
             )}
             <span className="br-roster__badges">

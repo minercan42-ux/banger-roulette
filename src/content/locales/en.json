@@ -105,7 +105,6 @@
     "settingsHeading": "Game rules",
     "settingsHostOnly": "Only the host can change the rules.",
     "backHome": "Back to start",
-    "score": "{{count}} pts",
     "doneBadge": "done"
   },
   "sound": {

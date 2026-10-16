@@ -390,6 +390,22 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
     await expect(cRow).toContainText('12.0');
     await expect(cRow.getByTestId('leaderboard-delta')).toHaveCount(1);
 
+    // Roster score is the same decimal total as the leaderboard (integer tenths).
+    for (const [id, decimal] of [
+      [cId, '12.0'],
+      [aId, '7.3'],
+    ] as const) {
+      const rosterScore = host.page
+        .locator(`[data-testid="roster-row"][data-player-id="${id}"]`)
+        .getByTestId('player-score');
+      const boardTotal = await host.page
+        .locator(`[data-testid="leaderboard-row"][data-player-id="${id}"]`)
+        .locator('.br-lb__pts [aria-hidden="true"]')
+        .innerText();
+      expect(boardTotal).toBe(decimal);
+      await expect(rosterScore).toContainText(decimal);
+    }
+
     // Host skips the reveal hold and lands on the finale.
     expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
       'accepted',
