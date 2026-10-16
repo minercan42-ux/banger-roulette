@@ -257,6 +257,51 @@ test('drift over 750 ms is corrected while a sub-threshold offset is left alone'
   }
 });
 
+test('the sync diagnostics stay hidden from players until the debug switch is on', async ({
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  const stages = await Promise.all([
+    newStage(browser, { nickname: 'Alice' }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    await assembleRoom(stages[0], stages.slice(1));
+    await enterSubmission(stages.map((stage) => stage.page));
+    await submitAll(stages, [SONG_A, SONG_B, SONG_C]);
+    await finishToPlayback(stages);
+    const page = stages[0]!.page;
+    await waitForPlaybackState(page, 'playing', 20000);
+
+    // Without the switch: no table, no raw timestamps, no free-text status.
+    const timing = playbackTiming(await stateOf(page));
+    await expect(page.getByTestId('playback-phase')).toBeVisible();
+    await expect(page.getByTestId('playback-debug')).toHaveCount(0);
+    await expect(page.getByTestId('playback-status')).toHaveClass(/sr-only/);
+    const text = await page.getByTestId('playback-phase').innerText();
+    expect(text).not.toContain(String(Math.round(timing.startAt)));
+    expect(text).not.toContain(String(Math.round(timing.deadlineAt)));
+    // Volume, mute and the genre-fail flag stay available.
+    await expect(page.getByTestId('playback-volume')).toBeVisible();
+    await expect(page.getByTestId('playback-mute')).toBeVisible();
+    await expect(page.getByTestId('playback-flag')).toBeVisible();
+
+    // localStorage `banger-roulette.debug` turns the table on.
+    await page.evaluate(() => {
+      window.localStorage.setItem('banger-roulette.debug', '1');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByTestId('playback-debug')).toBeVisible();
+    await expect(page.getByTestId('playback-status')).not.toHaveClass(
+      /sr-only/,
+    );
+    expect((await readDiagnostics(page)).plannedStart).toBe(timing.startAt);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
 test('a late cue and heavy buffering catch up without blocking the round', async ({
   browser,
 }) => {
