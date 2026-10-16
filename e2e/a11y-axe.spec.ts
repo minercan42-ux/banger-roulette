@@ -28,9 +28,11 @@ import {
  * The gate is zero `serious`/`critical` violations for the rule tags `wcag2a`,
  * `wcag2aa`, `wcag21a` and `wcag21aa` (axe-core's `wcag21aa` tag holds only the
  * rules added in 2.1, so the 2.0 tags are required alongside it). Reduced motion
- * is on so no entry animation or opacity transition is mid-flight while axe
- * samples colours; the contrast of a settled screen is what the gate measures.
- * Chromium only, as in the issue.
+ * is on and every finite animation or transition is awaited before a scan: the
+ * reduced-motion block still fades some elements in (the genre plate), and axe
+ * would otherwise read the blended mid-fade colours on a slow runner. The
+ * contrast of a settled screen is what the gate measures. Chromium only, as in
+ * the issue.
  */
 const WCAG_AA_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
@@ -43,6 +45,25 @@ interface Finding {
 }
 
 /**
+ * Resolves once every finite animation and transition of the document has
+ * finished (infinite loops never do and do not change colours), capped at 5 s.
+ */
+async function settleAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const finite = document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect?.getComputedTiming().endTime !== Infinity,
+      );
+    await Promise.race([
+      Promise.allSettled(finite.map((animation) => animation.finished)),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+  });
+}
+
+/**
  * Scans the page's current screen (a fresh builder per scan, as axe-playwright
  * requires) and records every serious/critical violation, so one run lists all
  * screens' findings instead of stopping at the first.
@@ -52,6 +73,7 @@ async function scan(
   screen: string,
   findings: Finding[],
 ): Promise<void> {
+  await settleAnimations(page);
   const results = await new AxeBuilder({ page })
     .withTags(WCAG_AA_TAGS)
     .analyze();
