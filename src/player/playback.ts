@@ -260,6 +260,8 @@ class PlaybackSession implements PlaybackController {
     const iframe = createYouTubeIframe(
       this.plan?.videoId ?? null,
       this.options.title,
+      0,
+      true,
     );
     // Marker for the e2e fixture: distinguishes the one long-lived playback
     // player from the transient submission preview players.

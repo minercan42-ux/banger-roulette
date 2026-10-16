@@ -2752,3 +2752,76 @@ body {
     scroll-padding-block: 9rem 8rem;
   }
 }
+
+/* Playback stage (issue #95): the video leads the PLAYBACK stage, centred and
+   16:9 at full stage width (max 960 px), with the song card hand compact below
+   it. The iframe is appended by the player; a transparent shield above it takes
+   every pointer event so the YouTube hover UI and click-to-pause never show. */
+@layer components {
+  .br-stage-video {
+    position: relative;
+    width: 100%;
+    max-width: 960px;
+    margin-inline: auto;
+    aspect-ratio: 16 / 9;
+    /* YouTube embeds need at least 200 px in each direction. */
+    min-height: 200px;
+    overflow: hidden;
+    background: var(--color-well);
+    box-shadow: 0 0 0 4px var(--color-edge);
+  }
+  /* The iframe carries inline 100% x 270px (shared with the submission
+     preview); the stage sizes it to the 16:9 box instead. */
+  .br-stage-video > iframe {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .br-stage-video__shield {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: transparent;
+    touch-action: manipulation;
+  }
+
+  /* A smaller card in a single tidy row under the stage. */
+  .br-hand.br-hand--compact {
+    row-gap: var(--space-3);
+    padding: var(--space-3) var(--space-4) var(--space-2);
+  }
+  .br-hand.br-hand--compact > .br-card {
+    width: 92px;
+    height: 128px;
+  }
+  .br-hand.br-hand--compact > .br-card,
+  .br-hand.br-hand--compact > .br-card + .br-card {
+    margin-inline: -8px;
+  }
+  .br-hand--compact .br-card__back {
+    border-width: 4px;
+  }
+  .br-hand--compact .br-card__back::after {
+    width: 36px;
+    height: 36px;
+    font-size: 34px;
+  }
+  .br-hand--compact .br-card__face {
+    padding: var(--space-1);
+  }
+  .br-hand--compact .br-card__corner {
+    font-size: 14px;
+  }
+  .br-hand--compact .br-card__thumb {
+    height: 32px;
+  }
+  .br-hand--compact .br-card__title {
+    font-size: 12px;
+    line-height: 13px;
+  }
+  .br-hand--compact .br-card__sub {
+    font-size: 10px;
+    line-height: 12px;
+  }
+}

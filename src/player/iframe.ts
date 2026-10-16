@@ -188,22 +188,49 @@ export function awaitWithAbort<T>(
 }
 
 /**
+ * Embed parameters for a player the viewer must not operate (the synchronized
+ * playback). Verified against the official parameter reference
+ * (https://developers.google.com/youtube/player_parameters):
+ * `controls=0` hides the player controls, `disablekb=1` ignores the keyboard
+ * shortcuts (space/k pause, arrows seek, 0-9 jump), `fs=0` removes the
+ * fullscreen button, `iv_load_policy=3` hides annotations and `playsinline=1`
+ * keeps iOS inline. `rel=0` only limits related videos to the same channel
+ * (YouTube no longer allows turning them off). The wrapped `YT.Player` ignores
+ * `playerVars` for an iframe that already exists, so they are set on its URL.
+ */
+export const LOCKED_PLAYER_PARAMS = {
+  controls: '0',
+  disablekb: '1',
+  fs: '0',
+  rel: '0',
+  iv_load_policy: '3',
+  playsinline: '1',
+} as const;
+
+/**
  * Builds the privacy enhanced embed. `origin` is required for the postMessage
  * API handshake; `strict-origin-when-cross-origin` keeps the referrer minimal.
  * A `null` video id builds the id-less embed YouTube itself uses when a player
  * is created before any video is known (M4 pre-warm); `cueVideoById` then loads
- * the real clip into that same iframe.
+ * the real clip into that same iframe. `locked` applies
+ * {@link LOCKED_PLAYER_PARAMS} (no YouTube controls, shortcuts or fullscreen).
  */
 export function createYouTubeIframe(
   videoId: string | null,
   title: string,
   startSeconds = 0,
+  locked = false,
 ): HTMLIFrameElement {
   const params = new URLSearchParams({
     enablejsapi: '1',
     origin: location.origin,
     playsinline: '1',
   });
+  if (locked) {
+    for (const [name, value] of Object.entries(LOCKED_PLAYER_PARAMS)) {
+      params.set(name, value);
+    }
+  }
   if (startSeconds > 0) {
     params.set('start', String(Math.floor(startSeconds)));
   }
@@ -214,7 +241,7 @@ export function createYouTubeIframe(
       : `${IFRAME_ORIGIN}/embed/${videoId}?${params.toString()}`;
   iframe.referrerPolicy = 'strict-origin-when-cross-origin';
   iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-  iframe.allowFullscreen = true;
+  iframe.allowFullscreen = !locked;
   iframe.title = title;
   iframe.style.border = '0';
   iframe.style.width = '100%';

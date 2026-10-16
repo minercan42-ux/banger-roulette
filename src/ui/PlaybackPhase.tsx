@@ -248,43 +248,6 @@ export function PlaybackPhase({
         </p>
       )}
 
-      {/* Songs up to the playing one are face up (the viewer has heard them);
-          the rest stay face down, so no title is shown ahead of its turn. */}
-      <Hand label={t('card.handPlayback')} data-testid="playback-hand">
-        {songs.map((song, position) =>
-          position <= view.index ? (
-            <SongCard
-              key={position}
-              data-testid="song-card"
-              data-face="up"
-              data-current={position === view.index}
-              index={position}
-              number={position + 1}
-              song={song}
-              flipped={position < flippedCount}
-              showThumbnail={consented}
-              thumbnailTestId={
-                position === view.index ? 'playback-thumbnail' : undefined
-              }
-              tooltip={song.title}
-              label={t('card.faceUp', {
-                number: position + 1,
-                title: song.title,
-              })}
-            />
-          ) : (
-            <SongCard
-              key={position}
-              data-testid="song-card"
-              data-face="down"
-              index={position}
-              number={position + 1}
-              label={t('card.faceDown')}
-            />
-          ),
-        )}
-      </Hand>
-
       <div className="br-stack br-playing">
         <p data-testid="playback-title" className="br-playing__title">
           {view.song.title}
@@ -341,6 +304,47 @@ export function PlaybackPhase({
           className="min-w-40 flex-1"
         />
       </div>
+
+      {/* Songs up to the playing one are face up (the viewer has heard them);
+          the rest stay face down, so no title is shown ahead of its turn. */}
+      <Hand
+        label={t('card.handPlayback')}
+        data-testid="playback-hand"
+        className="br-hand--compact"
+      >
+        {songs.map((song, position) =>
+          position <= view.index ? (
+            <SongCard
+              key={position}
+              data-testid="song-card"
+              data-face="up"
+              data-current={position === view.index}
+              index={position}
+              number={position + 1}
+              song={song}
+              flipped={position < flippedCount}
+              showThumbnail={consented}
+              thumbnailTestId={
+                position === view.index ? 'playback-thumbnail' : undefined
+              }
+              tooltip={song.title}
+              label={t('card.faceUp', {
+                number: position + 1,
+                title: song.title,
+              })}
+            />
+          ) : (
+            <SongCard
+              key={position}
+              data-testid="song-card"
+              data-face="down"
+              index={position}
+              number={position + 1}
+              label={t('card.faceDown')}
+            />
+          ),
+        )}
+      </Hand>
 
       <div className="br-stack">
         {!consented && (

@@ -1308,6 +1308,21 @@ describe('createPlayback', () => {
 
     // Id-less pre-warm embed, marked so the e2e fixture can tell it apart.
     expect(harness.iframes[0]?.src).toContain('/embed/?');
+    // The viewer must not reach any YouTube UI (#95): the embed URL carries the
+    // locked player parameters and no fullscreen.
+    const embedParams = new URLSearchParams(
+      harness.iframes[0]?.src.split('?')[1] ?? '',
+    );
+    expect(Object.fromEntries(embedParams)).toMatchObject({
+      controls: '0',
+      disablekb: '1',
+      fs: '0',
+      rel: '0',
+      iv_load_policy: '3',
+      playsinline: '1',
+      enablejsapi: '1',
+    });
+    expect(harness.iframes[0]?.allowFullscreen).toBe(false);
     expect(harness.iframes[0]?.dataset.playbackPlayer).toBe('true');
     expect(player.calls.filter((call) => call.startsWith('cue:'))).toHaveLength(
       0,
