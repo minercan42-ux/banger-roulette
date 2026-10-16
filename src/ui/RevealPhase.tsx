@@ -18,7 +18,41 @@ import { cx } from './pf/cx';
 import { Jackpot, JackpotBadge, type JackpotWinner } from './pf/Jackpot';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
+import { comboKind, comboValues, ScoreCombo } from './pf/ScoreCombo';
 import { useSessionNow } from './use-session-now';
+
+interface RevealScoreProps {
+  entry: RevealEntryView;
+  animate: boolean;
+}
+
+/** Borda votes, jackpot bonus (or genre-fail penalty) and the round score. */
+function RevealScore({ entry, animate }: RevealScoreProps) {
+  const { t } = useTranslation();
+  const kind = comboKind(entry);
+  return (
+    <ScoreCombo
+      {...comboValues(entry)}
+      votesLabel={t('score.votes')}
+      adjustLabel={
+        kind === 'penalty' ? (
+          <Badge tone="red">{t('score.penalty')}</Badge>
+        ) : (
+          t(`score.${kind}`)
+        )
+      }
+      totalLabel={t('score.total')}
+      animate={animate}
+      className="mt-2"
+    />
+  );
+}
+
+/**
+ * An entry that became visible longer ago than this (reload, late join) shows
+ * its settled score instead of counting up again.
+ */
+const COUNT_UP_WINDOW_MS = 1500;
 
 interface RevealPhaseProps {
   session: GameSession;
@@ -188,13 +222,19 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                         .join(', '),
                     })}
                   </p>
-                  <p data-testid="reveal-entry-points" className="br-read">
+                  {/* The screen reader and tests get the settled text at once;
+                      the combo below is the animated, decorative version. */}
+                  <p data-testid="reveal-entry-points" className="sr-only">
                     {t('reveal.points', {
                       borda: entry.borda,
                       bonus: entry.bonus,
                       points: entry.roundPoints,
                     })}
                   </p>
+                  <RevealScore
+                    entry={entry}
+                    animate={reference - entry.revealAt < COUNT_UP_WINDOW_MS}
+                  />
                   {entry.genreFailed && (
                     <p
                       data-testid="reveal-entry-genre-fail"

@@ -165,14 +165,15 @@
     "REVEAL": "Reveal",
     "FINAL": "Finale",
     "runningHeading": "Game in progress",
-    "roundLabel": "Round {{number}} of {{total}}",
     "genreLabel": "Genre: {{genre}}",
     "timerLabel": "Time left",
     "paused": "Paused",
     "pauseQuorum": "Paused: fewer than 3 active players.",
     "pauseHost": "Paused by the host.",
     "spectator": "You are watching and will play from the next round.",
-    "ended": "The game has ended."
+    "ended": "The game has ended.",
+    "timerAnnounce": "{{time}} left",
+    "roundStat": "Round"
   },
   "genre": {
     "heading": "Genre roulette",
@@ -271,7 +272,8 @@
     "debugObservedStart": "Observed start",
     "debugStartSkew": "Start skew",
     "debugDrift": "Drift",
-    "debugStatus": "Status"
+    "debugStatus": "Status",
+    "timeLabel": "Song time"
   },
   "voting": {
     "heading": "Voting",
@@ -370,5 +372,12 @@
   },
   "later": {
     "playbackPreroll": "The song clips start shortly."
+  },
+  "score": {
+    "votes": "Votes",
+    "jackpot": "Jackpot",
+    "penalty": "Penalty",
+    "shared": "Shared",
+    "total": "Round"
   }
 }

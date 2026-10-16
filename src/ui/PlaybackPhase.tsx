@@ -10,13 +10,14 @@ import type { GameSession } from '../net/session';
 import type { PlaybackPlan, PlaybackStatus } from '../player/playback';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
-import { formatDuration } from './format';
 import { LinkedAnimation, prerollElapsedMs } from './LinkedAnimation';
 import { usePlaybackControllerContext } from './playback-controller';
 import { Button } from './pf/Button';
 import { Hand } from './pf/Hand';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
+import { Progress } from './pf/Progress';
+import { TimerStat } from './pf/Stat';
 import { useSessionNow } from './use-session-now';
 
 interface PlaybackPhaseProps {
@@ -153,7 +154,6 @@ export function PlaybackPhase({
   const totalMs = Math.max(1, view.deadlineAt - view.startAt);
   const elapsedMs = Math.min(totalMs, Math.max(0, frozenNow - view.startAt));
   const remainingMs = Math.max(0, totalMs - elapsedMs);
-  const progressPct = Math.min(100, (elapsedMs / totalMs) * 100);
   const preroll = view.index === 0 && frozenNow < view.startAt;
   const status: PlaybackStatus | 'idle' = consented
     ? (diagnostics?.status ?? 'loading')
@@ -314,26 +314,25 @@ export function PlaybackPhase({
         )}
       </div>
 
-      <div
-        data-testid="playback-progress"
-        role="progressbar"
-        aria-label={t('playback.progressLabel')}
-        aria-valuemin={0}
-        aria-valuemax={Math.round(totalMs)}
-        aria-valuenow={Math.round(elapsedMs)}
-        data-elapsed-ms={Math.round(elapsedMs)}
-        data-total-ms={Math.round(totalMs)}
-        data-remaining-ms={Math.round(remainingMs)}
-        className="br-progress"
-      >
-        <div
-          className="br-progress__fill"
-          style={{ width: `${progressPct}%` }}
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <TimerStat
+          session={session}
+          deadlineAt={view.deadlineAt}
+          pausedAt={view.pausedAt}
+          label={t('playback.timeLabel')}
+          data-testid="playback-timer"
+        />
+        <Progress
+          data-testid="playback-progress"
+          aria-label={t('playback.progressLabel')}
+          value={elapsedMs}
+          max={totalMs}
+          data-elapsed-ms={Math.round(elapsedMs)}
+          data-total-ms={Math.round(totalMs)}
+          data-remaining-ms={Math.round(remainingMs)}
+          className="min-w-40 flex-1"
         />
       </div>
-      <p className="br-label">
-        {t('playback.timeLeft', { time: formatDuration(remainingMs) })}
-      </p>
 
       <div className="br-stack">
         {!consented && (
