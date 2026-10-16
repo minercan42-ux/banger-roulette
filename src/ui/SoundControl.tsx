@@ -7,14 +7,21 @@ import type { SoundUnlock } from './useSoundUnlock';
 interface SoundControlProps {
   sound: SoundUnlock;
   canWrite: boolean;
+  /**
+   * The start gate was closed with Esc before the audio unlock succeeded. Only
+   * then does the control offer a manual retry; normally the gate owns the
+   * unlock click.
+   */
+  canRetry: boolean;
 }
 
 /**
- * FR-07 consent control. Presentation only: the unlock state and the shared
- * AudioContext live in `useSoundUnlock` (room lifetime), so this component may
- * unmount and remount when the layout moves it without losing the permission.
+ * FR-07 sound status. The unlock click itself lives in the start gate; this
+ * control shows the result. The unlock state and the shared AudioContext live
+ * in `useSoundUnlock` (room lifetime), so this component may unmount and
+ * remount when the layout moves it without losing the permission.
  */
-export function SoundControl({ sound, canWrite }: SoundControlProps) {
+export function SoundControl({ sound, canWrite, canRetry }: SoundControlProps) {
   const { t } = useTranslation();
   const { soundReady, busy, errorKey, enable } = sound;
 
@@ -31,7 +38,7 @@ export function SoundControl({ sound, canWrite }: SoundControlProps) {
           {soundReady ? t('sound.unlocked') : t('sound.locked')}
         </Badge>
       </div>
-      {!soundReady && (
+      {!soundReady && canRetry && (
         <div className="space-y-2">
           <Button
             data-testid="sound-consent"
@@ -45,7 +52,7 @@ export function SoundControl({ sound, canWrite }: SoundControlProps) {
           <p className="br-read">{t('sound.consentExplainer')}</p>
         </div>
       )}
-      {errorKey && (
+      {errorKey && canRetry && (
         <p
           data-testid="sound-error"
           role="alert"

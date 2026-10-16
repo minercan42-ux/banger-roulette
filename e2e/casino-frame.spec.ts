@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { closeStages, createRoom, joinRoom, newStage } from './m3-support';
+import {
+  closeStages,
+  createRoom,
+  joinRoom,
+  newStage,
+  unlockSound,
+} from './m3-support';
 
 /**
  * SPEC section 6 frame: one global gold focus ring on every interactive
@@ -170,6 +176,8 @@ test('Lobby: every focusable control shows the gold focus ring on Tab', async ({
   const host = await newStage(browser, { nickname: 'Ada' });
   try {
     await createRoom(host.page, host.nickname);
+    // The start gate traps focus; the table behind it is tabbed after the click.
+    await unlockSound(host.page);
     const stops = await tabThrough(host.page);
     const tags = new Set(stops.map((stop) => stop.tag));
     expect(tags).toContain('SELECT');

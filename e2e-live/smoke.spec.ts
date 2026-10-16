@@ -135,11 +135,19 @@ async function joinByLink(
   await expect(page.getByTestId('room-view')).toBeVisible({ timeout: 40_000 });
 }
 
-/** Clicks the Web Audio consent button until the server confirms the unlock. */
+/**
+ * Passes the start gate ("Los geht's", or the one-tap form after a stored
+ * consent): grants the YouTube consent, unlocks Web Audio and waits until the
+ * server confirms the unlock. A page that already passed has nothing to click.
+ */
 async function unlockSound(page: Page): Promise<void> {
-  const consent = page.getByTestId('sound-consent');
-  if ((await consent.count()) > 0) {
-    await consent.click();
+  const accept = page.getByTestId('start-gate-accept');
+  const unlocked = page.locator(
+    '[data-testid="sound-status"][data-unlocked="true"]',
+  );
+  await expect(accept.or(unlocked).first()).toBeAttached({ timeout: 30_000 });
+  if ((await accept.count()) > 0) {
+    await accept.click();
   }
   await expect(page.getByTestId('sound-status')).toHaveAttribute(
     'data-unlocked',
@@ -191,12 +199,11 @@ async function captureGenre(page: Page): Promise<GenreSnapshot> {
   };
 }
 
-/** Full submission path: link, consent, preview, play, save, done (FR-20..FR-26). */
+/** Full submission path: link, preview, play, save, done (FR-20..FR-26); the consent came from the start gate. */
 async function submitSong(page: Page, videoId: string): Promise<void> {
   const link = page.getByTestId('song-link');
   await expect(link).toBeVisible({ timeout: 30_000 });
   await link.fill(`https://www.youtube.com/watch?v=${videoId}`);
-  await page.getByTestId('youtube-consent').check();
   await page.getByTestId('load-preview').click();
   const status = page.getByTestId('preview-status');
   await expect(status).toHaveAttribute('data-state', 'ready', {
@@ -808,9 +815,9 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   // in that round - none of the previous game's totals may survive. The new
   // host is Bob (he held `final-rematch`), and Alice stays away, so the game
   // runs with three players and three songs.
-  // The reloaded tab lost its audio permission: `SoundControl` re-asserts
+  // The reloaded tab lost its audio permission: `useSoundUnlock` re-asserts
   // `unlocked: false` for a retained actor on every page load, so Cara has to
-  // consent again. Without it the lobby stays "1 player without sound" and the
+  // pass the one-tap start gate again. Without it the lobby stays "1 player without sound" and the
   // host's start button never enables. Bob and Dana are already unlocked, so
   // their click is skipped by the helper.
   await Promise.all(

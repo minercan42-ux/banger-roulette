@@ -82,7 +82,7 @@ export function PlaybackPhase({
     viewerId,
     viewerConnectionId,
   );
-  const { consented, setConsent } = useEmbedConsent();
+  const { consented } = useEmbedConsent();
   const now = useSessionNow(session, true, PROGRESS_FRAME_MS);
 
   const aliveRef = useRef(true);
@@ -345,25 +345,11 @@ export function PlaybackPhase({
         )}
       </Hand>
 
-      <div className="br-stack">
-        {!consented && (
-          <p data-testid="playback-consent-required" className="br-read">
-            {t('playback.consentRequired')}
-          </p>
-        )}
-        <label className="br-check">
-          <input
-            type="checkbox"
-            data-testid="playback-consent"
-            checked={consented}
-            onChange={(event) => {
-              setConsent(event.target.checked);
-            }}
-            className="br-check__input"
-          />
-          <span>{t('playback.consentLabel')}</span>
-        </label>
-      </div>
+      {!consented && (
+        <p data-testid="playback-consent-required" className="br-notice">
+          {t('playback.consentRequired')}
+        </p>
+      )}
 
       {consented && (
         <div className="br-stack">

@@ -5,6 +5,7 @@ import {
   closeStages,
   enterSubmission,
   newStage,
+  unlockSound,
   type Stage,
 } from './m3-support';
 
@@ -168,6 +169,7 @@ test('360 px: sticky bars leave controls reachable and nothing overflows', async
   );
   try {
     const page = host.page;
+    await unlockSound(page);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
 
     // Both bars stay on screen while the page scrolls.
@@ -179,7 +181,7 @@ test('360 px: sticky bars leave controls reachable and nothing overflows', async
     expect(actions.bottom).toBeLessThanOrEqual(740 + 1);
 
     // A control scrolled into view is never hidden behind either bar.
-    for (const testId of ['sound-consent', 'copy-link', 'leave-room']) {
+    for (const testId of ['sound-status', 'copy-link', 'leave-room']) {
       expect(await uncovered(page, testId), `${testId} is covered`).toBe(true);
     }
     await page.getByTestId('roster').scrollIntoViewIfNeeded();

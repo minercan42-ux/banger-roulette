@@ -41,17 +41,6 @@ export async function enablePlaybackDebug(page: Page): Promise<void> {
   });
 }
 
-/** Checks the per-tab playback consent if the tab has not consented already. */
-export async function consentToPlayback(page: Page): Promise<void> {
-  const consent = page.getByTestId('playback-consent');
-  if ((await consent.count()) === 0) {
-    return;
-  }
-  if (!(await consent.isChecked())) {
-    await consent.check();
-  }
-}
-
 export interface PlaybackDiagnostics {
   status: string | null;
   offsetMs: number | null;

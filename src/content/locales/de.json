@@ -77,9 +77,26 @@
   },
   "privacy": {
     "title": "Datenschutz",
-    "embed": "Videos werden von youtube-nocookie.com eingebettet, und zwar erst nach deiner Zustimmung in diesem Tab.",
+    "embed": "Videos werden von youtube-nocookie.com eingebettet, und zwar erst nach deiner Zustimmung im Start-Popup (\"Los geht's\"). Mit \"Ohne Videos\" wird nichts von YouTube geladen.",
     "noTracking": "Diese App nutzt keine Analyse-Tools und setzt keine Cookies.",
-    "storage": "Gespeichert wird nur eine zufällige Spieler-ID im localStorage deines Browsers, damit dich ein Neuladen wiedererkennt. Kein Konto, kein Spielstand."
+    "storage": "Gespeichert werden nur eine zufällige Spieler-ID und deine YouTube-Zustimmung im localStorage deines Browsers, damit dich ein Neuladen wiedererkennt. Die Zustimmung kannst du im Menü jederzeit widerrufen. Kein Konto, kein Spielstand."
+  },
+  "gate": {
+    "title": "Bereit für Banger Roulette?",
+    "body": "Die Songs laufen als YouTube-Videos, eingebettet von youtube-nocookie.com, und das Spiel spielt Sounds ab.",
+    "privacy": "Ein Klick reicht: Erst mit \"Los geht's\" werden Videos von YouTube geladen und der Sound aktiviert. Du kannst die Zustimmung jederzeit im Menü widerrufen.",
+    "accept": "Los geht's",
+    "decline": "Ohne Videos",
+    "compactTitle": "Sound starten",
+    "compactBody": "Dein Browser erlaubt Audio erst nach einem Tipp.",
+    "compactAccept": "Tippen zum Starten"
+  },
+  "consent": {
+    "statusLabel": "YouTube-Videos",
+    "on": "Erlaubt",
+    "off": "Aus",
+    "revoke": "YouTube-Zustimmung widerrufen",
+    "grant": "YouTube-Videos erlauben"
   },
   "lobby": {
     "heading": "Lobby",
@@ -187,8 +204,7 @@
     "linkLabel": "YouTube-Link",
     "linkHint": "Unterstützt: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com und m.youtube.com. Andere Domains werden abgelehnt.",
     "linkInvalid": "Kein gültiger YouTube-Link. Bitte eine unterstützte URL eingeben.",
-    "consentLabel": "Ich bin einverstanden, dass YouTube-Inhalte (Vorschau-Player und Vorschaubild) geladen werden.",
-    "consentRequired": "Bitte zuerst der Einbettung von YouTube zustimmen.",
+    "consentRequired": "YouTube-Videos sind aus. Zum Hören und Prüfen im Menü die Zustimmung erteilen.",
     "loadPreview": "Vorschau laden",
     "previewPlay": "Vorschau abspielen",
     "statusIdle": "Keine Vorschau geladen",
@@ -238,8 +254,7 @@
     "spectator": "Du schaust zu; dein Tab spielt mit, kann aber nichts schreiben.",
     "boundTab": "Ein anderer Tab hält die Schreibverbindung. Dieser Tab hört nur zu und kann keine Songs markieren.",
     "ownersHidden": "Namen folgen beim Reveal.",
-    "consentRequired": "Die YouTube-Wiedergabe bleibt bis zur Zustimmung deaktiviert.",
-    "consentLabel": "Ich bin einverstanden, dass YouTube-Inhalte (Player und Vorschaubild) geladen werden.",
+    "consentRequired": "YouTube-Videos sind aus. Im Menü die Zustimmung erteilen, um die Wiedergabe zu laden.",
     "progressLabel": "Wiedergabefortschritt",
     "timeLeft": "Noch {{time}}",
     "volumeLabel": "Lautstärke",
