@@ -75,8 +75,7 @@ function playback(): GameState {
     nextSubmissionOrder: 1,
     songs: [{ media, ownerIds: [a], clipSeconds: 20 }],
     playbackOrder: [media.videoId],
-    ballots: {},
-    votingDoneIds: [],
+    ratings: {},
     genreFailFlags: {},
   };
   return state;
@@ -89,7 +88,6 @@ describe('wire contracts', () => {
       rounds: 5,
       submissionSeconds: 90,
       clipSeconds: 40,
-      votingSeconds: 60,
       anonymous: true,
       genreFailPenalty: -3,
       linkedPoints: 'full',
@@ -102,38 +100,98 @@ describe('wire contracts', () => {
       }).success,
     ).toBe(false);
   });
-  it.each(['noSongs', 'singleSong'] as const)(
-    'rejects player points in a %s result',
-    (reason) => {
-      const state = playback();
-      state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
-      if (reason === 'noSongs') {
-        state.round!.submissions = {};
-        state.round!.songs = [];
-        state.round!.playbackOrder = [];
-      }
-      state.results = [
+  it('rejects player points in a noSongs result', () => {
+    const state = playback();
+    state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
+    state.round!.submissions = {};
+    state.round!.songs = [];
+    state.round!.playbackOrder = [];
+    state.results = [
+      {
+        number: 1,
+        genre,
+        reason: 'noSongs',
+        songs: [],
+        playerDeltas: { [a]: 0 },
+      },
+    ];
+    expect(GameStateSchema.safeParse(state).success).toBe(true);
+    state.results[0]!.playerDeltas[a] = 42;
+    expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
+  it('validates scored song basis, banger and bonus invariants', () => {
+    const state = playback();
+    state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
+    const song = state.round!.songs[0]!;
+    const scored = {
+      song,
+      scoreTenths: 100,
+      ratingCount: 3,
+      banger: true,
+      basis: 'ratings' as 'ratings' | 'noRating' | 'noRaters',
+      flaggerIds: [],
+      genreFailed: false,
+      winner: true,
+      bonus: 20,
+      ownerDeltas: { [a]: 120 },
+    };
+    state.results = [
+      {
+        number: 1,
+        genre,
+        reason: 'normal',
+        songs: [scored],
+        playerDeltas: { [a]: 120 },
+      },
+    ];
+    expect(GameStateSchema.safeParse(state).success).toBe(true);
+    const withSong = (override: Partial<typeof scored>): unknown => ({
+      ...state,
+      results: [
         {
-          number: 1,
-          genre,
-          reason,
-          songs: state.round!.songs.map((song) => ({
-            song,
-            borda: 0,
-            flaggerIds: [],
-            genreFailed: false,
-            winner: false,
-            bonus: 0,
-            ownerDeltas: { [a]: 0 },
-          })),
-          playerDeltas: { [a]: 0 },
+          ...state.results[0]!,
+          songs: [{ ...scored, ...override }],
         },
-      ];
-      expect(GameStateSchema.safeParse(state).success).toBe(true);
-      state.results[0]!.playerDeltas[a] = 42;
-      expect(GameStateSchema.safeParse(state).success).toBe(false);
-    },
-  );
+      ],
+    });
+    // A banger must be a full-marks ratings song.
+    expect(
+      GameStateSchema.safeParse(withSong({ scoreTenths: 95 })).success,
+    ).toBe(false);
+    // noRating must score zero.
+    expect(
+      GameStateSchema.safeParse(
+        withSong({
+          scoreTenths: 10,
+          ratingCount: 0,
+          banger: false,
+          basis: 'noRating',
+        }),
+      ).success,
+    ).toBe(false);
+    // noRaters can never win.
+    expect(
+      GameStateSchema.safeParse(
+        withSong({ ratingCount: 0, banger: false, basis: 'noRaters' }),
+      ).success,
+    ).toBe(false);
+  });
+  it.each([
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 0 },
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 10 },
+  ])('accepts a valid RATE payload %#', (clientAction) => {
+    expect(ClientActionSchema.safeParse(clientAction).success).toBe(true);
+  });
+  it.each([
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 11 },
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: -1 },
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 1.5 },
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: '5' },
+    { type: 'RATE', value: 5 },
+    { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 5, extra: true },
+  ])('rejects a malformed RATE payload %#', (clientAction) => {
+    expect(ClientActionSchema.safeParse(clientAction).success).toBe(false);
+  });
   it.each([0, 21, 1.5])('rejects invalid round count %s', (rounds) =>
     expect(SettingsSchema.safeParse({ rounds }).success).toBe(false),
   );
@@ -315,9 +373,9 @@ describe('wire contracts', () => {
       },
     ],
     [
-      'own vote',
+      'own song rating',
       (s: GameState) => {
-        s.round!.ballots[a] = { ranking: ['dQw4w9WgXcQ'] };
+        s.round!.ratings[a] = { dQw4w9WgXcQ: 5 };
       },
     ],
     [
@@ -327,9 +385,21 @@ describe('wire contracts', () => {
       },
     ],
     [
-      'nonparticipant vote',
+      'nonparticipant rating',
       (s: GameState) => {
-        s.round!.ballots[b] = { ranking: [] };
+        s.round!.ratings[b] = { dQw4w9WgXcQ: 5 };
+      },
+    ],
+    [
+      'unknown song rating',
+      (s: GameState) => {
+        s.round!.ratings[a] = { aaaaaaaaaaa: 5 };
+      },
+    ],
+    [
+      'out of range rating',
+      (s: GameState) => {
+        s.round!.ratings[a] = { dQw4w9WgXcQ: 11 };
       },
     ],
     [

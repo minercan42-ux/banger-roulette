@@ -18,6 +18,7 @@ import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
 import { Progress } from './pf/Progress';
 import { TimerStat } from './pf/Stat';
+import { RatingSection } from './RatingSection';
 import { useSessionNow } from './use-session-now';
 
 interface PlaybackPhaseProps {
@@ -313,6 +314,13 @@ export function PlaybackPhase({
           </p>
         )}
       </div>
+
+      <RatingSection
+        session={session}
+        state={state}
+        viewerId={viewerId}
+        viewerConnectionId={viewerConnectionId}
+      />
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <TimerStat

@@ -29,24 +29,39 @@ function timer(now: number, pausedAt: number | null = null): string {
 }
 
 describe('comboValues', () => {
-  it('splits a winner into votes + jackpot = round score', () => {
-    const entry = { borda: 9, bonus: 2, roundPoints: 11, genreFailed: false };
-    expect(comboValues(entry)).toEqual({ votes: 9, adjust: 2, total: 11 });
+  it('splits a winner into average + jackpot = round score (tenths)', () => {
+    const entry = {
+      scoreTenths: 85,
+      bonus: 20,
+      roundPoints: 105,
+      genreFailed: false,
+    };
+    expect(comboValues(entry)).toEqual({ votes: 85, adjust: 20, total: 105 });
     expect(comboKind(entry)).toBe('jackpot');
   });
 
   it('keeps votes + adjust = total for a genre fail (negative adjust)', () => {
-    const entry = { borda: 3, bonus: 0, roundPoints: 1, genreFailed: true };
+    const entry = {
+      scoreTenths: 30,
+      bonus: 0,
+      roundPoints: 10,
+      genreFailed: true,
+    };
     const { votes, adjust, total } = comboValues(entry);
-    expect(adjust).toBe(-2);
+    expect(adjust).toBe(-20);
     expect(votes + adjust).toBe(total);
     expect(comboKind(entry)).toBe('penalty');
   });
 
   it('labels a halved linked song as a share', () => {
-    const entry = { borda: 8, bonus: 2, roundPoints: 5, genreFailed: false };
+    const entry = {
+      scoreTenths: 80,
+      bonus: 20,
+      roundPoints: 50,
+      genreFailed: false,
+    };
     expect(comboKind(entry)).toBe('shared');
-    expect(comboValues(entry).total).toBe(5);
+    expect(comboValues(entry).total).toBe(50);
   });
 
   it('counts up well inside the 2500 ms a reveal entry gets', () => {
@@ -56,9 +71,9 @@ describe('comboValues', () => {
 
 describe('ScoreCombo', () => {
   const props = {
-    votes: 9,
-    adjust: 2,
-    total: 11,
+    votes: 73,
+    adjust: 20,
+    total: 93,
     votesLabel: 'Votes',
     adjustLabel: 'Jackpot',
     totalLabel: 'Round',
@@ -68,24 +83,30 @@ describe('ScoreCombo', () => {
     const html = renderToStaticMarkup(
       <ScoreCombo {...props} animate={false} />,
     );
-    expect(html).toMatch(/score-combo-votes[^>]*>9</);
-    expect(html).toMatch(/score-combo-adjust[^>]*>2</);
-    expect(html).toMatch(/score-combo-total[^>]*>11</);
-    expect(html).toContain('data-total="11"');
+    expect(html).toMatch(/score-combo-votes[^>]*>7\.3</);
+    expect(html).toMatch(/score-combo-adjust[^>]*>2\.0</);
+    expect(html).toMatch(/score-combo-total[^>]*>9\.3</);
+    expect(html).toContain('data-total="93"');
   });
 
   it('starts at zero while it counts up and is decoration for readers', () => {
     const html = renderToStaticMarkup(<ScoreCombo {...props} />);
-    expect(html).toMatch(/score-combo-total[^>]*>0</);
+    expect(html).toMatch(/score-combo-total[^>]*>0\.0</);
     expect(html).toContain('aria-hidden="true"');
   });
 
   it('draws a penalty as a minus sign with the absolute amount', () => {
     const html = renderToStaticMarkup(
-      <ScoreCombo {...props} votes={3} adjust={-2} total={1} animate={false} />,
+      <ScoreCombo
+        {...props}
+        votes={30}
+        adjust={-20}
+        total={10}
+        animate={false}
+      />,
     );
     expect(html).toContain('br-combo__op">-<');
-    expect(html).toMatch(/score-combo-adjust[^>]*>2</);
+    expect(html).toMatch(/score-combo-adjust[^>]*>2\.0</);
   });
 });
 

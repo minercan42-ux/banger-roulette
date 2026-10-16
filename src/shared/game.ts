@@ -6,9 +6,11 @@ import {
   Int,
   MediaSchema,
   Nickname,
+  Rating,
   RoomCode,
   Seconds,
   Time,
+  VideoId,
   VideoIds,
   unique,
   nicknameKey,
@@ -45,25 +47,34 @@ export const RoundSchema = z.strictObject({
   nextSubmissionOrder: Int,
   songs: z.array(SongSchema).max(10),
   playbackOrder: VideoIds,
-  ballots: z.record(Id, z.strictObject({ ranking: VideoIds })),
-  votingDoneIds: Ids,
+  /** Live 0-10 ratings: rater id -> video id -> rating (FR-40). */
+  ratings: z.record(Id, z.record(VideoId, Rating)),
   genreFailFlags: z.record(Id, VideoIds),
 });
 export type Round = z.infer<typeof RoundSchema>;
+/** All scores below are integer tenths of a point (73 shows as 7.3). */
+export const SCORE_TENTHS_PER_POINT = 10;
 export const ScoredSongSchema = z.strictObject({
   song: SongSchema,
-  borda: Int,
+  /** Mean rating in tenths; 50 for a song nobody was eligible to rate. */
+  scoreTenths: z.number().int().min(0).max(100),
+  ratingCount: Int,
+  /** Every rating given was a 10 (at least one rating). */
+  banger: z.boolean(),
+  /** `ratings`: scored from ratings; `noRating`: raters but no rating; `noRaters`: every active player owns the song. */
+  basis: z.enum(['ratings', 'noRating', 'noRaters']),
   flaggerIds: Ids,
   genreFailed: z.boolean(),
   winner: z.boolean(),
-  bonus: Int,
+  /** Winner bonus in tenths: 20 or 0. */
+  bonus: z.number().int(),
   ownerDeltas: z.record(Id, z.number().int()),
 });
 export type ScoredSong = z.infer<typeof ScoredSongSchema>;
 export const RoundResultSchema = z.strictObject({
   number: z.number().int().min(1).max(20),
   genre: GenreSchema,
-  reason: z.enum(['normal', 'noSongs', 'singleSong']),
+  reason: z.enum(['normal', 'noSongs']),
   songs: z.array(ScoredSongSchema).max(10),
   playerDeltas: z.record(Id, z.number().int()),
 });
@@ -82,7 +93,6 @@ export const PhaseSchema = z.discriminatedUnion('type', [
     startAt: Time,
     deadlineAt: Time,
   }),
-  z.strictObject({ type: z.literal('VOTING'), deadlineAt: Time }),
   z.strictObject({
     type: z.literal('REVEAL'),
     startedAt: Time,
@@ -252,8 +262,7 @@ export const GameStateSchema = z
         [
           ...Object.keys(round.submissions),
           ...round.submissionDoneIds,
-          ...Object.keys(round.ballots),
-          ...round.votingDoneIds,
+          ...Object.keys(round.ratings),
           ...Object.keys(round.genreFailFlags),
         ].some((id) => !participant(id))
       )
@@ -284,17 +293,21 @@ export const GameStateSchema = z
         )
           issue('Song owner/submission mismatch');
       }
-      for (const [id, ballot] of Object.entries(round.ballots))
+      for (const [id, given] of Object.entries(round.ratings))
         if (
-          ballot.ranking.some(
-            (video) =>
-              !videos.includes(video) ||
-              round.songs
-                .find((s) => s.media.videoId === video)
-                ?.ownerIds.includes(id),
-          )
+          Object.keys(given).some((video) => {
+            const owned = round.songs
+              .find((s) => s.media.videoId === video)
+              ?.ownerIds.includes(id);
+            const playIndex = round.playbackOrder.indexOf(video);
+            return (
+              playIndex < 0 ||
+              owned !== false ||
+              (state.phase.type === 'PLAYBACK' && playIndex > state.phase.index)
+            );
+          })
         )
-          issue('Invalid or own ranked song');
+          issue('Invalid, own or unplayed rated song');
       for (const [id, flags] of Object.entries(round.genreFailFlags))
         if (
           flags.some(
@@ -314,14 +327,13 @@ export const GameStateSchema = z
       if (Object.keys(result.playerDeltas).some((id) => !knownPlayer(id)))
         issue('Unknown scored player');
       if (
-        result.reason !== 'normal' &&
+        result.reason === 'noSongs' &&
         Object.values(result.playerDeltas).some((delta) => delta !== 0)
       )
-        issue('Degenerate round must have zero player deltas');
+        issue('Empty round must have zero player deltas');
       if (
         (result.reason === 'noSongs' && result.songs.length !== 0) ||
-        (result.reason === 'singleSong' && result.songs.length !== 1) ||
-        (result.reason === 'normal' && result.songs.length < 2)
+        (result.reason === 'normal' && result.songs.length < 1)
       )
         issue('Result reason mismatch');
       for (const scored of result.songs) {
@@ -347,18 +359,18 @@ export const GameStateSchema = z
         )
           issue('Owner deltas mismatch');
         if (
-          scored.bonus !== (scored.winner ? 2 : 0) ||
-          (scored.genreFailed && scored.winner)
+          scored.bonus !== (scored.winner ? 2 * SCORE_TENTHS_PER_POINT : 0) ||
+          (scored.genreFailed && scored.winner) ||
+          (scored.basis === 'noRaters' && scored.winner)
         )
           issue('Invalid winner bonus');
         if (
-          result.reason !== 'normal' &&
-          (scored.borda ||
-            scored.bonus ||
-            scored.genreFailed ||
-            Object.values(scored.ownerDeltas).some((delta) => delta !== 0))
+          (scored.basis === 'ratings') !== scored.ratingCount > 0 ||
+          (scored.banger &&
+            (scored.basis !== 'ratings' || scored.scoreTenths !== 100)) ||
+          (scored.basis === 'noRating' && scored.scoreTenths !== 0)
         )
-          issue('Degenerate round must have zero points');
+          issue('Rating basis mismatch');
       }
     }
   });

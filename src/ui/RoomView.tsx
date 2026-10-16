@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   selectLobbyReadiness,
   selectPlayback,
-  selectReveal,
   selectRoom,
   selectViewerPermissions,
   type PlayerView,
@@ -27,11 +26,9 @@ import {
 import { RevealPhase } from './RevealPhase';
 import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
-import { SingleSongPhase } from './SingleSongPhase';
 import { SfxDirector } from './SfxDirector';
 import { SoundControl } from './SoundControl';
 import { SubmissionPanel } from './SubmissionPanel';
-import { VotingPhase } from './VotingPhase';
 
 interface RoomViewProps {
   session: GameSession;
@@ -61,7 +58,6 @@ export function RoomView({
   );
   const room = selectRoom(state);
   const readiness = selectLobbyReadiness(state);
-  const reveal = selectReveal(state);
   const shareUrl = `${window.location.origin}/r/${room.roomCode}`;
 
   // M4 AK-7: one playback controller for the tab, pre-warmed during SUBMISSION
@@ -227,28 +223,14 @@ export function RoomView({
           />
         )}
 
-        {room.phase === 'VOTING' && (
-          <VotingPhase
+        {room.phase === 'REVEAL' && (
+          <RevealPhase
             key={`${room.gameNumber}:${room.roundNumber}`}
             session={session}
             state={state}
             viewerId={viewerId}
-            viewerConnectionId={snapshot.connectionId}
-            roster={roster}
           />
         )}
-
-        {room.phase === 'REVEAL' &&
-          (reveal?.reason === 'singleSong' ? (
-            <SingleSongPhase state={state} viewerId={viewerId} />
-          ) : (
-            <RevealPhase
-              key={`${room.gameNumber}:${room.roundNumber}`}
-              session={session}
-              state={state}
-              viewerId={viewerId}
-            />
-          ))}
 
         {room.phase === 'FINAL' && (
           <FinalPhase

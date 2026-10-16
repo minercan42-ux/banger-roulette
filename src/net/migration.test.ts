@@ -54,17 +54,17 @@ function media(index: number) {
   };
 }
 
-interface VotingGame {
+interface PlayingGame {
   host: GameSession;
   guests: GameSession[];
   hostConnectionId: string;
 }
 
-async function buildVotingGame(
+async function buildPlayingGame(
   hub: InMemoryHub,
   clock: ManualClock,
   uuid: () => string,
-): Promise<VotingGame> {
+): Promise<PlayingGame> {
   const host = makeSession(hub, clock, uuid, 0);
   const guests = [1, 2, 3].map((n) => makeSession(hub, clock, uuid, n));
   await host.createRoom('Host');
@@ -92,13 +92,21 @@ async function buildVotingGame(
   }
 
   for (let step = 0; step < 10; step += 1) {
-    if (host.getSnapshot().state?.phase.type === 'VOTING') {
+    const current = host.getSnapshot().state;
+    if (
+      current?.phase.type === 'PLAYBACK' &&
+      current.phase.index === current.round!.playbackOrder.length - 1
+    ) {
       break;
     }
     await host.dispatch({ type: 'ADVANCE' });
     await settle(clock);
   }
-  expect(host.getSnapshot().state?.phase.type).toBe('VOTING');
+  const open = host.getSnapshot().state!;
+  expect(open.phase.type).toBe('PLAYBACK');
+  expect(open.phase.type === 'PLAYBACK' && open.phase.index).toBe(
+    open.round!.playbackOrder.length - 1,
+  );
   return { host, guests, hostConnectionId: uid(200) };
 }
 
@@ -107,7 +115,7 @@ describe('host migration', () => {
     const clock = new ManualClock(CLOCK_START);
     const hub = new InMemoryHub();
     const uuid = uuidFactory();
-    const { host, guests, hostConnectionId } = await buildVotingGame(
+    const { host, guests, hostConnectionId } = await buildPlayingGame(
       hub,
       clock,
       uuid,
@@ -123,7 +131,7 @@ describe('host migration', () => {
     const successorState = successor.getSnapshot().state!;
     expect(successorState.hostId).toBe(successor.getSnapshot().clientId);
     expect(successorState.hostEpoch).toBe(1);
-    expect(successorState.phase.type).toBe('VOTING');
+    expect(successorState.phase.type).toBe('PLAYBACK');
     expect(deadlineOf(successorState)).toBe(deadlineAt);
     expect(Object.keys(successorState.round!.submissions)).toHaveLength(4);
     expect(guests[1].getSnapshot().state?.hostId).toBe(
@@ -138,7 +146,7 @@ describe('host migration', () => {
     const clock = new ManualClock(CLOCK_START);
     const hub = new InMemoryHub();
     const uuid = uuidFactory();
-    const { guests, hostConnectionId } = await buildVotingGame(
+    const { guests, hostConnectionId } = await buildPlayingGame(
       hub,
       clock,
       uuid,
@@ -146,10 +154,16 @@ describe('host migration', () => {
     const candidate = guests[0];
     const candidateConnectionId = uid(201);
     hub.setLossy(candidateConnectionId, true);
-    await guests[1].dispatch({
-      type: 'SET_RANKING',
-      ranking: [media(1).videoId, media(2).videoId, media(4).videoId],
-    });
+    const playing = guests[0].getSnapshot().state!;
+    const openVideo =
+      playing.round!.playbackOrder[playing.round!.playbackOrder.length - 1];
+    const owner = playing.round!.songs.find(
+      (song) => song.media.videoId === openVideo,
+    )!.ownerIds[0];
+    const rater = guests
+      .slice(1)
+      .find((guest) => guest.getSnapshot().clientId !== owner)!;
+    await rater.dispatch({ type: 'RATE', songId: openVideo, value: 8 });
     await settle(clock);
     hub.setLossy(candidateConnectionId, false);
 
@@ -160,10 +174,10 @@ describe('host migration', () => {
 
     const successorState = candidate.getSnapshot().state!;
     expect(successorState.hostId).toBe(candidate.getSnapshot().clientId);
-    // The ballot the candidate missed was carried by the newer replica.
+    // The rating the candidate missed was carried by the newer replica.
     expect(
-      successorState.round!.ballots[guests[1].getSnapshot().clientId],
-    ).toBeDefined();
+      successorState.round!.ratings[rater.getSnapshot().clientId]?.[openVideo],
+    ).toBe(8);
   });
 
   it('keeps a paused phase and its frozen deadline across migration', async () => {
@@ -207,7 +221,7 @@ describe('host migration', () => {
     const clock = new ManualClock(CLOCK_START);
     const hub = new InMemoryHub();
     const uuid = uuidFactory();
-    const { host, guests, hostConnectionId } = await buildVotingGame(
+    const { host, guests, hostConnectionId } = await buildPlayingGame(
       hub,
       clock,
       uuid,
@@ -281,7 +295,7 @@ describe('host migration', () => {
       const clock = new ManualClock(CLOCK_START);
       const hub = new InMemoryHub();
       const uuid = uuidFactory();
-      const { guests, hostConnectionId } = await buildVotingGame(
+      const { guests, hostConnectionId } = await buildPlayingGame(
         hub,
         clock,
         uuid,

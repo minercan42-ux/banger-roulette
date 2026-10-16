@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import type { GameState } from '../src/shared/game';
 import {
   assembleRoom,
   closeStages,
@@ -14,7 +13,7 @@ import {
   waitForPhase,
   type Stage,
 } from './m3-support';
-import { mediaFor } from './m5-support';
+import { mediaFor, ratePlayback } from './m5-support';
 
 /**
  * SPEC §6 accessibility coverage: the phase live region and a keyboard-only run.
@@ -41,7 +40,6 @@ const FOCUSABLE_SELECTOR =
 
 interface FocusInfo {
   testId: string | null;
-  videoId: string | null;
   /** DOM position of the focused element, so a parked focus is detectable. */
   index: number;
   /** Whether the focused element ends or opens the document's tab order. */
@@ -52,15 +50,11 @@ interface FocusInfo {
 async function focusedInfo(page: Page): Promise<FocusInfo> {
   return page.evaluate((selector) => {
     const active = document.activeElement as HTMLElement | null;
-    const item = active?.closest(
-      '[data-testid="voting-rank-item"]',
-    ) as HTMLElement | null;
     const focusable = Array.from(
       document.querySelectorAll<HTMLElement>(selector),
     ).filter((element) => element.getClientRects().length > 0);
     return {
       testId: active?.getAttribute('data-testid') ?? null,
-      videoId: item?.getAttribute('data-video-id') ?? null,
       index:
         active === null
           ? -1
@@ -83,18 +77,12 @@ async function focusedInfo(page: Page): Promise<FocusInfo> {
  * Shift+Tab rather than by focusing a control from script. A control that
  * swallows Tab anywhere else is a real keyboard trap and fails the run.
  */
-async function tabTo(
-  page: Page,
-  target: { testId: string; videoId?: string },
-): Promise<void> {
+async function tabTo(page: Page, target: { testId: string }): Promise<void> {
   let backwards = false;
   let previous: number | null = null;
   for (let presses = 0; presses <= MAX_TABS; presses += 1) {
     const info = await focusedInfo(page);
-    if (
-      info.testId === target.testId &&
-      (target.videoId === undefined || info.videoId === target.videoId)
-    ) {
+    if (info.testId === target.testId) {
       return;
     }
     if (presses === MAX_TABS) {
@@ -156,70 +144,6 @@ async function submitSongByKeyboard(page: Page, url: string): Promise<void> {
   await page.keyboard.press('Enter');
 }
 
-async function rankOf(page: Page, videoId: string): Promise<number> {
-  const item = page.locator(
-    `[data-testid="voting-rank-item"][data-video-id="${videoId}"]`,
-  );
-  return Number(await item.getAttribute('data-rank'));
-}
-
-/** Moves a ranked song to `targetRank` using only the up/down buttons. */
-async function moveByKeyboard(
-  page: Page,
-  videoId: string,
-  targetRank: number,
-): Promise<void> {
-  for (let guard = 0; guard < 12; guard += 1) {
-    const rank = await rankOf(page, videoId);
-    if (rank === targetRank) {
-      return;
-    }
-    const testId = rank > targetRank ? 'voting-rank-up' : 'voting-rank-down';
-    await tabTo(page, { testId, videoId });
-    await page.keyboard.press('Enter');
-    await expect
-      .poll(() => rankOf(page, videoId), { timeout: 5000 })
-      .toBe(rank + (rank > targetRank ? -1 : 1));
-  }
-  throw new Error(
-    `Could not move ${videoId} to rank ${targetRank} by keyboard`,
-  );
-}
-
-/** Adds every foreign song to the ranking with the keyboard only. */
-async function rankAllByKeyboard(page: Page, expected: number): Promise<void> {
-  for (let index = 0; index < expected; index += 1) {
-    await tabTo(page, { testId: 'voting-song-add' });
-    await page.keyboard.press('Enter');
-  }
-  await expect(page.getByTestId('voting-rank-item')).toHaveCount(expected);
-}
-
-async function ballotOf(page: Page, id: string): Promise<string[]> {
-  const state = await stateOf(page);
-  return state?.round?.ballots?.[id]?.ranking ?? [];
-}
-
-/** Ranks every foreign song and finishes voting through the session. */
-async function finishVotingFor(
-  page: Page,
-  state: GameState | null,
-): Promise<void> {
-  const id = (await snapshot(page)).clientId;
-  const ranking = (state?.round?.songs ?? [])
-    .filter((song) => !song.ownerIds.includes(id))
-    .map((song) => song.media.videoId);
-  expect((await dispatch(page, { type: 'SET_RANKING', ranking })).status).toBe(
-    'accepted',
-  );
-  expect((await dispatch(page, { type: 'FINISH_VOTING' })).status).toBe(
-    'accepted',
-  );
-  await expect
-    .poll(async () => (await stateOf(page))?.round?.votingDoneIds ?? [])
-    .toContain(id);
-}
-
 test('announces every phase transition including the lobby boundary but stays silent on mount', async ({
   browser,
 }) => {
@@ -274,22 +198,8 @@ test('announces every phase transition including the lobby boundary but stays si
       'Playback, round 1 of 1.',
     );
 
-    const songCount = (await stateOf(host.page))?.round?.songs.length ?? 0;
-    for (let index = 0; index < songCount; index += 1) {
-      expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
-        'accepted',
-      );
-    }
-    await waitForPhase(host.page, 'VOTING');
-    await expect(host.page.getByTestId('phase-announcement')).toHaveText(
-      'Voting, round 1 of 1.',
-    );
-
-    const state = await stateOf(host.page);
-    for (const page of all) {
-      await finishVotingFor(page, state);
-    }
-    await waitForPhase(host.page, 'REVEAL');
+    const medias = all.map((_, index) => mediaFor(1, index));
+    await ratePlayback(all, medias);
     await expect(host.page.getByTestId('phase-announcement')).toHaveText(
       'Reveal, round 1 of 1.',
     );
@@ -451,54 +361,72 @@ test('one player completes the round from Lobby to Finale with the keyboard only
     }
     await waitForPhase(host.page, 'PLAYBACK');
 
-    // Playback has no keyboard control; the clips are skipped via the session.
-    const songCount = (await stateOf(host.page))?.round?.songs.length ?? 0;
-    for (let index = 0; index < songCount; index += 1) {
+    // Playback has no keyboard control for the clips; they are skipped via the
+    // session. Skip to a song the audited player does not own, so the rating
+    // bar (not the "your song" note) is on screen.
+    const hostId = (await snapshot(host.page)).clientId;
+    const medias = all.map((_, index) => mediaFor(1, index));
+    for (let guard = 0; guard < 3; guard += 1) {
+      const playing = await stateOf(host.page);
+      const current = playing?.round?.playbackOrder[
+        playing.phase.type === 'PLAYBACK' ? playing.phase.index : 0
+      ] as string;
+      const owner = playing?.round?.songs.find(
+        (song) => song.media.videoId === current,
+      );
+      if (!owner?.ownerIds.includes(hostId)) {
+        break;
+      }
       expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
         'accepted',
       );
     }
-    await waitForPhase(host.page, 'VOTING');
+    const playing = await stateOf(host.page);
+    expect(playing?.phase.type).toBe('PLAYBACK');
+    const index = playing?.phase.type === 'PLAYBACK' ? playing.phase.index : 0;
+    const songId = playing?.round?.playbackOrder[index] as string;
 
-    // Ranking by keyboard, exercising both the down and up buttons.
-    const hostId = (await snapshot(host.page)).clientId;
-    const state = await stateOf(host.page);
-    const foreign = (state?.round?.songs ?? [])
-      .filter((song) => !song.ownerIds.includes(hostId))
-      .map((song) => song.media.videoId);
-    expect(foreign).toHaveLength(2);
-
-    await rankAllByKeyboard(host.page, foreign.length);
-    await expect
-      .poll(() => ballotOf(host.page, hostId))
-      .toHaveLength(foreign.length);
-    // The pool order is not guaranteed, so use the order the keyboard produced.
-    const initial = await ballotOf(host.page, hostId);
-    expect([...initial].sort()).toEqual([...foreign].sort());
-    const [first, second] = initial as [string, string];
-
-    // Move the current top song down, then back up.
-    await moveByKeyboard(host.page, first, 2);
-    await expect
-      .poll(() => ballotOf(host.page, hostId))
-      .toEqual([second, first]);
-
-    await moveByKeyboard(host.page, first, 1);
-    await expect
-      .poll(() => ballotOf(host.page, hostId))
-      .toEqual([first, second]);
-
-    await tabTo(host.page, { testId: 'voting-finish' });
+    // Rating by keyboard: pick a chip, then change it.
+    await tabTo(host.page, { testId: 'rating-chip-7' });
     await host.page.keyboard.press('Enter');
+    await expect(host.page.getByTestId('rating-chip-7')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await expect
-      .poll(async () => (await stateOf(host.page))?.round?.votingDoneIds ?? [])
-      .toContain(hostId);
+      .poll(
+        async () =>
+          (await stateOf(host.page))?.round?.ratings[hostId]?.[songId],
+      )
+      .toBe(7);
+    await tabTo(host.page, { testId: 'rating-chip-9' });
+    await host.page.keyboard.press(' ');
+    await expect
+      .poll(
+        async () =>
+          (await stateOf(host.page))?.round?.ratings[hostId]?.[songId],
+      )
+      .toBe(9);
 
-    // The remaining voters finish through the session so the round resolves.
-    for (const stage of others) {
-      await finishVotingFor(stage.page, state);
+    // The next song opens the summary; change the earlier rating from it.
+    if (index + 1 < medias.length) {
+      expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+        'accepted',
+      );
+      await tabTo(host.page, { testId: `rating-entry-toggle-${index}` });
+      await host.page.keyboard.press('Enter');
+      await tabTo(host.page, { testId: 'rating-edit-chip-3' });
+      await host.page.keyboard.press('Enter');
+      await expect
+        .poll(
+          async () =>
+            (await stateOf(host.page))?.round?.ratings[hostId]?.[songId],
+        )
+        .toBe(3);
     }
-    await waitForPhase(host.page, 'REVEAL');
+
+    // The remaining ratings go through the session so the round resolves.
+    await ratePlayback(all, medias, (rater) => (rater === 0 ? null : 6));
 
     expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
       'accepted',

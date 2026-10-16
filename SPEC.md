@@ -5,7 +5,7 @@ Du bist Tech Lead und Orchestrator eines Agenten-Teams. Du planst, zerlegst die 
 Ziel: ein lauffähiges, getestetes und deploytes MVP von "Banger Roulette" gemäß dieser Spezifikation.
 
 ## 1. Produktvision
-Browserbasiertes Multiplayer-Partyspiel für 3-10 Spieler, die remote spielen. Pro Runde wird ein Musikgenre bestimmt. Jeder reicht per YouTube-Link den Song ein, den er für den größten Banger dieses Genres hält. Alle hören die Ausschnitte synchron auf ihren eigenen Geräten, ranken die Songs der anderen und bekommen Punkte. Casino-Flair, schnelle Runden, kein Login.
+Browserbasiertes Multiplayer-Partyspiel für 3-10 Spieler, die remote spielen. Pro Runde wird ein Musikgenre bestimmt. Jeder reicht per YouTube-Link den Song ein, den er für den größten Banger dieses Genres hält. Alle hören die Ausschnitte synchron auf ihren eigenen Geräten, bewerten die Songs der anderen live mit 0 bis 10 Punkten und bekommen Punkte. Casino-Flair, schnelle Runden, kein Login.
 
 ## 2. Rahmenbedingungen
 - Zielgruppe MVP: privater Freundeskreis. Eine spätere öffentliche Version (Phase 2) ist möglich, die Architektur darf sie nicht verbauen.
@@ -49,7 +49,7 @@ Architekturregeln:
 Bekannte, akzeptierte Grenzen des MVP (in `docs/SECURITY.md` dokumentieren): Da alle Clients den vollständigen State erhalten, ist die Anonymität nur UI-seitig umgesetzt und mit DevTools umgehbar. Absender von Broadcasts sind nicht kryptografisch verifiziert. Für den Freundeskreis ist das akzeptiert. Phase 2: Engine serverseitig betreiben (z.B. Cloudflare Durable Objects oder eigener Node-Server), Clients erhalten nur noch gefilterte Views.
 
 ## 4. Spielablauf (State Machine)
-`LOBBY -> GENRE_SPIN -> SUBMISSION -> PLAYBACK -> VOTING -> REVEAL -> (weitere Runde: GENRE_SPIN | sonst FINAL) -> LOBBY (Rematch)`
+`LOBBY -> GENRE_SPIN -> SUBMISSION -> PLAYBACK -> REVEAL -> (weitere Runde: GENRE_SPIN | sonst FINAL) -> LOBBY (Rematch)`
 
 Jeder Übergang erfolgt über eine Deadline oder eine Host-Aktion. Jede Phase zeigt den Timer und wer noch fehlt, ohne zu verraten, was gewählt wurde.
 
@@ -72,7 +72,6 @@ Jeder Übergang erfolgt über eine Deadline oder eine Host-Aktion. Jede Phase ze
 | Runden | 1-20 | 5 |
 | Auswahlzeit | 30-300 s | 90 s |
 | Ausschnittlänge | 15-60 s | 40 s |
-| Votingzeit | 30-180 s | 60 s |
 | Anonymität | an (Zuordnung erst beim Reveal) / aus (Name des Owners beim Abspielen sichtbar) | an |
 | Genre-Fail-Strafe | aus oder -1 bis -10 | -3 |
 | Linked-Punkte | voll für jeden Owner / halbiert (aufgerundet) | voll |
@@ -89,8 +88,8 @@ Die vordefinierte Genre-Liste umfasst mindestens 30 Genres und liegt als `src/co
 - FR-22 Embed-Validierung: Vorschau im IFrame Player. Bei Fehlercodes, die "nicht verfügbar" oder "Embedding verboten" bedeuten (laut Doku u.a. 100, 101, 150; aktuelle Liste prüfen), wird die Einreichung mit einer verständlichen Meldung blockiert.
 - FR-23 Startpunkt wählen: Vorschau-Player mit Button "Startpunkt setzen" und Feinjustierung um ±1 s und ±5 s. Der Ausschnitt ist `[start, start + Ausschnittlänge]`, begrenzt durch die Videolänge.
 - FR-24 Die Einreichung ist bis zum Ablauf der Auswahlzeit oder bis "Fertig" änderbar. Die Phase endet vorzeitig, wenn alle fertig sind.
-- FR-25 Wer bis zum Ablauf nichts einreicht, setzt die Runde aus (0 Punkte), darf aber voten.
-- FR-26 Spiritually Linked: Reichen mehrere Spieler dieselbe videoId ein, ist das kein Fehler. Der Song wird zu einem Eintrag mit mehreren Ownern zusammengeführt, es gilt der Startpunkt des ersten Einreichers. Am Ende der Auswahlphase läuft eine Spezialanimation "Spiritually Linked" (bei aktiver Anonymität ohne Namen, die Namen folgen beim Reveal). Jeder Owner bekommt die Punkte des Songs gemäß der Einstellung "Linked-Punkte". Keiner der Owner darf für diesen Song stimmen.
+- FR-25 Wer bis zum Ablauf nichts einreicht, setzt die Runde aus (0 Punkte), darf aber bewerten.
+- FR-26 Spiritually Linked: Reichen mehrere Spieler dieselbe videoId ein, ist das kein Fehler. Der Song wird zu einem Eintrag mit mehreren Ownern zusammengeführt, es gilt der Startpunkt des ersten Einreichers. Am Ende der Auswahlphase läuft eine Spezialanimation "Spiritually Linked" (bei aktiver Anonymität ohne Namen, die Namen folgen beim Reveal). Jeder Owner bekommt die Punkte des Songs gemäß der Einstellung "Linked-Punkte". Keiner der Owner darf diesen Song bewerten.
 
 ### 5.5 Synchrones Abspielen
 - FR-30 Die Reihenfolge der Songs ist zufällig (injizierte RNG). Jeder Client spielt jeden Ausschnitt über seinen eigenen IFrame Player.
@@ -100,24 +99,24 @@ Die vordefinierte Genre-Liste umfasst mindestens 30 Genres und liegt als `src/co
 - FR-34 Während des Abspielens werden Titel, Thumbnail und Fortschrittsbalken angezeigt, bei deaktivierter Anonymität auch der Owner. Button "Genre-Fail": pro Spieler und Song einmal setzbar, nicht für eigene Songs.
 - FR-35 Als Player-Host wird `youtube-nocookie.com` verwendet.
 
-### 5.6 Voting
-- FR-40 Jeder Spieler rankt alle Songs außer den eigenen (inklusive verlinkter) per Drag and Drop. Mobil zusätzlich per Antippen in Reihenfolge. Jeder Song lässt sich lokal (unsynchron) erneut anhören.
-- FR-41 Das Genre-Fail-Flag ist auch in der Votingphase setzbar und zurücknehmbar.
-- FR-42 Die Phase endet bei Ablauf der Votingzeit oder wenn alle abgegeben haben. Bei unvollständigem Ranking zählen die vergebenen Plätze, der Rest bekommt 0.
+### 5.6 Live-Bewertung
+- FR-40 Während der Wiedergabephase bewertet jeder Spieler jeden Song, der nicht ihm gehört (inklusive verlinkter Songs), mit einer ganzen Zahl von 0 bis 10. Ein Song ist ab seinem Start (einschließlich des Vorlaufs) bis zum Ende der Wiedergabephase bewertbar und kann bis dahin beliebig geändert werden; wird derselbe Wert erneut gesendet, lehnt der Host das Event als `NOT_READY` ab. Wer nicht bewertet, gibt keine Stimme ab. Das Netzwerkevent ist `RATE {songId, value}`; der Host validiert mit zod die Phase (PLAYBACK), den bereits gestarteten Song, den Rater (nicht Owner), ganzzahlige Werte 0-10 sowie das Rate-Limit und verwirft ungültige oder phasenfremde Events.
+- FR-41 Das Genre-Fail-Flag ist auch während der Wiedergabephase setzbar (pro Spieler und Song einmal, nicht für eigene Songs, siehe FR-34).
+- FR-42 Die Wiedergabephase endet wie bisher über die Deadline oder eine Host-Aktion; danach ist die Bewertung abgeschlossen.
 
 ### 5.7 Wertung
-- FR-50 Borda-Count: Rankt ein Spieler k Songs, bekommt Platz 1 k Punkte und Platz k 1 Punkt. Der Songscore ist die Summe über alle Ranker.
-- FR-51 Rundensieger: Der Song mit dem höchsten Score bringt seinen Ownern +2 Bonus. Bei Gleichstand bekommen alle Gleichplatzierten den Bonus.
-- FR-52 Genre-Fail: Flaggt mehr als die Hälfte der für diesen Song stimmberechtigten Spieler (alle außer den Ownern) den Song, erhalten die Owner die eingestellte Strafe und der Song ist vom Sieger-Bonus ausgeschlossen.
-- FR-53 Der Gesamtstand ist die Summe aller Runden. Gleichstand im Finale ergibt einen geteilten Platz.
+- FR-50 Der Songscore ist der Mittelwert der abgegebenen Bewertungen, als ganze Zehntelpunkte `scoreTenths = round(Summe * 10 / Anzahl)` (kaufmännisch aufgerundet) und mit einer Nachkommastelle angezeigt (z. B. 7.3). Die Owner erhalten den Songscore als Punkte; die Einstellung "Linked-Punkte" (voll oder halbiert, aufgerundet) gilt. Alle Scores, Summen und Deltas im State sind ganzzahlige Zehntelpunkte. Songs mit stimmberechtigten Ratern, aber ohne abgegebene Bewertung, erhalten 0.0 (`basis: 'noRating'`, Reveal-Hinweis "keine Bewertung"). Hat ein Song keinen stimmberechtigten Rater (alle aktiven Spieler sind Owner, also Spiritually Linked), erhält er pauschal 5.0 (50 Zehntel) als Linked-Bonus an jeden Owner ohne Halbierung (`basis: 'noRaters'`) und ist vom Sieger-Bonus ausgeschlossen.
+- FR-51 Rundensieger: Der Song mit dem höchsten Score bringt seinen Ownern +2.0 (20 Zehntel). Bei Gleichstand bekommen alle Gleichplatzierten den Bonus.
+- FR-52 Genre-Fail: Flaggt mehr als die Hälfte der für diesen Song stimmberechtigten Spieler (alle außer den Ownern) den Song, erhalten die Owner die eingestellte Strafe (in Zehntel) und der Song ist vom Sieger-Bonus ausgeschlossen.
+- FR-53 Der Gesamtstand ist die Summe aller Runden und wird mit einer Nachkommastelle angezeigt. Gleichstand im Finale ergibt einen geteilten Platz.
 - FR-54 Sonderfälle sind definiert und getestet:
-  - Nur ein Song in der Runde (alle verlinkt oder nur eine Einreichung): kein Voting, keine Punkte, Hinweis an alle.
-  - Ein Spieler hat keine fremden Songs zum Ranken.
-  - Ein Spieler verlässt mitten in der Runde den Raum: seine Einreichung bleibt im Spiel, bereits abgegebene Stimmen zählen.
+  - Eine Runde ohne eingereichten Song wird übersprungen (`reason: 'noSongs'`), ohne Punkte, Bonus oder Strafe. Ein einzelner Song wird normal bewertet (`reason: 'normal'`, der Song steht in der `playbackOrder`).
+  - Ein Spieler hat keine fremden Songs zum Bewerten.
+  - Ein Spieler verlässt mitten in der Runde den Raum: seine Einreichung bleibt im Spiel, bereits abgegebene Bewertungen zählen.
   - Host-Wechsel in jeder Phase.
 
 ### 5.8 Reveal und Finale
-- FR-60 Reveal: Songs werden in aufsteigender Platzierung aufgedeckt, mit Owner, Punkten, Flags und der Linked-Animation inklusive Namen. Der Rundensieger bekommt eine Jackpot-Animation.
+- FR-60 Reveal: Songs werden in aufsteigender Platzierung aufgedeckt (Sieger zuletzt), mit Owner, Punkten, Flags und der Linked-Animation inklusive Namen. Der Rundensieger bekommt eine Jackpot-Animation. Ein Banger (mindestens eine Bewertung, jede Bewertung 10, Mittelwert also exakt 10.0) wird mit `banger: true` markiert und erhält einen längeren Reveal-Slot (`BANGER_REVEAL_MS = 5000` statt `REVEAL_PER_SONG_MS = 2500`); die Länge der Reveal-Phase ist die Summe der Slots plus `REVEAL_HOLD_MS`. Songs ohne Bewertung zeigen den Hinweis "keine Bewertung", Songs ohne stimmberechtigte Rater den 5.0-Linked-Bonus-Hinweis.
 - FR-61 Nach jeder Runde ein Zwischenstand-Leaderboard mit animierten Positionswechseln.
 - FR-62 Finale: Podium, Liste aller Rundensieger-Banger mit Links, Button "Nochmal" (zurück in die Lobby, Einstellungen bleiben erhalten).
 
@@ -172,19 +171,19 @@ Jeder Meilenstein endet mit Demo und kurzem Statusbericht (erledigt, offen, Risi
 - M2 Lobby und Realtime: Raum erstellen und beitreten, Presence, Einstellungen, Reconnect, Host-Migration.
 - M3 Genre-Roulette und Song-Auswahl inklusive Validierung und Spiritually Linked.
 - M4 Synchrones Abspielen inklusive Uhrsync und Drift-Korrektur.
-- M5 Voting, Genre-Fail, Wertung, Reveal und Finale: erstes komplett spielbares Spiel.
+- M5 Live-Bewertung, Genre-Fail, Wertung, Reveal und Finale: erstes komplett spielbares Spiel.
 - M6 Polish: Casino-Design, Animationen, Sounds, a11y, Performance.
 - M7 Release: Produktiv-Deployment, E2E-Smoke-Test gegen das Deployment, README fertig.
 
 ## 11. Akzeptanzkriterien
 - AK-1 Gegeben 4 Spieler im Raum, wenn der Host startet, dann sehen alle dasselbe Genre und dieselbe Rad-Animation.
-- AK-2 Gegeben zwei Spieler reichen dieselbe videoId ein, dann erscheint der Song einmal, die Linked-Animation läuft, beide bekommen die Punkte und keiner von beiden kann für ihn stimmen.
+- AK-2 Gegeben zwei Spieler reichen dieselbe videoId ein, dann erscheint der Song einmal, die Linked-Animation läuft, beide bekommen die Punkte und keiner von beiden kann ihn bewerten.
 - AK-3 Gegeben Anonymität ist an, dann ist bis zum Reveal nirgends in der UI erkennbar, wer welchen Song gewählt hat.
-- AK-4 Gegeben der Host schließt den Tab während der Votingphase, dann übernimmt innerhalb von 5 s ein anderer Spieler und das Spiel läuft ohne Datenverlust weiter.
+- AK-4 Gegeben der Host schließt den Tab während der Wiedergabephase, dann übernimmt innerhalb von 5 s ein anderer Spieler und das Spiel läuft ohne Datenverlust weiter.
 - AK-5 Gegeben ein Spieler lädt die Seite neu, dann ist er innerhalb von 5 s wieder im Raum, mit unverändertem Punktestand.
 - AK-6 Gegeben ein Video mit deaktiviertem Embedding, dann wird die Einreichung mit Fehlermeldung abgelehnt.
 - AK-7 Gegeben alle Clients haben Sound freigeschaltet, dann starten alle Ausschnitte innerhalb von ±500 ms (messbar über ein Debug-Overlay mit `?debug=1`).
-- AK-8 Wertung als Unit-Test: Spieler A, B, C, D mit je einem Song. Rankings: A: C > B > D, B: C > A > D, C: A > B > D, D: C > A > B. Erwartete Songscores: C 9, A 7, B 5, D 3. Mit Sieger-Bonus: C 11, A 7, B 5, D 3.
+- AK-8 Wertung als Unit-Test: Spieler A, B, C, D mit je einem Song. Bewertungen der fremden Songs: A: C 9, B 5, D 3; B: C 9, A 7, D 3; C: A 7, B 5, D 3; D: C 9, A 7, B 5. Erwartete Songscores: C 9.0, A 7.0, B 5.0, D 3.0. Mit Sieger-Bonus (+2.0): C 11.0, A 7.0, B 5.0, D 3.0.
 - AK-9 Gegeben ein Spieler schaltet die Sprache um, dann wechselt die gesamte UI ohne Reload. Ein CI-Check schlägt fehl, wenn in einer Sprache Keys fehlen.
 
 ## 12. Deliverables (Definition of Done)

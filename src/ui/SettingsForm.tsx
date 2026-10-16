@@ -24,7 +24,6 @@ interface Draft {
   rounds: number;
   submissionSeconds: number;
   clipSeconds: number;
-  votingSeconds: number;
   anonymous: boolean;
   genreFailPenalty: number;
   linkedPoints: LinkedPoints;
@@ -36,7 +35,6 @@ const BOUNDS = {
   rounds: { min: 1, max: 20 },
   submissionSeconds: { min: 30, max: 300 },
   clipSeconds: { min: 15, max: 60 },
-  votingSeconds: { min: 30, max: 180 },
   genreFailPenalty: { min: -10, max: -1 },
 } as const;
 
@@ -53,7 +51,6 @@ function draftFromSettings(view: SettingsView): Draft {
     rounds: view.rounds,
     submissionSeconds: view.submissionSeconds,
     clipSeconds: view.clipSeconds,
-    votingSeconds: view.votingSeconds,
     anonymous: view.anonymous,
     genreFailPenalty: view.genreFailPenalty,
     linkedPoints: view.linkedPoints,
@@ -159,7 +156,6 @@ function toSettings(draft: Draft): Settings {
     rounds: draft.rounds,
     submissionSeconds: draft.submissionSeconds,
     clipSeconds: draft.clipSeconds,
-    votingSeconds: draft.votingSeconds,
     anonymous: draft.anonymous,
     genreFailPenalty: draft.genreFailPenalty,
     linkedPoints: draft.linkedPoints,
@@ -321,26 +317,6 @@ export function SettingsForm({ session, state, canEdit }: SettingsFormProps) {
                 Number(event.target.value),
                 BOUNDS.clipSeconds.min,
                 BOUNDS.clipSeconds.max,
-              ),
-            })
-          }
-        />
-
-        <Field
-          type="number"
-          data-testid="settings-voting-seconds"
-          label={t('settings.votingSeconds')}
-          min={BOUNDS.votingSeconds.min}
-          max={BOUNDS.votingSeconds.max}
-          step={1}
-          value={draft.votingSeconds}
-          disabled={disabled}
-          onChange={(event) =>
-            update({
-              votingSeconds: clamp(
-                Number(event.target.value),
-                BOUNDS.votingSeconds.min,
-                BOUNDS.votingSeconds.max,
               ),
             })
           }

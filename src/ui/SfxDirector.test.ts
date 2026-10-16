@@ -92,7 +92,10 @@ describe('sfxEventsFor', () => {
 
   test('phaseChange on a boundary without another event', () => {
     expect(
-      sfxEventsFor(snapshot({ phase: 'LOBBY' }), snapshot({ phase: 'VOTING' })),
+      sfxEventsFor(
+        snapshot({ phase: 'LOBBY' }),
+        snapshot({ phase: 'SUBMISSION' }),
+      ),
     ).toEqual(['phaseChange']);
   });
 

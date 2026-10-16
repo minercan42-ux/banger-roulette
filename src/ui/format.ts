@@ -5,6 +5,13 @@ export function genreName(genre: Genre, language: string | undefined): string {
   return language === 'en' ? genre.en : genre.de;
 }
 
+/** Score in integer tenths with one decimal: 73 -> "7.3", -15 -> "-1.5" (FR-53). */
+export function formatTenths(tenths: number): string {
+  const magnitude = Math.abs(Math.round(tenths));
+  const sign = tenths < 0 ? '-' : '';
+  return `${sign}${Math.floor(magnitude / 10)}.${magnitude % 10}`;
+}
+
 /** mm:ss for a non-negative millisecond duration. */
 export function formatDuration(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));

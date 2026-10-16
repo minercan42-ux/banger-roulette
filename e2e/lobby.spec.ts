@@ -5,7 +5,7 @@ import type { CommandResult } from '../src/net/errors';
 import type { SessionSnapshot } from '../src/net/session';
 import type { GameState } from '../src/shared/game';
 import { harnessContext } from './m3-support';
-import { finishVoting, mediaFor, playToVoting } from './m5-support';
+import { mediaFor, playToReveal } from './m5-support';
 
 /**
  * End-to-end M2 lobby and realtime scenarios. Every test drives the real UI,
@@ -494,15 +494,14 @@ test('reload keeps the retained identity and score without game persistence', as
     await joinRoom(third, code, 'Third');
 
     const players = [host, member, third];
-    const medias = await playToVoting(players, 1);
-    await finishVoting(players, medias);
-    await waitForPhase(host, 'REVEAL');
+    await playToReveal(players, 1);
 
     const memberId = (await snapshot(member)).clientId;
     const before = await stateOf(host);
     expect(before?.results).toHaveLength(1);
     const scoreBefore = before?.players[memberId]?.totalScore ?? 0;
-    expect(scoreBefore).toBe(3);
+    // Three flat 5.0 songs tie, so every owner gets 5.0 plus the 2.0 bonus (tenths).
+    expect(scoreBefore).toBe(70);
 
     // Only the identity is stored locally, never the game.
     const storageKeys = await member.evaluate(() => Object.keys(localStorage));
@@ -535,7 +534,7 @@ test('reload keeps the retained identity and score without game persistence', as
   }
 });
 
-test('host disconnect during voting migrates and keeps every round datum', async ({
+test('host disconnect during playback migrates and keeps every round datum', async ({
   browser,
 }) => {
   test.setTimeout(90_000);
@@ -551,11 +550,9 @@ test('host disconnect during voting migrates and keeps every round datum', async
     await joinRoom(third, code, 'Third');
 
     const players = [host, member, third];
-    const firstMedias = await playToVoting(players, 1);
-    await finishVoting(players, firstMedias);
-    await waitForPhase(host, 'REVEAL');
+    await playToReveal(players, 1);
 
-    // Round two: reach VOTING, then leave drafts and flags unsubmitted.
+    // Round two: reach PLAYBACK, then leave a rating and a flag in the round.
     expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
     await waitForPhase(host, 'GENRE_SPIN');
     expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe('accepted');
@@ -575,24 +572,29 @@ test('host disconnect during voting migrates and keeps every round datum', async
       ).toBe('accepted');
     }
     await waitForPhase(host, 'PLAYBACK');
-    for (let index = 0; index < secondMedias.length; index += 1) {
-      expect((await dispatch(host, { type: 'ADVANCE' })).status).toBe(
-        'accepted',
-      );
-    }
-    await waitForPhase(host, 'VOTING');
-
+    const playing = (await stateOf(host))?.round?.playbackOrder[0] ?? '';
+    const hostSongId = secondMedias[0].videoId;
     const memberId = (await snapshot(member)).clientId;
-    const draft = secondMedias
-      .filter((media) => media.videoId !== secondMedias[1].videoId)
-      .map((media) => media.videoId);
-    expect(
-      (await dispatch(member, { type: 'SET_RANKING', ranking: draft })).status,
-    ).toBe('accepted');
-    const flagged = secondMedias[0].videoId;
+    const thirdId = (await snapshot(third)).clientId;
+    const owner = (await stateOf(host))?.round?.songs.find(
+      (song) => song.media.videoId === playing,
+    )?.ownerIds[0];
+    const rater = owner === memberId ? third : member;
+    const raterId = owner === memberId ? thirdId : memberId;
     expect(
       (
-        await dispatch(member, {
+        await dispatch(rater, {
+          type: 'RATE',
+          songId: playing,
+          value: 8,
+        })
+      ).status,
+    ).toBe('accepted');
+    // The host's own song is foreign to both other players.
+    const flagged = hostSongId;
+    expect(
+      (
+        await dispatch(rater, {
           type: 'SET_GENRE_FAIL',
           videoId: flagged,
           flagged: true,
@@ -642,8 +644,8 @@ test('host disconnect during voting migrates and keeps every round datum', async
     expect(after?.round).toEqual(before?.round);
     expect(after?.results).toEqual(before?.results);
     expect(after?.phase).toEqual(before?.phase);
-    expect(after?.round?.ballots[memberId]?.ranking).toEqual(draft);
-    expect(after?.round?.genreFailFlags[memberId]).toContain(flagged);
+    expect(after?.round?.ratings[raterId]?.[playing]).toBe(8);
+    expect(after?.round?.genreFailFlags[raterId]).toContain(flagged);
   } finally {
     await Promise.all([
       hostContext.close(),

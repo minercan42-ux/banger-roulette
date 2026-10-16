@@ -9,7 +9,7 @@ import {
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
-import { genreName } from './format';
+import { formatTenths, genreName } from './format';
 import { Leaderboard } from './Leaderboard';
 import { LinkedAnimation } from './LinkedAnimation';
 import { usePrefersReducedMotion } from './motion';
@@ -79,9 +79,10 @@ function asSongView(entry: RevealEntryView): SongView {
 }
 
 /**
- * FR-60 reveal: entries appear worst-first against server time, one every
- * `perSongMs`. Owner names are public from here on (AK-3); a late joiner or a
- * reload simply sees every entry whose `revealAt` already passed.
+ * FR-60 reveal: entries appear worst-first against server time, each owning
+ * the stage for its `slotMs` (longer for a banger). Owner names are public
+ * from here on (AK-3); a late joiner or a reload simply sees every entry whose
+ * `revealAt` already passed.
  */
 export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
   const { t, i18n } = useTranslation();
@@ -152,11 +153,11 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
           : latest.winner
             ? t('reveal.announceWinner', {
                 title: latest.title,
-                points: latest.roundPoints,
+                points: formatTenths(latest.roundPoints),
               })
             : t('reveal.announceEntry', {
                 title: latest.title,
-                points: latest.roundPoints,
+                points: formatTenths(latest.roundPoints),
               })}
       </p>
 
@@ -177,6 +178,8 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
               data-video-id={entry.videoId}
               data-winner={entry.winner}
               data-genre-failed={entry.genreFailed}
+              data-banger={entry.banger}
+              data-basis={entry.basis}
               className={cx(
                 'br-panel br-panel--well br-reveal__entry',
                 entry.winner && 'is-winner',
@@ -226,11 +229,44 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                       the combo below is the animated, decorative version. */}
                   <p data-testid="reveal-entry-points" className="sr-only">
                     {t('reveal.points', {
-                      borda: entry.borda,
-                      bonus: entry.bonus,
-                      points: entry.roundPoints,
+                      score: formatTenths(entry.scoreTenths),
+                      count: entry.ratingCount,
+                      bonus: formatTenths(entry.bonus),
+                      points: formatTenths(entry.roundPoints),
                     })}
                   </p>
+                  <p
+                    data-testid="reveal-entry-rating"
+                    data-score-tenths={entry.scoreTenths}
+                    data-rating-count={entry.ratingCount}
+                    className="br-read flex flex-wrap items-center gap-2"
+                  >
+                    {entry.basis === 'ratings' && (
+                      <span>
+                        {t('reveal.rating', {
+                          score: formatTenths(entry.scoreTenths),
+                          count: entry.ratingCount,
+                        })}
+                      </span>
+                    )}
+                    {entry.banger && (
+                      <Badge tone="gold" data-testid="reveal-entry-banger">
+                        {t('reveal.banger')}
+                      </Badge>
+                    )}
+                  </p>
+                  {entry.basis === 'noRating' && (
+                    <p data-testid="reveal-entry-note" className="br-notice">
+                      {t('reveal.noRating')}
+                    </p>
+                  )}
+                  {entry.basis === 'noRaters' && (
+                    <p data-testid="reveal-entry-note" className="br-notice">
+                      {t('reveal.noRaters', {
+                        bonus: formatTenths(entry.scoreTenths),
+                      })}
+                    </p>
+                  )}
                   <RevealScore
                     entry={entry}
                     animate={reference - entry.revealAt < COUNT_UP_WINDOW_MS}

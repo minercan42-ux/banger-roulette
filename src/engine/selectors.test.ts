@@ -4,7 +4,6 @@ import { REVEAL_PER_SONG_MS, classifyCommand, reducer } from './reducer';
 import {
   areOwnersVisible,
   selectCurrentSong,
-  selectEligibleSongs,
   selectFinal,
   selectFlaggableSongs,
   selectGenrePool,
@@ -19,6 +18,7 @@ import {
   selectSongs,
   selectStandings,
   selectViewerChoices,
+  selectRatingEntries,
   selectViewerPermissions,
 } from './selectors';
 import {
@@ -31,6 +31,7 @@ import {
   makeSettings,
   media,
   newGame,
+  lastSongState,
   playbackState,
   presence,
   revealState,
@@ -40,7 +41,6 @@ import {
   submissionState,
   validationError,
   videoId,
-  votingState,
 } from './fixtures';
 
 function collectKeys(value: unknown, keys: Set<string>): Set<string> {
@@ -65,32 +65,39 @@ function conn(state: GameState, viewerId: string): string | null {
   return player === undefined ? null : player.connectionId;
 }
 
-/** Round with two ballots, revealed at the voting deadline. */
+/** Reveal built from live ratings: 40 / 50 / 60, winner song 1 at 85 + 2.0. */
 function scoredReveal() {
-  let state = votingState();
-  state = command(
-    state,
-    id(1),
-    { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-    200000,
-  );
-  state = command(
-    state,
-    id(2),
-    { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-    200001,
-  );
-  return fireDeadline(state, 236203);
+  let state = lastSongState();
+  const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 1 : 0;
+  const given: [number, number, number][] = [
+    [2, 1, 8],
+    [3, 1, 9],
+    [1, 2, 5],
+    [3, 2, 5],
+    [1, 3, 6],
+    [2, 3, 6],
+    [1, 4, 4],
+    [2, 4, 4],
+  ];
+  for (const [rater, song, value] of given) {
+    state = command(
+      state,
+      id(rater),
+      { type: 'RATE', songId: videoId(song), value },
+      at,
+    );
+  }
+  return fireDeadline(state);
 }
 
 describe('selectRoom', () => {
   it('describes the room without protocol metadata', () => {
-    const state = votingState();
+    const state = playbackState();
     expect(selectRoom(state)).toEqual({
       roomCode: 'ABCDEF',
       gameNumber: 1,
       hostId: id(1),
-      phase: 'VOTING',
+      phase: 'PLAYBACK',
       paused: false,
       pauseReason: null,
       anonymous: true,
@@ -110,7 +117,6 @@ describe('lobby settings reads', () => {
       rounds: 5,
       submissionSeconds: 90,
       clipSeconds: 40,
-      votingSeconds: 60,
       anonymous: true,
       genreFailPenalty: -3,
       linkedPoints: 'full',
@@ -205,7 +211,6 @@ describe('selectPhaseTimer', () => {
     });
     expect(selectPhaseTimer(submissionState(), 4000).totalMs).toBe(90000);
     expect(selectPhaseTimer(playbackState(), 7203).totalMs).toBe(40000);
-    expect(selectPhaseTimer(votingState(), 176203).totalMs).toBe(60000);
     expect(selectPhaseTimer(revealState(), 94000).totalMs).toBe(5000);
   });
 });
@@ -354,22 +359,22 @@ describe('anonymity', () => {
   });
 
   it('never exposes raw state, connection or cache fields', () => {
-    const voting = votingState();
+    const playing = playbackState();
     const reveal = revealState();
     const final = scoredFinalState();
     const keys = collectKeys(
       [
-        selectRoom(voting),
-        selectPhaseTimer(voting, 200000),
-        selectLobbyReadiness(voting),
-        selectRoster(voting, id(1)),
-        selectRound(voting, id(1)),
-        selectSongs(voting, id(1)),
-        selectCurrentSong(voting, id(1)),
-        selectEligibleSongs(voting, id(1), conn(voting, id(1))),
-        selectFlaggableSongs(voting, id(1), conn(voting, id(1))),
-        selectViewerChoices(voting, id(1)),
-        selectViewerPermissions(voting, id(1), conn(voting, id(1))),
+        selectRoom(playing),
+        selectPhaseTimer(playing, 8000),
+        selectLobbyReadiness(playing),
+        selectRoster(playing, id(1)),
+        selectRound(playing, id(1)),
+        selectSongs(playing, id(1)),
+        selectCurrentSong(playing, id(1)),
+        selectRatingEntries(playing, id(1), conn(playing, id(1))),
+        selectFlaggableSongs(playing, id(1), conn(playing, id(1))),
+        selectViewerChoices(playing, id(1)),
+        selectViewerPermissions(playing, id(1), conn(playing, id(1))),
         selectReveal(reveal),
         selectResults(final),
         selectStandings(final, id(1)),
@@ -388,44 +393,43 @@ describe('anonymity', () => {
       'forceBelowMinimum',
       'nextSubmissionOrder',
       'submissions',
-      'ballots',
       'genreFailFlags',
     ]) {
       expect([...keys]).not.toContain(forbidden);
     }
-    expect(selectRound(voting, id(1))).toMatchObject({
-      playbackIndex: null,
-      currentVideoId: null,
+    expect(selectRound(playing, id(1))).toMatchObject({
+      playbackIndex: 0,
+      currentVideoId: playing.round!.playbackOrder[0],
     });
   });
 });
 
 describe('selectViewerChoices', () => {
   it('isolates the viewer choices from everyone else', () => {
-    let state = votingState();
+    let state = lastSongState();
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 3 : 0;
     state = command(
       state,
       id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3)] },
-      200000,
+      { type: 'RATE', songId: videoId(2), value: 3 },
+      at,
     );
     state = command(
       state,
       id(1),
       { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      200001,
+      at + 1,
     );
     expect(selectViewerChoices(state, id(1))).toMatchObject({
       isParticipant: true,
       submitted: true,
       submissionDone: true,
-      votingDone: false,
-      ranking: [videoId(2), videoId(3)],
+      ratings: { [videoId(2)]: 3 },
       flaggedVideoIds: [videoId(2)],
     });
     expect(selectViewerChoices(state, id(1)).media?.videoId).toBe(videoId(1));
     expect(selectViewerChoices(state, id(2))).toMatchObject({
-      ranking: [],
+      ratings: {},
       flaggedVideoIds: [],
     });
     expect(selectViewerChoices(state, id(2)).media?.videoId).toBe(videoId(2));
@@ -433,46 +437,45 @@ describe('selectViewerChoices', () => {
       isParticipant: false,
       submitted: false,
       submissionDone: false,
-      votingDone: false,
       media: null,
-      ranking: [],
+      ratings: {},
       flaggedVideoIds: [],
     });
   });
 });
 
-describe('selectEligibleSongs and selectFlaggableSongs', () => {
-  it('excludes own and linked songs for the participant context', () => {
-    const voting = votingState();
-    const eligible = selectEligibleSongs(voting, id(1), conn(voting, id(1)));
-    expect(eligible.map((song) => song.videoId)).toHaveLength(3);
-    expect(eligible.some((song) => song.ownedByViewer)).toBe(false);
-    expect(eligible.every((song) => song.ownerCount === 1)).toBe(true);
-    expect(selectEligibleSongs(voting, id(9), conn(voting, id(9)))).toEqual([]);
-    const done = command(voting, id(1), { type: 'FINISH_VOTING' }, 200000);
-    expect(selectEligibleSongs(done, id(1), conn(done, id(1)))).toEqual([]);
-    const playback = playbackState();
+describe('selectRatingEntries and selectFlaggableSongs', () => {
+  it('lists the rating targets and excludes own songs for flags', () => {
+    const playing = playbackState();
+    const ratings = selectRatingEntries(playing, id(1), conn(playing, id(1)));
+    expect(ratings).toHaveLength(1);
+    expect(
+      ratings.every((entry) => entry.canRate === !entry.ownedByViewer),
+    ).toBe(true);
+    // A stranger gets the entries but may rate none of them.
+    expect(
+      selectRatingEntries(playing, id(9), conn(playing, id(9))).every(
+        (entry) => !entry.canRate,
+      ),
+    ).toBe(true);
+    expect(
+      selectRatingEntries(submissionState(), id(1), conn(playing, id(1))),
+    ).toEqual([]);
     const flaggable = selectFlaggableSongs(
-      playback,
+      playing,
       id(1),
-      conn(playback, id(1)),
+      conn(playing, id(1)),
     );
     expect(flaggable).toHaveLength(3);
     expect(flaggable.some((song) => song.ownedByViewer)).toBe(false);
     const withSpectator = send(
-      playback,
+      playing,
       { type: 'JOIN', nickname: 'Late' },
       { actorId: id(9), connectionId: id(109), at: 8000 },
     );
     expect(
       selectFlaggableSongs(withSpectator, id(9), conn(withSpectator, id(9))),
     ).toEqual([]);
-    expect(
-      selectFlaggableSongs(voting, id(1), conn(voting, id(1))),
-    ).toHaveLength(3);
-    expect(selectEligibleSongs(playback, id(1), conn(playback, id(1)))).toEqual(
-      [],
-    );
   });
 });
 
@@ -509,7 +512,7 @@ describe('selectViewerPermissions', () => {
       canAdvance: true,
       canPause: true,
       canEndGame: true,
-      canRank: false,
+      canRate: false,
     });
     const lost = presence(submission, 4200, [id(101), id(103), id(104)]);
     expect(
@@ -531,24 +534,23 @@ describe('selectViewerPermissions', () => {
       canSubmit: false,
       canSetGenreFail: false,
     });
-    const voting = votingState();
+    const playing = playbackState();
     expect(
-      selectViewerPermissions(voting, id(1), conn(voting, id(1))),
+      selectViewerPermissions(playing, id(1), conn(playing, id(1))),
     ).toMatchObject({
       canSubmit: false,
-      canRank: true,
-      canFinishVoting: true,
+      canRate: true,
       canSetGenreFail: true,
       canAdvance: true,
     });
-    const paused = command(voting, id(1), { type: 'PAUSE' }, 200000);
+    const paused = command(playing, id(1), { type: 'PAUSE' }, 8000);
     expect(
       selectViewerPermissions(paused, id(1), conn(paused, id(1))),
     ).toMatchObject({
       canAdvance: false,
       canPause: false,
       canResume: true,
-      canRank: false,
+      canRate: false,
       canSetGenreFail: false,
     });
     const final = scoredFinalState();
@@ -560,21 +562,20 @@ describe('selectViewerPermissions', () => {
       canPause: false,
     });
     const kicked = command(
-      voting,
+      playing,
       id(1),
       { type: 'KICK', playerId: id(3) },
-      200010,
+      8010,
     );
     expect(
       selectViewerPermissions(kicked, id(3), conn(kicked, id(3))),
     ).toMatchObject({
       isParticipant: true,
       isHost: false,
-      canRank: false,
-      canFinishVoting: false,
+      canRate: false,
       canSetGenreFail: false,
     });
-    const unknown = selectViewerPermissions(voting, id(77), null);
+    const unknown = selectViewerPermissions(playing, id(77), null);
     expect(unknown.isHost).toBe(false);
     expect(unknown.isParticipant).toBe(false);
     expect(
@@ -586,19 +587,19 @@ describe('selectViewerPermissions', () => {
 });
 
 describe('selectReveal and selectResults', () => {
-  it('orders ascending Borda with deterministic ties and banger links', () => {
+  it('orders ascending score with deterministic ties and banger links', () => {
     const reveal = scoredReveal();
     const view = selectReveal(reveal);
     expect(view?.reason).toBe('normal');
     expect(view?.entries.map((entry) => entry.videoId)).toEqual([
       videoId(4),
-      videoId(1),
       videoId(2),
       videoId(3),
+      videoId(1),
     ]);
     expect(view?.entries[0]).toMatchObject({
-      borda: 2,
-      roundPoints: 2,
+      scoreTenths: 40,
+      roundPoints: 40,
       bonus: 0,
       winner: false,
       genreFailed: false,
@@ -606,58 +607,22 @@ describe('selectReveal and selectResults', () => {
       linked: false,
     });
     expect(view?.entries[3]).toMatchObject({
-      borda: 4,
-      bonus: 2,
-      roundPoints: 6,
+      scoreTenths: 85,
+      bonus: 20,
+      roundPoints: 105,
       winner: true,
     });
-    expect(view?.entries[3].owners).toEqual([
-      { id: id(3), nickname: 'Player3' },
-    ]);
+    expect(view?.entries[3].owners).toEqual([{ id: id(1), nickname: 'Host' }]);
     expect(view?.entries[3].watchUrl).toBe(
-      `https://www.youtube.com/watch?v=${videoId(3)}&t=10s`,
+      `https://www.youtube.com/watch?v=${videoId(1)}&t=10s`,
     );
     const later = fireDeadline(reveal, 260000);
     expect(selectReveal(later)).toBeNull();
     expect(selectResults(later)).toHaveLength(1);
     expect(selectResults(later)[0].entries[3]).toMatchObject({
       winner: true,
-      roundPoints: 6,
+      roundPoints: 105,
     });
-  });
-
-  it('reveals winners last even when a genre-failed song had more Borda', () => {
-    let state = votingState();
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      200000,
-    );
-    state = command(
-      state,
-      id(2),
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-      200001,
-    );
-    for (const [index, flagger] of [id(1), id(2)].entries()) {
-      state = command(
-        state,
-        flagger,
-        { type: 'SET_GENRE_FAIL', videoId: videoId(3), flagged: true },
-        200002 + index,
-      );
-    }
-    const entries = selectReveal(fireDeadline(state, 236203))?.entries ?? [];
-    expect(
-      entries.map((entry) => [entry.videoId, entry.borda, entry.winner]),
-    ).toEqual([
-      [videoId(4), 2, false],
-      [videoId(3), 4, false],
-      [videoId(1), 3, true],
-      [videoId(2), 3, true],
-    ]);
-    expect(entries[1].genreFailed).toBe(true);
   });
 
   it('omits the start offset from a banger link without a clip start', () => {
@@ -679,8 +644,7 @@ describe('selectReveal and selectResults', () => {
     );
     state = fireDeadline(state, 94000);
     state = fireDeadline(state, 137000);
-    state = fireDeadline(state, 180000);
-    const reveal = fireDeadline(state, 240000);
+    const reveal = fireDeadline(state, 180000);
     const entries = selectReveal(reveal)?.entries ?? [];
     expect(entries.map((entry) => entry.videoId)).toContain(videoId(1));
     for (const entry of entries) {
@@ -703,10 +667,12 @@ describe('selectReveal and selectResults', () => {
     const results = selectResults(final);
     expect(results).toHaveLength(1);
     expect(results[0].roundNumber).toBe(1);
-    expect(results[0].entries.map((entry) => entry.borda)).toEqual([2, 3, 4]);
+    expect(results[0].entries.map((entry) => entry.scoreTenths)).toEqual([
+      45, 65, 85,
+    ]);
     expect(results[0].entries[2]).toMatchObject({
       winner: true,
-      roundPoints: 6,
+      roundPoints: 105,
     });
     expect(results[0].entries[2].owners).toEqual([
       { id: id(1), nickname: 'Host' },
@@ -717,7 +683,9 @@ describe('selectReveal and selectResults', () => {
     const reveal = scoredReveal();
     const view = selectReveal(reveal);
     expect(view).not.toBeNull();
-    expect(view?.perSongMs).toBe(REVEAL_PER_SONG_MS);
+    expect(
+      view?.entries.every((entry) => entry.slotMs === REVEAL_PER_SONG_MS),
+    ).toBe(true);
     expect(view?.pausedAt).toBeNull();
     expect(view?.entries.map((entry) => entry.revealAt)).toEqual([
       view!.startedAt,
@@ -752,7 +720,7 @@ describe('selectReveal and selectResults', () => {
 
 describe('selectFinal', () => {
   it('is null outside FINAL and exposes the finale reason', () => {
-    expect(selectFinal(votingState())).toBeNull();
+    expect(selectFinal(playbackState())).toBeNull();
     expect(selectFinal(scoredFinalState())).toEqual({ reason: 'completed' });
     expect(selectFinal(finalState())).toEqual({ reason: 'hostEnded' });
   });
@@ -788,7 +756,7 @@ describe('lobby selector edges', () => {
     expect(selectRound(lobby, id(1))).toBeNull();
     expect(selectSongs(lobby, id(1))).toEqual([]);
     expect(selectCurrentSong(lobby, id(1))).toBeNull();
-    expect(selectEligibleSongs(lobby, id(1), conn(lobby, id(1)))).toEqual([]);
+    expect(selectRatingEntries(lobby, id(1), conn(lobby, id(1)))).toEqual([]);
     expect(selectFlaggableSongs(lobby, id(1), conn(lobby, id(1)))).toEqual([]);
     expect(selectReveal(lobby)).toBeNull();
     expect(selectResults(lobby)).toEqual([]);
@@ -799,9 +767,8 @@ describe('lobby selector edges', () => {
       isParticipant: false,
       submitted: false,
       submissionDone: false,
-      votingDone: false,
       media: null,
-      ranking: [],
+      ratings: {},
       flaggedVideoIds: [],
     });
     expect(
@@ -820,67 +787,25 @@ describe('lobby selector edges', () => {
   });
 });
 
-describe('selectable targets and finished voters', () => {
-  it('locks ranking and flags for a voter that finished', () => {
-    let state = votingState();
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      200000,
-    );
-    state = command(state, id(1), { type: 'FINISH_VOTING' }, 200001);
-    expect(
-      selectViewerPermissions(state, id(1), conn(state, id(1))),
-    ).toMatchObject({
-      canRank: false,
-      canFinishVoting: false,
-      canSetGenreFail: false,
-    });
-    expect(selectEligibleSongs(state, id(1), conn(state, id(1)))).toEqual([]);
-    expect(selectFlaggableSongs(state, id(1), conn(state, id(1)))).toEqual([]);
-    expect(
-      selectViewerPermissions(state, id(2), conn(state, id(2))).canSetGenreFail,
-    ).toBe(true);
-    expect(selectFlaggableSongs(state, id(2), conn(state, id(2)))).toHaveLength(
-      3,
-    );
-    const flagAfterFinish = action(
-      state,
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      { actorId: id(1), connectionId: id(101), at: 200002 },
-    );
-    expect(classifyCommand(state, flagAfterFinish)).toBe('FORBIDDEN');
-    expect(reducer(state, flagAfterFinish)).toBe(state);
-    expect(selectViewerChoices(state, id(1))).toMatchObject({
-      votingDone: true,
-      ranking: [videoId(2), videoId(3), videoId(4)],
-    });
-  });
-
-  it('keeps selectable lists aligned with the permission hints', () => {
-    const base = command(
-      votingState(),
-      id(2),
-      { type: 'SET_RANKING', ranking: [videoId(1), videoId(3), videoId(4)] },
-      199000,
-    );
+describe('rating targets and bound tabs', () => {
+  it('keeps rating targets and permissions aligned', () => {
+    const base = playbackState();
     const late = send(
       base,
       { type: 'JOIN', nickname: 'Late' },
-      { actorId: id(9), connectionId: id(109), at: 200000 },
+      { actorId: id(9), connectionId: id(109), at: 8000 },
     );
     const cases: [string, GameState, string][] = [
-      ['paused', command(base, id(1), { type: 'PAUSE' }, 200000), id(2)],
+      ['paused', command(base, id(1), { type: 'PAUSE' }, 8000), id(2)],
       [
         'disconnected',
-        presence(base, 200000, [id(101), id(103), id(104)]),
+        presence(base, 8000, [id(101), id(103), id(104)]),
         id(2),
       ],
-      ['left', command(base, id(2), { type: 'LEAVE' }, 200000), id(2)],
+      ['left', command(base, id(2), { type: 'LEAVE' }, 8000), id(2)],
       [
         'kicked',
-        command(base, id(1), { type: 'KICK', playerId: id(2) }, 200000),
+        command(base, id(1), { type: 'KICK', playerId: id(2) }, 8000),
         id(2),
       ],
       ['spectator', late, id(9)],
@@ -893,54 +818,17 @@ describe('selectable targets and finished voters', () => {
         conn(state, viewerId),
       );
       expect(
-        selectEligibleSongs(state, viewerId, conn(state, viewerId)),
-        `${label} ranking targets`,
-      ).toEqual([]);
-      expect(
-        selectFlaggableSongs(state, viewerId, conn(state, viewerId)),
-        `${label} flag targets`,
-      ).toEqual([]);
-      expect(permissions.canRank, `${label} canRank`).toBe(false);
+        selectRatingEntries(state, viewerId, conn(state, viewerId)).every(
+          (entry) => !entry.canRate,
+        ),
+        `${label} rating targets`,
+      ).toBe(true);
+      expect(permissions.canRate, `${label} canRate`).toBe(false);
       expect(permissions.canSetGenreFail, `${label} canSetGenreFail`).toBe(
         false,
       );
       expect(permissions.canSubmit, `${label} canSubmit`).toBe(false);
-      expect(
-        selectViewerChoices(state, viewerId).ranking,
-        `${label} stored choices`,
-      ).toEqual(state.round?.ballots[viewerId]?.ranking ?? []);
     }
-  });
-
-  it('offers a playback flag target once and reopens it during voting', () => {
-    let state = playbackState();
-    const targets = selectFlaggableSongs(state, id(1), conn(state, id(1)));
-    expect(targets).toHaveLength(3);
-    expect(targets.map((song) => song.videoId)).not.toContain(videoId(1));
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      8000,
-    );
-    const afterFlag = selectFlaggableSongs(state, id(1), conn(state, id(1)));
-    expect(afterFlag).toHaveLength(2);
-    expect(afterFlag.map((song) => song.videoId)).not.toContain(videoId(2));
-    expect(
-      selectViewerPermissions(state, id(1), conn(state, id(1))).canSetGenreFail,
-    ).toBe(true);
-    for (let step = 0; step < 6; step += 1) {
-      if (state.phase.type !== 'PLAYBACK') {
-        break;
-      }
-      state = fireDeadline(state);
-    }
-    expect(state.phase.type).toBe('VOTING');
-    expect(
-      selectFlaggableSongs(state, id(1), conn(state, id(1))).map(
-        (song) => song.videoId,
-      ),
-    ).toContain(videoId(2));
   });
 
   it('drops the flag permission when no permitted foreign song remains', () => {
@@ -962,31 +850,24 @@ describe('selectable targets and finished voters', () => {
   });
 
   it('denies writes to an older tab after the viewer rebound its connection', () => {
-    let state = votingState();
-    state = command(
-      state,
-      id(1),
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(3), videoId(4)] },
-      200000,
-    );
+    const state = playbackState();
+    const song = state.round!.playbackOrder[0];
     const staleConnection = state.players[id(1)].connectionId;
     const rebound = send(
       state,
       { type: 'JOIN', nickname: 'Host' },
-      { actorId: id(1), connectionId: id(901), at: 200001 },
+      { actorId: id(1), connectionId: id(901), at: 8000 },
     );
     expect(rebound.players[id(1)].connectionId).toBe(id(901));
     expect(selectViewerPermissions(rebound, id(1), id(901))).toMatchObject({
       isHost: true,
       isParticipant: true,
-      canRank: true,
-      canFinishVoting: true,
+      canRate: true,
       canSetGenreFail: true,
       canAdvance: true,
       canPause: true,
       canKick: true,
     });
-    expect(selectEligibleSongs(rebound, id(1), id(901))).toHaveLength(3);
     expect(
       selectViewerPermissions(rebound, id(1), staleConnection),
     ).toMatchObject({
@@ -1002,36 +883,35 @@ describe('selectable targets and finished voters', () => {
       canRematch: false,
       canSubmit: false,
       canFinishSubmission: false,
-      canRank: false,
-      canFinishVoting: false,
+      canRate: false,
       canSetGenreFail: false,
     });
-    expect(selectEligibleSongs(rebound, id(1), staleConnection)).toEqual([]);
+    expect(
+      selectRatingEntries(rebound, id(1), staleConnection).every(
+        (entry) => !entry.canRate,
+      ),
+    ).toBe(true);
     expect(selectFlaggableSongs(rebound, id(1), staleConnection)).toEqual([]);
-    expect(selectViewerChoices(rebound, id(1)).ranking).toEqual([
-      videoId(2),
-      videoId(3),
-      videoId(4),
-    ]);
     const staleCommand = action(
       rebound,
-      { type: 'SET_RANKING', ranking: [videoId(2), videoId(4), videoId(3)] },
-      { actorId: id(1), connectionId: staleConnection, at: 200002 },
+      { type: 'RATE', songId: song, value: 5 },
+      { actorId: id(1), connectionId: staleConnection, at: 9000 },
     );
     expect(classifyCommand(rebound, staleCommand)).toBe('STALE');
     expect(reducer(rebound, staleCommand)).toBe(rebound);
   });
 
   it('denies writes for a missing or unknown viewer connection', () => {
-    const state = votingState();
+    const state = playbackState();
     expect(selectViewerPermissions(state, id(1), null)).toMatchObject({
       isHost: false,
       isParticipant: true,
-      canRank: false,
-      canSetGenreFail: false,
+      canRate: false,
     });
-    expect(selectViewerPermissions(state, id(1), id(777)).canRank).toBe(false);
-    expect(selectEligibleSongs(state, id(1), null)).toEqual([]);
+    expect(selectViewerPermissions(state, id(1), id(777)).canRate).toBe(false);
+    expect(
+      selectRatingEntries(state, id(1), null).every((entry) => !entry.canRate),
+    ).toBe(true);
     expect(selectFlaggableSongs(state, id(1), id(777))).toEqual([]);
     expect(selectViewerChoices(state, id(1)).media?.videoId).toBe(videoId(1));
   });
@@ -1045,10 +925,10 @@ describe('selectStandings', () => {
     ]);
     expect(selectStandings(final, id(2))[1]).toMatchObject({
       playerId: id(2),
-      totalScore: 3,
+      totalScore: 65,
       isSelf: true,
       status: 'player',
-      delta: 3,
+      delta: 65,
       previousRank: 1,
     });
     expect(
@@ -1057,16 +937,19 @@ describe('selectStandings', () => {
         entry.delta,
       ]),
     ).toEqual([
-      [id(1), 6],
-      [id(2), 3],
-      [id(3), 2],
+      [id(1), 105],
+      [id(2), 65],
+      [id(3), 45],
     ]);
-    let tied = votingState();
-    tied = command(tied, id(4), { type: 'LEAVE' }, 200000);
-    tied = fireDeadline(tied, 236203);
+    let tied = lastSongState();
+    const leaveAt =
+      tied.phase.type === 'PLAYBACK' ? tied.phase.deadlineAt - 10 : 0;
+    tied = command(tied, id(4), { type: 'LEAVE' }, leaveAt);
+    tied = fireDeadline(tied);
     const standings = selectStandings(tied, id(1));
+    // Nothing was rated, so every song ties at 0.0 and every owner gets +2.0.
     expect(standings.map((entry) => entry.rank)).toEqual([1, 1, 1, 1]);
-    expect(standings.every((entry) => entry.totalScore === 2)).toBe(true);
+    expect(standings.every((entry) => entry.totalScore === 20)).toBe(true);
     expect(standings.some((entry) => entry.status === 'left')).toBe(true);
     expect(standings[0].isSelf).toBe(true);
   });

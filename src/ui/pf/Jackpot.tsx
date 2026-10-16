@@ -8,6 +8,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { usePrefersReducedMotion } from '../motion';
+import { formatTenths } from '../format';
 import { Badge } from './Badge';
 
 /**
@@ -223,7 +224,7 @@ function JackpotShow({ winners, elapsed, paused }: JackpotShowProps) {
               <div className="br-jackpot__word">{t('reveal.jackpotWord')}</div>
               <div className="br-jackpot__sub">
                 {t('reveal.jackpotSub', {
-                  points,
+                  points: formatTenths(points),
                   names: names.join(', '),
                 })}
               </div>

@@ -12,18 +12,17 @@ import {
   waitForPhase,
   type Stage,
 } from './m3-support';
-import type { Media } from '../src/shared/primitives';
 import {
-  advanceToVoting,
-  finishVoting,
   mediaFor,
   playToPlayback,
+  ratePlayback,
+  rateCurrentSong,
 } from './m5-support';
 
 /**
  * #26 / #69: automated WCAG 2.1 AA scan (SPEC section 6) of every screen of one
  * round through the in-memory harness: Home, Lobby, GENRE_SPIN, SUBMISSION,
- * PLAYBACK, VOTING, REVEAL and FINAL.
+ * PLAYBACK (with the rating bar and summary), REVEAL and FINAL.
  *
  * The gate is zero `serious`/`critical` violations for the rule tags `wcag2a`,
  * `wcag2aa`, `wcag21a` and `wcag21aa` (axe-core's `wcag21aa` tag holds only the
@@ -157,23 +156,27 @@ for (const { name, locale, viewport } of VARIANTS) {
         ).toBe('accepted');
       }
       await waitForPhase(host.page, 'PLAYBACK');
+      await expect(host.page.getByTestId('playback-phase')).toBeVisible();
       await scan(host.page, 'PLAYBACK', findings);
 
-      await advanceToVoting(players);
-      await scan(host.page, 'VOTING', findings);
+      // Rate the playing song so the pressed chip and its bar are scanned too.
+      await rateCurrentSong(players, medias, () => 7);
+      await expect(host.page.getByTestId('rating-section')).toBeVisible();
+      await scan(host.page, 'PLAYBACK (rated)', findings);
 
-      // Rank one song first so the ranked list, not only the empty pool, is scanned.
-      const ranking = [(medias[1] as Media).videoId];
-      expect(
-        (await dispatch(host.page, { type: 'SET_RANKING', ranking })).status,
-      ).toBe('accepted');
-      await expect(host.page.getByTestId('voting-rank-item')).toHaveCount(
-        ranking.length,
+      // The second song opens the summary of the first one; open it to edit.
+      expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+        'accepted',
       );
-      await scan(host.page, 'VOTING (ranked)', findings);
+      await expect(host.page.getByTestId('rating-summary')).toBeVisible();
+      const toggle = host.page.getByTestId('rating-entry-toggle-0');
+      if ((await toggle.count()) > 0) {
+        await toggle.click();
+        await expect(host.page.getByTestId('rating-edit-bar')).toBeVisible();
+      }
+      await scan(host.page, 'PLAYBACK (summary)', findings);
 
-      await finishVoting(players, medias);
-      await waitForPhase(host.page, 'REVEAL');
+      await ratePlayback(players, medias);
       await expect(host.page.getByTestId('reveal-phase')).toBeVisible();
       await scan(host.page, 'REVEAL', findings);
 
@@ -216,21 +219,9 @@ test('axe finds no serious or critical violation in the linked and jackpot revea
     const solo = mediaFor(1, 2);
     await assembleRoom(stages[0] as Stage, stages.slice(1));
     await playToPlayback(pages, [dupe, dupe, solo]);
-    await advanceToVoting(pages);
-    const ballots: Array<[Page, string[]]> = [
-      [pages[0] as Page, [solo.videoId]],
-      [pages[1] as Page, [solo.videoId]],
-      [pages[2] as Page, [dupe.videoId]],
-    ];
-    for (const [page, ranking] of ballots) {
-      expect(
-        (await dispatch(page, { type: 'SET_RANKING', ranking })).status,
-      ).toBe('accepted');
-      expect((await dispatch(page, { type: 'FINISH_VOTING' })).status).toBe(
-        'accepted',
-      );
-    }
-    await waitForPhase(host, 'REVEAL');
+    await ratePlayback(pages, [dupe, dupe, solo], (rater, song) =>
+      song === 2 ? 9 : rater === 2 ? 2 : null,
+    );
 
     await expect(host.getByTestId('linked-animation')).toBeVisible({
       timeout: 10_000,
