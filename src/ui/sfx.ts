@@ -11,6 +11,7 @@ export type SfxEvent =
   | 'linked'
   | 'revealEntry'
   | 'jackpot'
+  | 'banger'
   | 'phaseChange'
   | 'final';
 
@@ -27,7 +28,7 @@ const SILENCE = 0.0001;
 /** Fade applied when the toggle silences an effect that is still sounding. */
 const MUTE_FADE_SECONDS = 0.01;
 
-interface Tone {
+export interface Tone {
   frequency: number;
   type: OscillatorType;
   /** Offset from the effect start, in seconds. */
@@ -83,6 +84,167 @@ const JACKPOT: Tone[] = [
   { frequency: 1046.5, type: 'sine', at: 0.27, duration: 0.45, gain: 0.9 },
 ];
 
+/**
+ * "THIS IS A BANGER" (a 10.0 song): five seconds, exactly the engine's banger
+ * reveal slot, at 120 bpm with the first kick on the stamp. An air-horn scoop
+ * and chord, a kick on every beat, a backbeat snare and a snare roll into the
+ * finale, a rising two-octave arpeggio and a last hit at +3.8 s that rings out
+ * before the slot ends. The layers are written with a headroom of 1 and then
+ * made up by `BANGER_BOOST`: their peaks never line up and the envelopes decay,
+ * so the rendered peak stays under the 0.2 master ceiling, which
+ * `e2e/sfx-render.spec.ts` measures over the whole effect.
+ * Oscillators only: the snare is a pitched body plus a fast square sweep.
+ */
+const BANGER_BEAT_SECONDS = 0.5;
+/** Make-up gain of the layered effect, so the owner's moment is the loudest. */
+export const BANGER_BOOST = 1.5;
+/** First kick: the stamp lands 0.3 s into the show. */
+const BANGER_FIRST_HIT = 0.3;
+/** The last hit: confetti burst and last shake of the show. */
+const BANGER_FINALE_AT = 3.8;
+
+function kick(at: number, gain: number, duration = 0.22): Tone {
+  return {
+    frequency: 160,
+    type: 'sine',
+    at,
+    duration,
+    gain,
+    sweepTo: 42,
+  };
+}
+
+function snare(at: number): Tone[] {
+  return [
+    {
+      frequency: 330,
+      type: 'triangle',
+      at,
+      duration: 0.12,
+      gain: 0.17,
+      sweepTo: 180,
+    },
+    {
+      frequency: 2400,
+      type: 'square',
+      at,
+      duration: 0.09,
+      gain: 0.1,
+      sweepTo: 900,
+    },
+  ];
+}
+
+function bangerTones(): Tone[] {
+  const tones: Tone[] = [
+    // Riser into the stamp.
+    {
+      frequency: 120,
+      type: 'sawtooth',
+      at: 0,
+      duration: BANGER_FIRST_HIT,
+      gain: 0.25,
+      sweepTo: 900,
+    },
+    // Air horn: the scoop up, then the held triad.
+    {
+      frequency: 180,
+      type: 'sawtooth',
+      at: 0.22,
+      duration: 0.16,
+      gain: 0.12,
+      sweepTo: 440,
+    },
+    { frequency: 440, type: 'sawtooth', at: 0.36, duration: 1, gain: 0.08 },
+    { frequency: 554.37, type: 'sawtooth', at: 0.36, duration: 1, gain: 0.08 },
+    { frequency: 659.25, type: 'sawtooth', at: 0.36, duration: 1, gain: 0.08 },
+  ];
+  // A kick on every beat up to the finale.
+  for (
+    let at = BANGER_FIRST_HIT;
+    at < BANGER_FINALE_AT - 0.01;
+    at += BANGER_BEAT_SECONDS
+  ) {
+    tones.push(kick(at, 0.34));
+  }
+  // Backbeat snare, then a roll of 16ths that builds into the finale.
+  for (const at of [0.8, 1.8, 2.8]) {
+    tones.push(...snare(at));
+  }
+  for (const at of [3.3, 3.425, 3.55, 3.675]) {
+    tones.push(...snare(at));
+  }
+  // Rising major arpeggio, C5 up over two and a half octaves.
+  const steps = [0, 4, 7, 12, 16, 19, 24, 28, 31, 36, 40, 43];
+  steps.forEach((step, index) => {
+    tones.push({
+      frequency: 523.25 * 2 ** (step / 12),
+      type: 'square',
+      at: 0.9 + index * 0.2,
+      duration: 0.22,
+      gain: 0.12,
+    });
+  });
+  // The last hit, ringing out until 4.8 s. The chord is the last tone to end.
+  tones.push(
+    kick(BANGER_FINALE_AT, 0.3, 0.5),
+    {
+      frequency: 55,
+      type: 'sine',
+      at: BANGER_FINALE_AT,
+      duration: 0.9,
+      gain: 0.1,
+    },
+    {
+      frequency: 3100,
+      type: 'square',
+      at: BANGER_FINALE_AT,
+      duration: 0.8,
+      gain: 0.06,
+      sweepTo: 1500,
+    },
+    {
+      frequency: 4300,
+      type: 'square',
+      at: BANGER_FINALE_AT,
+      duration: 0.8,
+      gain: 0.06,
+      sweepTo: 1900,
+    },
+    {
+      frequency: 523.25,
+      type: 'sawtooth',
+      at: BANGER_FINALE_AT,
+      duration: 1,
+      gain: 0.1,
+    },
+    {
+      frequency: 659.25,
+      type: 'sawtooth',
+      at: BANGER_FINALE_AT,
+      duration: 1,
+      gain: 0.1,
+    },
+    {
+      frequency: 783.99,
+      type: 'sawtooth',
+      at: BANGER_FINALE_AT,
+      duration: 1,
+      gain: 0.1,
+    },
+    {
+      frequency: 1046.5,
+      type: 'sawtooth',
+      at: BANGER_FINALE_AT,
+      duration: 1,
+      gain: 0.1,
+    },
+  );
+  return tones.map((tone) => ({ ...tone, gain: tone.gain * BANGER_BOOST }));
+}
+
+const BANGER: Tone[] = bangerTones();
+
 /** Any phase boundary (SPEC §4). */
 const PHASE_CHANGE: Tone[] = [
   {
@@ -109,9 +271,15 @@ const RECIPES: Record<SfxEvent, Tone[]> = {
   linked: LINKED,
   revealEntry: REVEAL_ENTRY,
   jackpot: JACKPOT,
+  banger: BANGER,
   phaseChange: PHASE_CHANGE,
   final: FINAL,
 };
+
+/** The tones of one recipe, for the specs that pin its timing and loudness. */
+export function recipeTones(event: SfxEvent): readonly Tone[] {
+  return RECIPES[event];
+}
 
 /**
  * One effect bus: the master gain of a single effect plus every oscillator

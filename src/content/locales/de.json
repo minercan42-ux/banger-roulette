@@ -320,6 +320,12 @@
     "announceEntry": "{{title}}: {{points}} Punkte.",
     "announceWinner": "Gewinner: {{title}} mit {{points}} Punkten."
   },
+  "banger": {
+    "word": "THIS IS A BANGER",
+    "sub": "+{{points}} für {{names}}",
+    "bonus": "Bonus {{bonus}}",
+    "announce": "THIS IS A BANGER! {{title}}: {{points}} Punkte."
+  },
   "leaderboard": {
     "heading": "Zwischenstand",
     "score": "{{points}} Punkte",

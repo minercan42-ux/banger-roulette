@@ -14,6 +14,7 @@ import { Leaderboard } from './Leaderboard';
 import { LinkedAnimation } from './LinkedAnimation';
 import { usePrefersReducedMotion } from './motion';
 import { Badge } from './pf/Badge';
+import { BangerShow, type BangerEntry } from './pf/BangerShow';
 import { cx } from './pf/cx';
 import { Jackpot, JackpotBadge, type JackpotWinner } from './pf/Jackpot';
 import { Panel, PanelTitle } from './pf/Panel';
@@ -111,12 +112,30 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
   // scored higher, so ties share it (FR-53).
   const order = selectSongs(state, viewerId);
 
+  // A banger owns the viewport with its own show and replaces the jackpot
+  // for that entry; the winner mark on the entry stays.
   const winners: JackpotWinner[] = reveal.entries
-    .filter((entry) => entry.winner)
+    .filter((entry) => entry.winner && !entry.banger)
     .map((entry) => ({
       videoId: entry.videoId,
       revealAt: entry.revealAt,
       roundPoints: entry.roundPoints,
+      names: entry.owners.map((owner) => owner.nickname),
+    }));
+
+  const bangers: BangerEntry[] = reveal.entries
+    .filter((entry) => entry.banger)
+    .map((entry) => ({
+      videoId: entry.videoId,
+      revealAt: entry.revealAt,
+      slotMs: entry.slotMs,
+      number: order.findIndex((song) => song.videoId === entry.videoId) + 1,
+      title: entry.title,
+      channel: entry.channel,
+      thumbnail: entry.thumbnail,
+      scoreTenths: entry.scoreTenths,
+      roundPoints: entry.roundPoints,
+      bonus: entry.bonus,
       names: entry.owners.map((owner) => owner.nickname),
     }));
 
@@ -132,6 +151,13 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
         winners={winners}
         now={reference}
         paused={reveal.pausedAt !== null}
+      />
+      <BangerShow
+        key={reveal.roundNumber}
+        entries={bangers}
+        now={reference}
+        paused={reveal.pausedAt !== null}
+        showThumbnail={consented}
       />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <PanelTitle>{t('reveal.heading')}</PanelTitle>
@@ -150,15 +176,20 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       >
         {latest === undefined
           ? ''
-          : latest.winner
-            ? t('reveal.announceWinner', {
+          : latest.banger
+            ? t('banger.announce', {
                 title: latest.title,
                 points: formatTenths(latest.roundPoints),
               })
-            : t('reveal.announceEntry', {
-                title: latest.title,
-                points: formatTenths(latest.roundPoints),
-              })}
+            : latest.winner
+              ? t('reveal.announceWinner', {
+                  title: latest.title,
+                  points: formatTenths(latest.roundPoints),
+                })
+              : t('reveal.announceEntry', {
+                  title: latest.title,
+                  points: formatTenths(latest.roundPoints),
+                })}
       </p>
 
       {reveal.entries.length === 0 ? (

@@ -28,7 +28,12 @@ export interface SfxSnapshot {
   linkedEntries: number;
   /** Reveal entries already revealed, worst first (FR-60). */
   revealedEntries: number;
-  /** Whether the round winner's entry is on screen already. */
+  /** Banger entries (every rating 10) already revealed; each gets its own show. */
+  bangerEntries: number;
+  /**
+   * Whether the round winner's entry is on screen already. A winning banger
+   * does not count: its show replaces the jackpot.
+   */
   winnerRevealed: boolean;
 }
 
@@ -59,8 +64,16 @@ export function sfxEventsFor(prev: SfxSnapshot, next: SfxSnapshot): SfxEvent[] {
     events.push('linked');
   }
   const revealed = Math.max(0, next.revealedEntries - prev.revealedEntries);
-  for (let entry = 0; entry < revealed; entry += 1) {
+  // A banger brings its own sound: it is not announced by the plain blip too.
+  const bangers = Math.min(
+    revealed,
+    Math.max(0, next.bangerEntries - prev.bangerEntries),
+  );
+  for (let entry = 0; entry < revealed - bangers; entry += 1) {
     events.push('revealEntry');
+  }
+  for (let entry = 0; entry < bangers; entry += 1) {
+    events.push('banger');
   }
   if (next.winnerRevealed && !prev.winnerRevealed) {
     events.push('jackpot');
@@ -118,7 +131,8 @@ export function sfxSnapshot(
     spinTicks,
     linkedEntries,
     revealedEntries: visible.length,
-    winnerRevealed: visible.some((entry) => entry.winner),
+    bangerEntries: visible.filter((entry) => entry.banger).length,
+    winnerRevealed: visible.some((entry) => entry.winner && !entry.banger),
   };
 }
 
