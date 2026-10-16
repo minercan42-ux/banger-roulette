@@ -27,7 +27,8 @@ interface StatProps extends Omit<ComponentPropsWithoutRef<'div'>, 'children'> {
 /**
  * Pixel-Filz stat (docs/design/pixel-filz/components/Stat): a recessed well
  * with a Silkscreen label and a big gold number for timers, done counters and
- * the round. Pass `role="timer"` for a countdown.
+ * the round. A `group` named by its label (a generic `div` must not carry
+ * `aria-labelledby`); pass `role="timer"` for a countdown.
  */
 export function Stat({
   label,
@@ -39,6 +40,7 @@ export function Stat({
   const labelId = useId();
   return (
     <div
+      role="group"
       aria-labelledby={labelId}
       {...rest}
       className={cx('br-stat', urgent && 'is-urgent', className)}

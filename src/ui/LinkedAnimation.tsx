@@ -104,7 +104,7 @@ export function LinkedAnimation({
     return showEmptyMarker ? (
       <p
         data-testid="linked-animation-none"
-        className="text-xs text-cream-100/50"
+        className="text-xs text-cream-100/70"
       >
         {t('linked.none')}
       </p>

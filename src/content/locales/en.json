@@ -293,7 +293,7 @@
     "poolHeading": "Songs to rank",
     "dragHint": "Drag songs to rank them, or tap a song to append it.",
     "add": "Add",
-    "addAria": "Add {{title}} to the ranking",
+    "addAria": "Add to the ranking: {{number}} {{title}}, {{channel}}, {{number}}",
     "remove": "Remove",
     "removeAria": "Remove {{title}} from the ranking",
     "up": "Up",
