@@ -9,6 +9,7 @@ import {
 import type { GameSession } from '../net/session';
 import type { PlaybackPlan, PlaybackStatus } from '../player/playback';
 import type { GameState } from '../shared/game';
+import { isDebugMode } from './debug-mode';
 import { useEmbedConsent } from './embed-consent';
 import { LinkedAnimation, prerollElapsedMs } from './LinkedAnimation';
 import { usePlaybackControllerContext } from './playback-controller';
@@ -159,9 +160,7 @@ export function PlaybackPhase({
   const status: PlaybackStatus | 'idle' = consented
     ? (diagnostics?.status ?? 'loading')
     : 'idle';
-  const debug =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('debug') === '1';
+  const debug = isDebugMode();
   const clock = session.getSnapshot().clock;
   const errorCode = diagnostics?.errorCode ?? null;
   const observedStart = diagnostics?.observedStartAt ?? null;
@@ -373,7 +372,7 @@ export function PlaybackPhase({
             data-state={status}
             data-error-code={errorCode ?? undefined}
             role="status"
-            className="br-read"
+            className={debug ? 'br-read' : 'sr-only'}
           >
             {t(statusKey(status))}
           </p>
