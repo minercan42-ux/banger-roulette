@@ -573,7 +573,7 @@ export function SubmissionPanel({
           <div className="flex flex-wrap items-end gap-2">
             <Field
               label={t('submission.startLabel')}
-              className="w-28"
+              className="w-48 max-w-full flex-none"
               type="number"
               data-testid="start-seconds"
               min={0}

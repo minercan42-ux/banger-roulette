@@ -30,6 +30,9 @@ const CODE_ERRORS = new Set([
 ]);
 const NICKNAME_ERRORS = new Set(['errors.INVALID', 'errors.NICKNAME_TAKEN']);
 
+/** Banner id; only the invalid field points at it through `aria-describedby`. */
+const ERROR_ID = 'home-error-message';
+
 function nicknameError(nickname: string): boolean {
   const trimmed = nickname.trim();
   return trimmed.length < 1 || trimmed.length > 20;
@@ -131,6 +134,7 @@ export function HomeView({
           {errorKey && (
             <p
               data-testid="home-error"
+              id={ERROR_ID}
               role="alert"
               className="br-notice br-notice--error"
             >
@@ -157,6 +161,9 @@ export function HomeView({
               label={t('home.nicknameLabel')}
               hint={t('home.nicknameHint')}
               invalid={nicknameInvalid('create')}
+              aria-describedby={
+                nicknameInvalid('create') ? ERROR_ID : undefined
+              }
               value={nickname}
               maxLength={20}
               autoComplete="off"
@@ -186,6 +193,7 @@ export function HomeView({
               label={t('home.joinCodeLabel')}
               hint={`${t('home.joinCodeHint')} ${t('home.codeExample')}`}
               invalid={codeInvalid}
+              aria-describedby={codeInvalid ? ERROR_ID : undefined}
               value={code}
               maxLength={6}
               autoComplete="off"
@@ -200,6 +208,7 @@ export function HomeView({
               data-testid="join-nickname"
               label={t('home.nicknameLabel')}
               invalid={nicknameInvalid('join')}
+              aria-describedby={nicknameInvalid('join') ? ERROR_ID : undefined}
               value={joinNickname}
               maxLength={20}
               autoComplete="off"

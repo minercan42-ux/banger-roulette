@@ -3,8 +3,7 @@
 /*
  * Design tokens: Pixel-Filz (SPEC section 6, docs/design/pixel-filz/). The
  * `@theme static` block below carries every token of `tokens.css` 1:1:
- *   --color-<name>   colours (`bg-gold`, `text-cream`, ...; the Pixel-Filz
- *                    `felt-950` and `felt-900` replace the old casino greens)
+ *   --color-<name>   colours (`bg-gold`, `text-cream`, ...)
  *   --drop-edge, --press-*, --card-lift*, --glow-gold   hard-edge shadows
  *   --space-*, --radius-*, --dur-*, --ease-*, --font-*  layout, motion, type
  * `static` keeps unreferenced tokens in the output, so later packages can use
@@ -14,26 +13,11 @@
  * `@layer components` below, names unchanged, with their own reduced-motion
  * block at the end of that layer.
  *
- * The casino tokens and utilities that follow (`ink-*`, `gold-500..200`,
- * `neon-*`, `felt-panel`, `casino-*`, ...) stay until the last Pixel-Filz
- * package removes them together with `Chip.tsx`:
- *   felt-panel      raised felt-green card with a gold hairline.
- *   panel-black     black surface with gold hairline and inner highlight.
- *   neon-rule       1px pink-to-cyan glowing divider (decorative element).
- *   text-glow-neon  neon text glow; pair with `text-neon-cyan|pink`.
- *   casino-button   primary action: gold gradient, dark text, gold glow.
- *   casino-ghost    secondary action: gold outline on black.
- *   casino-field    opaque control-border colour for text fields and selects
- *                   (about 5:1 against felt-900 and 6:1 against black, WCAG
- *                   1.4.11).
- *   animate-glow-pulse  slow glow pulse for neon chips and plates.
- *
  * Focus: one global gold `:focus-visible` ring (see bottom). Do not add
  * per-component ring classes.
  *
- * Motion: every animation is switched off in the reduced-motion blocks (the
- * `br-*` one inside `@layer components`, the casino one at the end of this
- * file).
+ * Motion: every animation is switched off in the reduced-motion blocks of
+ * `@layer components` (the `br-*` one and the ones added below).
  */
 
 @theme static {
@@ -125,151 +109,6 @@
   src: url('/fonts/Silkscreen-Bold.woff2') format('woff2');
   font-weight: 700;
   font-display: swap;
-}
-
-@theme {
-  --font-display: Georgia, 'Times New Roman', serif;
-
-  --color-felt-800: #0a3325;
-  --color-felt-700: #0f4531;
-
-  --color-ink-950: #050505;
-  --color-ink-900: #0b0b0c;
-  --color-ink-800: #151517;
-
-  --color-gold-500: #b8860b;
-  --color-gold-400: #d4af37;
-  --color-gold-300: #ecd07f;
-  --color-gold-200: #f6e6b0;
-  --color-cream-100: #f7f2e5;
-
-  --color-neon-pink: #ff4fb0;
-  --color-neon-cyan: #35e8ff;
-  --color-chip-red: #c8102e;
-  --color-control-border: #b8860b;
-
-  --shadow-glow-gold:
-    0 0 0 1px rgb(236 208 127 / 0.25), 0 0 14px rgb(212 175 55 / 0.35);
-  --shadow-glow-pink:
-    0 0 0 1px rgb(255 79 176 / 0.35), 0 0 16px rgb(255 79 176 / 0.45);
-  --shadow-glow-cyan:
-    0 0 0 1px rgb(53 232 255 / 0.35), 0 0 16px rgb(53 232 255 / 0.45);
-
-  --animate-glow-pulse: glow-pulse 3.2s ease-in-out infinite;
-
-  @keyframes glow-pulse {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 2px rgb(53 232 255 / 0.35));
-    }
-    50% {
-      filter: drop-shadow(0 0 8px rgb(53 232 255 / 0.85));
-    }
-  }
-}
-
-@utility felt-panel {
-  border: 1px solid rgb(212 175 55 / 0.28);
-  background-color: var(--color-felt-900);
-  background-image:
-    repeating-linear-gradient(
-      45deg,
-      rgb(255 255 255 / 0.02) 0 1px,
-      transparent 1px 3px
-    ),
-    repeating-linear-gradient(
-      -45deg,
-      rgb(0 0 0 / 0.12) 0 1px,
-      transparent 1px 3px
-    );
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
-}
-
-@utility panel-black {
-  border: 1px solid rgb(212 175 55 / 0.35);
-  background-color: var(--color-ink-950);
-  background-image: linear-gradient(
-    180deg,
-    var(--color-ink-800),
-    var(--color-ink-950) 40%
-  );
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.06),
-    0 18px 40px rgb(0 0 0 / 0.55);
-}
-
-@utility neon-rule {
-  display: block;
-  height: 2px;
-  border-radius: 9999px;
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-neon-pink) 25%,
-    var(--color-neon-cyan) 75%,
-    transparent
-  );
-  box-shadow:
-    0 0 8px rgb(255 79 176 / 0.55),
-    0 0 14px rgb(53 232 255 / 0.35);
-}
-
-@utility text-glow-neon {
-  text-shadow:
-    0 0 6px rgb(53 232 255 / 0.6),
-    0 0 14px rgb(255 79 176 / 0.35);
-}
-
-@utility casino-button {
-  border: 1px solid var(--color-gold-300);
-  border-radius: 0.5rem;
-  background-image: linear-gradient(
-    180deg,
-    var(--color-gold-300),
-    var(--color-gold-400) 55%,
-    var(--color-gold-500)
-  );
-  color: var(--color-felt-950);
-  font-weight: 600;
-  box-shadow: var(--shadow-glow-gold);
-  transition:
-    filter 150ms ease,
-    transform 150ms ease;
-
-  &:hover:not(:disabled) {
-    filter: brightness(1.1);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(1px);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    box-shadow: none;
-    opacity: 0.5;
-  }
-}
-
-@utility casino-field {
-  border-color: var(--color-control-border);
-}
-
-@utility casino-ghost {
-  border: 1px solid rgb(212 175 55 / 0.55);
-  border-radius: 0.5rem;
-  background-color: rgb(5 5 5 / 0.55);
-  color: var(--color-cream-100);
-  transition: background-color 150ms ease;
-
-  &:hover:not(:disabled) {
-    background-color: rgb(212 175 55 / 0.18);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
 }
 
 @layer components {
@@ -1438,21 +1277,6 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-glow-pulse {
-    animation: none;
-  }
-
-  .casino-button,
-  .casino-ghost {
-    transition: none;
-  }
-
-  .casino-button:active:not(:disabled) {
-    transform: none;
-  }
-}
-
 /*
  * Primitive additions (src/ui/pf, Home and Lobby screens). Same `br-` naming
  * as the design reference; nothing here changes a token or the blocks above.
@@ -1969,8 +1793,20 @@ body {
 
 @layer components {
   /* ---------- Score combo, stat and progress in the game views (#66) ---------- */
+  /* One grid for the boxes and their captions (#81): the three value columns
+     and the two operator columns are shared by both rows, so every caption
+     sits centred under its box. `.br-combo` and the caption row only group the
+     markup (`display: contents`). A column never gets narrower than its
+     caption, so a long German word pushes the box wider instead of colliding
+     with its neighbour. */
   .br-combo-block {
     container-type: inline-size;
+    display: grid;
+    grid-template-columns:
+      minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto
+      minmax(min-content, 1fr);
+    align-items: center;
+    gap: var(--space-2) var(--space-1);
     width: 100%;
     max-width: 24rem;
     min-width: 0;
@@ -1978,17 +1814,30 @@ body {
   /* The digits shrink with the room the combo gets, so it also fits next to a
      song card on a 360 px screen. */
   .br-combo-block .br-combo {
+    display: contents;
     font-size: clamp(22px, 11cqi, 44px);
     line-height: 1;
-    gap: var(--space-1);
   }
   .br-combo-block .br-combo__box {
     min-width: 0;
     padding: 6px var(--space-1);
   }
   .br-combo-block .br-combo__caption {
-    gap: var(--space-1);
+    display: contents;
+    font-size: clamp(11px, 4.6cqi, 16px);
+  }
+  .br-combo-block .br-combo__caption > * {
+    grid-row: 2;
     text-align: center;
+  }
+  .br-combo-block .br-combo__caption > :nth-child(1) {
+    grid-column: 1;
+  }
+  .br-combo-block .br-combo__caption > :nth-child(2) {
+    grid-column: 3;
+  }
+  .br-combo-block .br-combo__caption > :nth-child(3) {
+    grid-column: 5;
   }
   .br-stat {
     min-width: 5.5rem;
