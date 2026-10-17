@@ -168,6 +168,11 @@ const linked: Row[] = [
     upload('Calvin Harris - One Kiss', 'Calvin Harris - Topic', 215),
   ],
   [
+    'multi-artist credit in reverse order on the other channel',
+    upload('Calvin Harris & Dua Lipa - One Kiss', 'Calvin Harris', 215),
+    upload('Dua Lipa & Calvin Harris - One Kiss', 'Dua Lipa - Topic', 215),
+  ],
+  [
     'Official and Music suffixes together',
     upload('Adele - Hello', 'Adele Official Music', 295),
     upload('Hello', 'Adele - Topic', 295),
@@ -191,6 +196,21 @@ const linked: Row[] = [
     'a real track named after its artist is not uncertain',
     upload('Adele - Adele', 'Adele', 295),
     upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'self-titled track with normalized Unicode, diacritics and whitespace',
+    upload('  ＢＥＹＯＮＣÉ \t–  Beyoncé  ', 'Beyoncé', 295),
+    upload('Beyonce', 'Beyoncé - Topic', 295),
+  ],
+  [
+    'self-titled track preserves the artist apostrophe',
+    upload('Guns N’ Roses - Guns N‘ Roses', "Guns N' Roses", 295),
+    upload("Guns N' Roses", 'Guns N’ Roses - Topic', 295),
+  ],
+  [
+    'bare self-titled track on a CamelCase VEVO channel',
+    upload('Lionel Richie - Lionel Richie', 'Lionel Richie', 295),
+    upload('Lionel Richie', 'LionelRichieVEVO', 295),
   ],
   [
     'duration inside the 3 percent window on long songs',
@@ -534,6 +554,71 @@ const separate: Row[] = [
     upload('Queen - Bohemian Rhapsody Remastered 2011', 'Queen', 355),
     upload('Queen - Bohemian Rhapsody', 'Queen', 355),
   ],
+  [
+    'artist that is a prefix of the other artist (Pink vs Pink Floyd)',
+    upload('Pink - Time', 'Pink', 402),
+    upload('Pink Floyd - Time', 'Pink Floyd', 402),
+  ],
+  [
+    'pipe-only titles whose track hides behind a noise word',
+    upload('Adele | Song', 'Adele - Topic', 295),
+    upload('Adele | Music', 'Adele - Topic', 295),
+  ],
+  [
+    'bracket-only titles whose track hides behind a noise word',
+    upload('Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele (Music)', 'Adele - Topic', 295),
+  ],
+  [
+    'accepted false negative: an uncertain pipe title never links an artist-named track',
+    upload('Adele | Song', 'Adele - Topic', 295),
+    upload('Adele - Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a pipe segment',
+    upload('Adele - Adele | Song', 'Adele - Topic', 295),
+    upload('Adele - Adele | Music', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a parenthesised segment',
+    upload('Adele - Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele - Adele (Music)', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a square-bracket segment',
+    upload('Adele - Adele [Song]', 'Adele - Topic', 295),
+    upload('Adele - Adele [Music]', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a pipe versus a parenthesised segment',
+    upload('Adele - Adele | Song', 'Adele', 295),
+    upload('Adele - Adele (Music)', 'Adele', 295),
+  ],
+  [
+    'artist-named track behind a pipe segment is not the bare artist',
+    upload('Adele - Adele | Song', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a parenthesised segment is not the bare artist',
+    upload('Adele - Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a square-bracket segment is not the bare artist',
+    upload('Adele - Adele [Song]', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'accepted false negative: one-sided featured credit (A & B vs A feat. B)',
+    upload('Pink & Nate - Just Give Me a Reason', 'Pink', 242),
+    upload('Pink - Just Give Me a Reason (feat. Nate)', 'Pink - Topic', 242),
+  ],
+  [
+    'accepted false negative: a channel named only by a suffix word (Music - Topic)',
+    upload('Music', 'Music - Topic', 200),
+    upload('Music', 'Music - Topic', 200),
+  ],
 ];
 
 describe('isSameSong', () => {
@@ -568,6 +653,10 @@ describe('isSameSong', () => {
     'Adele -  - Official Audio',
     'Adele - Adele Lyrics',
     'Adele - Adele ft. Someone',
+    'Adele - Adele (Official Audio)',
+    'Adele - Adele [HD]',
+    'Adele - Adele | Official Video',
+    'Adele(Live)- Adele',
   ])(
     'never invents an artist-named track from the uncertain title %s',
     (title) => {
@@ -578,6 +667,73 @@ describe('isSameSong', () => {
       expect(isSameSong(a, { ...b, videoId: a.videoId })).toBe(true);
     },
   );
+
+  it('never links a track that only survived noise stripping of a pipe or bracket segment', () => {
+    const uncertain = [
+      ['Adele | Song', 'Adele - Topic'],
+      ['Adele | Music', 'Adele - Topic'],
+      ['Adele (Song)', 'Adele - Topic'],
+      ['Adele (Music)', 'Adele - Topic'],
+      ['Adele | Hello', 'Adele - Topic'],
+    ] as const;
+    for (const [title, channel] of uncertain) {
+      const a = upload(title, channel, 295);
+      const b = upload('Adele', 'Adele - Topic', 295);
+      expect(isSameSong(a, b)).toBe(false);
+      expect(isSameSong(b, a)).toBe(false);
+      expect(isSameSong(a, { ...b, videoId: a.videoId })).toBe(true);
+    }
+    const pipe = upload('Adele | Song', 'Adele - Topic', 295);
+    const bracket = upload('Adele (Song)', 'Adele - Topic', 295);
+    expect(isSameSong(pipe, bracket)).toBe(false);
+  });
+
+  it('never links an artist-named track recovered from a dropped title segment', () => {
+    const variants = [
+      'Adele - Adele | Song',
+      'Adele - Adele | Music',
+      'Adele - Adele (Song)',
+      'Adele - Adele (Music)',
+      'Adele - Adele [Song]',
+      'Adele - Adele [Music]',
+      'Adele - Adele - Song',
+      'Adele - Adele - Music',
+      'Adele - Adele ()',
+      'Adele - Adele {}',
+      'Adele - Adele 【】',
+      'Adele - Adele - Live',
+      'Adele - Adele (feat. Someone)',
+      'Adele ()',
+      'Adele - Adele -- Adele',
+    ];
+    const bare = upload('Adele', 'Adele - Topic', 295);
+    const uploads = variants.map((title) =>
+      upload(title, 'Adele - Topic', 295),
+    );
+    for (const one of uploads) {
+      expect(isSameSong(one, bare)).toBe(false);
+      expect(isSameSong(bare, one)).toBe(false);
+      expect(isSameSong(one, { ...bare, videoId: one.videoId })).toBe(true);
+      expect(isSameSong({ ...bare, videoId: one.videoId }, one)).toBe(true);
+      for (const other of uploads) {
+        if (one === other) {
+          continue;
+        }
+        expect(isSameSong(one, other)).toBe(false);
+        expect(isSameSong(other, one)).toBe(false);
+      }
+    }
+    // The genuine, unstripped self-titled track still links the bare artist
+    // upload, and never links an uncertain variant.
+    const genuine = upload('Adele - Adele', 'Adele - Topic', 295);
+    expect(isSameSong(genuine, bare)).toBe(true);
+    expect(isSameSong(bare, genuine)).toBe(true);
+    expect(isSameSong(genuine, uploads[0])).toBe(false);
+    for (const one of uploads) {
+      expect(isSameSong(one, genuine)).toBe(false);
+      expect(isSameSong(genuine, one)).toBe(false);
+    }
+  });
 
   it('keeps an identical videoId linked even on a denylisted channel', () => {
     const a = upload('Hello', 'Sing King', 295, 'sameVideo01');
@@ -616,6 +772,27 @@ describe('groupSameSongs', () => {
       'Adele - Music',
       'Adele - Adele',
       'Adele',
+    ].map((title) => upload(title, 'Adele - Topic', 295));
+    expect(groupSameSongs(songs)).toEqual([[0], [1], [2, 3]]);
+  });
+
+  it('does not group artist-named tracks that only survive dropping a segment', () => {
+    const songs = [
+      'Adele - Adele',
+      'Adele',
+      'Adele - Adele | Song',
+      'Adele - Adele (Music)',
+      'Adele - Adele [Song]',
+    ].map((title) => upload(title, 'Adele - Topic', 295));
+    expect(groupSameSongs(songs)).toEqual([[0, 1], [2], [3], [4]]);
+  });
+
+  it('keeps trailing-dash self-titled uploads separate from genuine self-titles', () => {
+    const songs = [
+      'Adele - Adele - Song',
+      'Adele - Adele - Music',
+      'Adele',
+      'Adele - Adele',
     ].map((title) => upload(title, 'Adele - Topic', 295));
     expect(groupSameSongs(songs)).toEqual([[0], [1], [2, 3]]);
   });
