@@ -198,6 +198,21 @@ const linked: Row[] = [
     upload('Adele', 'Adele - Topic', 295),
   ],
   [
+    'self-titled track with normalized Unicode, diacritics and whitespace',
+    upload('  ＢＥＹＯＮＣÉ \t–  Beyoncé  ', 'Beyoncé', 295),
+    upload('Beyonce', 'Beyoncé - Topic', 295),
+  ],
+  [
+    'self-titled track preserves the artist apostrophe',
+    upload('Guns N’ Roses - Guns N‘ Roses', "Guns N' Roses", 295),
+    upload("Guns N' Roses", 'Guns N’ Roses - Topic', 295),
+  ],
+  [
+    'bare self-titled track on a CamelCase VEVO channel',
+    upload('Lionel Richie - Lionel Richie', 'Lionel Richie', 295),
+    upload('Lionel Richie', 'LionelRichieVEVO', 295),
+  ],
+  [
     'duration inside the 3 percent window on long songs',
     upload('Pink Floyd - Echoes (Remastered)', 'Pink Floyd', 1400),
     upload('Pink Floyd - Echoes', 'Pink Floyd - Topic', 1430),
@@ -681,6 +696,15 @@ describe('isSameSong', () => {
       'Adele - Adele (Music)',
       'Adele - Adele [Song]',
       'Adele - Adele [Music]',
+      'Adele - Adele - Song',
+      'Adele - Adele - Music',
+      'Adele - Adele ()',
+      'Adele - Adele {}',
+      'Adele - Adele 【】',
+      'Adele - Adele - Live',
+      'Adele - Adele (feat. Someone)',
+      'Adele ()',
+      'Adele - Adele -- Adele',
     ];
     const bare = upload('Adele', 'Adele - Topic', 295);
     const uploads = variants.map((title) =>
@@ -690,6 +714,7 @@ describe('isSameSong', () => {
       expect(isSameSong(one, bare)).toBe(false);
       expect(isSameSong(bare, one)).toBe(false);
       expect(isSameSong(one, { ...bare, videoId: one.videoId })).toBe(true);
+      expect(isSameSong({ ...bare, videoId: one.videoId }, one)).toBe(true);
       for (const other of uploads) {
         if (one === other) {
           continue;
@@ -704,6 +729,10 @@ describe('isSameSong', () => {
     expect(isSameSong(genuine, bare)).toBe(true);
     expect(isSameSong(bare, genuine)).toBe(true);
     expect(isSameSong(genuine, uploads[0])).toBe(false);
+    for (const one of uploads) {
+      expect(isSameSong(one, genuine)).toBe(false);
+      expect(isSameSong(genuine, one)).toBe(false);
+    }
   });
 
   it('keeps an identical videoId linked even on a denylisted channel', () => {
@@ -756,6 +785,16 @@ describe('groupSameSongs', () => {
       'Adele - Adele [Song]',
     ].map((title) => upload(title, 'Adele - Topic', 295));
     expect(groupSameSongs(songs)).toEqual([[0, 1], [2], [3], [4]]);
+  });
+
+  it('keeps trailing-dash self-titled uploads separate from genuine self-titles', () => {
+    const songs = [
+      'Adele - Adele - Song',
+      'Adele - Adele - Music',
+      'Adele',
+      'Adele - Adele',
+    ].map((title) => upload(title, 'Adele - Topic', 295));
+    expect(groupSameSongs(songs)).toEqual([[0], [1], [2, 3]]);
   });
 
   it('is empty for no input and singleton for one', () => {
