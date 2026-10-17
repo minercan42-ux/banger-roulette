@@ -9,7 +9,7 @@ This is how work on Banger Roulette is organized. It binds every agent in this r
 | **Owner (stakeholder)** | `@minercan42-ux`                                   | Decides product direction, design taste, scope and priorities; playtests; changes accounts, billing and GitHub settings       | Write code, review PRs, merge (unless they choose to)      |
 | **PM (orchestrator)**   | The main agent session the owner talks to          | Turns owner requests into issues, plans waves, spawns and steers subagents, runs the merge gate, merges, reports to the owner | Implement features itself, edit files in the main checkout |
 | **Implementer**         | Subagent per issue (agent definitions below)       | One issue as one branch and one PR in its own worktree, tests, screenshots for visual work, green CI                          | Merge, push to `main`, widen scope                         |
-| **Reviewer**            | Subagent on a different model than the implementer | One `REVIEW: PASS                                                                                                             | CHANGES @ <sha>` comment per review round                  | Edit code |
+| **Reviewer**            | Subagent on a different model than the implementer | One `REVIEW: PASS @ <sha>` or `REVIEW: CHANGES @ <sha>` comment per review round                                              | Edit code                                                  |
 
 ## Lifecycle of a request
 
@@ -18,14 +18,14 @@ This is how work on Banger Roulette is organized. It binds every agent in this r
 3. **Start.** The PM checks open blockers, creates a worktree under `../wt/<issue>-<key>` from `origin/main`, sets the board status to In Progress and comments `claimed: <agent>, branch <branch>`.
 4. **Implement.** The implementer works only in its worktree, runs the local gate, opens the PR (template filled, `Closes #N`), waits for green CI and yields head SHA, CI run id, acceptance evidence, deviations and the screenshot list.
 5. **Review.** A reviewer on a different model reviews the exact head.
-6. **Fix loop.** On CHANGES the PM spawns a fix round with the verbatim findings. After two CHANGES rounds the PM decides: merge, one final targeted round, or escalate the model.
+6. **Fix loop.** On CHANGES the PM spawns a fix round with the verbatim findings. After two CHANGES rounds the PM runs one final targeted fix round or escalates to a stronger model. There is never a merge without a fulfilled merge gate.
 7. **Merge gate (PM).** All four must hold:
    - every check passes or is skipped;
-   - the last `REVIEW:` comment is `PASS @ <current head>`;
+   - the last `REVIEW:` comment is `PASS @ <current head>`, or it is `PASS` on an earlier head and the only change since then is a conflict-free rebase that leaves the PR's own patch unchanged; in that case the PM records the carry-over as a PR comment (`REVIEW: PASS @ <old> carries over to <new>`) before merging;
    - `origin/main` is an ancestor of the branch;
    - for visual PRs, the PM has read the screenshots and posted `PM visual gate: PASS`.
 
-   A conflict-free rebase keeps the review verdict. A rebase with manual conflict resolution needs a re-review.
+   A rebase that needed manual conflict resolution, or any other change to the PR's own patch, needs a re-review.
 
 8. **Merge.** The PM squash-merges, deletes the branch, removes the worktree and verifies that the issue is closed and the board item is Done.
 9. **Report.** The PM reports to the owner in German: concise, tables, no em-dashes, facts only.

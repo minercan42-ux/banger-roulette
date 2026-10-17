@@ -5,7 +5,7 @@ The product and architecture spec is `SPEC.md`. Read it before doing anything. I
 How work is organized (owner as stakeholder, PM orchestrator, implementer and reviewer subagents, merge gate, concurrency) is defined in `docs/WORKFLOW.md`.
 
 ## Golden rules
-1. Never push to `main`. One branch per task, open a pull request. The PM merges after green CI, a `REVIEW: PASS` on the current head by an agent that did not write the code, and the PM visual gate for visual changes (owner decision; see `docs/WORKFLOW.md`).
+1. Never push to `main`. One branch per task, open a pull request. The PM merges after green CI, a `REVIEW: PASS` on the current head by an agent that did not write the code (or a PASS carried over across a conflict-free rebase, as defined in `docs/WORKFLOW.md`), and the PM visual gate for visual changes (owner decision).
 2. Never commit secrets. `.env.local` is gitignored. Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` exist; a service_role or secret key must never appear anywhere in this repo.
 3. Stay inside the files your issue allows. Contracts in `src/shared/` are changed only by the orchestrator, or by an implementer whose issue explicitly authorizes the contract change.
 4. Check external APIs (YouTube IFrame API, oEmbed, Supabase Realtime, Vercel) against current official docs. Do not implement from memory.
