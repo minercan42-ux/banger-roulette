@@ -82,6 +82,10 @@ interface PanelRefs {
   saving: Promise<SaveOutcome> | null;
   waiters: Set<ValidationWaiter>;
   finishing: boolean;
+  /** The reason a save was rejected during the current Fertig click. */
+  finishRejection: string | null;
+  /** Bumped when consent or write access is withdrawn; ends a running Fertig. */
+  epoch: number;
 }
 
 /** The latest rendered inputs, readable from timers and async callbacks. */
@@ -208,6 +212,8 @@ export function SubmissionPanel({
     saving: null,
     waiters: new Set(),
     finishing: false,
+    finishRejection: null,
+    epoch: 0,
   });
   // The latest draft for timers and async callbacks, which must never read a
   // stale render closure.
@@ -256,6 +262,7 @@ export function SubmissionPanel({
   // Revoking the consent (drawer) stops the preview player at once.
   useEffect(() => {
     if (!consent) {
+      stateRef.current.epoch += 1;
       teardown();
     }
   }, [consent, teardown]);
@@ -281,6 +288,7 @@ export function SubmissionPanel({
             snapshot.connectionId,
           ).canSubmit
         ) {
+          stateRef.current.epoch += 1;
           teardown();
           setStatus({ type: 'idle' });
           setMetadata(null);
@@ -394,6 +402,10 @@ export function SubmissionPanel({
     const previous = refs.saving;
     const run = (async (): Promise<SaveOutcome> => {
       await previous;
+      if (refs.finishing && refs.finishRejection !== null) {
+        // This click already saw a rejected save of this draft: no retry.
+        return { kind: 'rejected', reason: refs.finishRejection };
+      }
       const media = buildMedia();
       if (media === null) {
         return { kind: 'skipped' };
@@ -407,9 +419,13 @@ export function SubmissionPanel({
         return { kind: 'saved' };
       }
       const result = await session.dispatch({ type: 'SUBMIT_SONG', media });
-      return result.status === 'rejected'
-        ? { kind: 'rejected', reason: result.reason }
-        : { kind: 'saved' };
+      if (result.status === 'rejected') {
+        if (refs.finishing) {
+          refs.finishRejection = result.reason;
+        }
+        return { kind: 'rejected', reason: result.reason };
+      }
+      return { kind: 'saved' };
     })();
     refs.saving = run;
     void run.then(() => {
@@ -453,7 +469,12 @@ export function SubmissionPanel({
    * async below is guarded by that generation: a result for a replaced link
    * can neither flip the status nor validate anything.
    */
-  function startPreview(videoId: string, startAt: number): number {
+  function startPreview(videoId: string, startAt: number): number | null {
+    // Never load YouTube content without the current consent and write access.
+    const allowed = draftRef.current;
+    if (!allowed.consent || !allowed.permissions.canSubmit) {
+      return null;
+    }
     teardown();
     const refs = stateRef.current;
     const generation = (refs.generation += 1);
@@ -613,12 +634,18 @@ export function SubmissionPanel({
     const generation = reusable
       ? refs.generation
       : startPreview(videoId, startAt);
+    if (generation === null) {
+      setNoticeKey('submission.consentRequired');
+      return false;
+    }
     const result = await waitForValidation(
       generation,
       FINISH_VALIDATION_TIMEOUT_MS,
     );
     switch (result) {
       case 'playing': {
+        // The save the PLAYING callback started is this click's save; a
+        // rejection of it ends the click instead of being retried.
         const outcome = await save();
         if (outcome.kind === 'rejected') {
           setNoticeKey(`errors.${outcome.reason}`);
@@ -639,21 +666,53 @@ export function SubmissionPanel({
     }
   }
 
-  async function submitAndFinish() {
+  /** True while this click's work is still wanted: not cancelled, still consented and writable. */
+  function finishLive(epoch: number): boolean {
+    const refs = stateRef.current;
     const draft = draftRef.current;
-    const link = parseYouTubeLink(draft.linkText);
-    if (link === null && draft.linkText.trim() !== '') {
+    return (
+      refs.epoch === epoch &&
+      refs.finishRejection === null &&
+      draft.permissions.canFinishSubmission
+    );
+  }
+
+  async function submitAndFinish() {
+    const refs = stateRef.current;
+    const epoch = refs.epoch;
+    const first = draftRef.current;
+    if (
+      parseYouTubeLink(first.linkText) === null &&
+      first.linkText.trim() !== ''
+    ) {
       setNoticeKey('submission.linkInvalid');
       return;
     }
-    if (link !== null) {
-      await stateRef.current.saving;
+    if (parseYouTubeLink(first.linkText) !== null) {
+      await refs.saving;
+      if (refs.finishRejection !== null) {
+        setNoticeKey(`errors.${refs.finishRejection}`);
+        return;
+      }
+      // Everything below reads the draft as it is now, not as it was at the click.
+      const draft = draftRef.current;
+      const link = parseYouTubeLink(draft.linkText);
+      if (!finishLive(epoch)) {
+        return;
+      }
+      if (link === null) {
+        setNoticeKey('submission.linkInvalid');
+        return;
+      }
       if (!savedMatches(link.videoId, draft.startSeconds)) {
         if (!draft.consent) {
           setNoticeKey('submission.consentRequired');
           return;
         }
         if (!(await validateAndSave(link.videoId, draft.startSeconds))) {
+          return;
+        }
+        if (!finishLive(epoch)) {
           return;
         }
       }
@@ -682,6 +741,7 @@ export function SubmissionPanel({
       refs.player.play();
     }
     clearTimers(refs);
+    refs.finishRejection = null;
     setBusy(true);
     setFinishing(true);
     setNoticeKey(null);

@@ -1149,3 +1149,133 @@ test('a blocked autoplay offers the play button and Fertig plays inside its clic
     await closeStages(stages);
   }
 });
+
+interface DispatchProbe {
+  __actions?: string[];
+  __releaseSave?: () => void;
+}
+
+test('revoking the consent ends a Fertig that waits for the autosave', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    // Hold the first SUBMIT_SONG (the autosave at start 0) before it is sent.
+    await alice.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      const gate = new Promise<void>((resolve) => {
+        probe.__releaseSave = resolve;
+      });
+      let held = false;
+      session.dispatch = async (action) => {
+        if (action.type === 'SUBMIT_SONG' && !held) {
+          held = true;
+          await gate;
+        }
+        return original(action);
+      };
+    });
+    await startPlayingPreview(alice.page, watchUrl(VALID_A));
+    await alice.page.getByTestId('start-plus-5').click();
+    await expect(alice.page.getByTestId('start-seconds')).toHaveValue('5');
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('finish-submission')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    await alice.page.getByTestId('consent-revoke').click();
+    await expect(alice.page.getByTestId('consent-status')).toHaveAttribute(
+      'data-consented',
+      'false',
+    );
+    const requestsAtRevoke = alice.youtubeRequests().length;
+    await alice.page.evaluate(() =>
+      (window as unknown as DispatchProbe).__releaseSave?.(),
+    );
+
+    // The released save may land (it was sent before the revocation), but the
+    // finish is over: no new YouTube request, no new preview, not finished.
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+    await alice.page.waitForTimeout(1500);
+    expect(alice.youtubeRequests()).toHaveLength(requestsAtRevoke);
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    const round = (await stateOf(stages[0].page))?.round;
+    expect(round?.submissionDoneIds).not.toContain(aliceId);
+    expect(round?.submissions?.[aliceId]?.media.startSeconds).not.toBe(5);
+    await expect(alice.page.getByTestId('submission-finished')).toHaveCount(0);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a rejected submit during Fertig is not retried and does not finish', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    // The first SUBMIT_SONG fails; every dispatched action type is recorded.
+    await alice.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      probe.__actions = [];
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      let failed = false;
+      session.dispatch = (action) => {
+        probe.__actions?.push(action.type);
+        if (action.type === 'SUBMIT_SONG' && !failed) {
+          failed = true;
+          return Promise.resolve({
+            status: 'rejected',
+            reason: 'CONNECTION_FAILED',
+          });
+        }
+        return original(action);
+      };
+    });
+    const actions = () =>
+      alice.page.evaluate(
+        () => (window as unknown as DispatchProbe).__actions ?? [],
+      );
+
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('submission-notice')).toHaveText(
+      'Connection failed. Please try again.',
+      { timeout: 15000 },
+    );
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+    await alice.page.waitForTimeout(500);
+    // One submit for this click, no silent second one, no finish.
+    expect(await actions()).toEqual(['SUBMIT_SONG']);
+    const round = (await stateOf(stages[0].page))?.round;
+    expect(round?.submissionDoneIds).not.toContain(aliceId);
+    await expect(alice.page.getByTestId('submission-finished')).toHaveCount(0);
+
+    // A new click is a new attempt: it submits again and finishes.
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('submission-finished')).toBeVisible({
+      timeout: 15000,
+    });
+    expect(await actions()).toEqual([
+      'SUBMIT_SONG',
+      'SUBMIT_SONG',
+      'FINISH_SUBMISSION',
+    ]);
+    await waitForSubmissionMedia(stages[0].page, aliceId, VALID_A);
+  } finally {
+    await closeStages(stages);
+  }
+});
