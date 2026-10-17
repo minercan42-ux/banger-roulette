@@ -15,7 +15,7 @@ Browserbasiertes Multiplayer-Partyspiel für 3-10 Spieler, die remote spielen. P
 - Desktop-Browser first, responsive bis 360 px Breite. Auf dem Handy spielbar, aber nicht primäres Ziel.
 
 ## 2a. Umgebung und Zugänge
-- Code liegt im privaten GitHub-Repo `minercan42-ux/banger-roulette`. Du pushst nur Feature-Branches und öffnest Pull Requests. Direkte Pushes auf main sind verboten. Da das Repo privat im Free-Plan liegt, setzt GitHub keine Branch Protection durch: Diese Regel gilt per Vereinbarung und ist nicht technisch erzwungen. Gemergt wird nur mit grüner CI, per Squash-Merge, durch den Nutzer oder nach seiner ausdrücklichen Freigabe.
+- Code liegt im öffentlichen GitHub-Repo `minercan42-ux/banger-roulette` (öffentlich seit 2026-10-15, siehe `docs/DECISIONS.md` D-009). Du pushst nur Feature-Branches und öffnest Pull Requests. Direkte Pushes auf main sind verboten. Branch Protection ist nicht eingerichtet: Diese Regel gilt per Vereinbarung und ist nicht technisch erzwungen. Gemergt wird per Squash-Merge durch den PM, sobald das Merge-Gate aus `docs/WORKFLOW.md` erfüllt ist (grüne CI, Review-PASS durch einen anderen Agent, PM-Visual-Gate bei visuellen Änderungen; Owner-Entscheidung D-001).
 - CI läuft über GitHub Actions (`.github/workflows/ci.yml`, bereits angelegt). Sie ruft die pnpm-Scripts `lint`, `typecheck`, `test`, `build`, `i18n:check` und `test:e2e` auf. Diese Script-Namen sind verbindlich, M0 muss sie in `package.json` anlegen.
 - Arbeitsregeln für alle Agents stehen in `AGENTS.md`.
 - Deployment erfolgt über die Git-Integration von Vercel: jeder PR bekommt ein Preview-Deployment, main geht auf Produktion. Du hast keinen Zugriff auf Vercel- oder Supabase-Admin-Konsolen und brauchst ihn auch nicht.
