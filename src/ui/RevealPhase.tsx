@@ -147,13 +147,13 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
       className="br-reveal space-y-4"
     >
       <Jackpot
-        key={reveal.roundNumber}
+        key={`jackpot-${reveal.roundNumber}`}
         winners={winners}
         now={reference}
         paused={reveal.pausedAt !== null}
       />
       <BangerShow
-        key={reveal.roundNumber}
+        key={`banger-${reveal.roundNumber}`}
         entries={bangers}
         now={reference}
         paused={reveal.pausedAt !== null}
