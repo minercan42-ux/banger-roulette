@@ -57,3 +57,4 @@ docs/          ADRs, ARCHITECTURE, SECURITY, OPEN_QUESTIONS, ROADMAP
 ```
 
 Product context for design and copy work (users, purpose, binding commitments): `PRODUCT.md` at the repo root. SPEC.md still wins on conflicts.
+Why things are the way they are (owner decisions and PM decisions on the owner's behalf): `docs/DECISIONS.md`. Read the entries relevant to your issue before changing behaviour they explain.
