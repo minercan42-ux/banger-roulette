@@ -234,6 +234,13 @@ const TWO_A = 'm8twoa00006';
 const TWO_B = 'm8twob00007';
 const TWO_C = 'm8twoc00008';
 
+declare global {
+  interface Window {
+    /** Test probe: when tones of the banger finale were scheduled (ms). */
+    __bangerStarts?: number[];
+  }
+}
+
 for (const reducedMotion of [false, true] as const) {
   test(`two bangers in one round: the show runs once, both entries keep the badge (${reducedMotion ? 'reduced motion' : 'full motion'})`, async ({
     browser,
@@ -273,6 +280,20 @@ for (const reducedMotion of [false, true] as const) {
                 }
               }
             }).observe(document.body, { childList: true, subtree: true });
+            // Count the banger sound too: a tone scheduled more than 3.5 s
+            // ahead is part of the banger finale and of nothing else.
+            const starts: number[] = [];
+            window.__bangerStarts = starts;
+            const nativeStart = AudioScheduledSourceNode.prototype.start;
+            AudioScheduledSourceNode.prototype.start = function (
+              this: AudioScheduledSourceNode,
+              when?: number,
+            ) {
+              if ((when ?? 0) - this.context.currentTime > 3.5) {
+                starts.push(performance.now());
+              }
+              return nativeStart.call(this, when);
+            };
           }),
         ),
       );
@@ -280,7 +301,20 @@ for (const reducedMotion of [false, true] as const) {
         song === 2 ? 4 : 10,
       );
 
+      // A pause inside the first show and a resume must neither remount the
+      // show nor replay its sound (the resumed render must use a fresh clock).
       const host = pages[0]!;
+      await expect(host.getByTestId('banger-show')).toBeVisible({
+        timeout: 10_000,
+      });
+      await host.waitForTimeout(800);
+      expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
+      await host.waitForTimeout(2000);
+      expect(
+        (await dispatch(host, { type: 'RESUME', forceBelowMinimum: false }))
+          .status,
+      ).toBe('accepted');
+
       const entries = host.getByTestId('reveal-entry');
       await expect(host.getByTestId('leaderboard')).toBeVisible({
         timeout: 25_000,
@@ -294,6 +328,17 @@ for (const reducedMotion of [false, true] as const) {
             () => document.documentElement.dataset.bangerMounts,
           ),
         ).toBe('1');
+        // One banger sound over the whole reveal: tones scheduled seconds
+        // ahead (the banger finale) only come from the banger recipe, and one
+        // play schedules them in one burst.
+        expect(
+          await page.evaluate(() => {
+            const starts = window.__bangerStarts ?? [];
+            return starts.filter(
+              (at, index) => index === 0 || at - starts[index - 1]! > 1000,
+            ).length;
+          }),
+        ).toBe(1);
         await expect(page.getByTestId('banger-show')).toHaveCount(0);
         await expect(page.getByTestId('jackpot-show')).toHaveCount(0);
       }
