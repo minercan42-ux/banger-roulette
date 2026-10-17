@@ -2851,6 +2851,10 @@ body {
   }
   .br-home__form {
     display: grid;
+    /* One column that may shrink below its content: an implicit auto track
+       takes the text input's intrinsic width as its minimum, and Firefox then
+       lays the join form 26 px wider than a 360 px viewport. */
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-3);
   }
 
