@@ -591,13 +591,28 @@ test('reload keeps the retained identity and score without game persistence', as
     // Three flat 5.0 songs tie, so every owner gets 5.0 plus the 2.0 bonus (tenths).
     expect(scoreBefore).toBe(70);
 
-    // Only the identity and the YouTube consent are stored locally, never the
-    // game (NFR-04).
+    // Before any preference is touched, only the identity and the YouTube
+    // consent are stored locally, never the game (NFR-04).
     const storageKeys = await member.evaluate(() =>
       Object.keys(localStorage).sort(),
     );
     expect(storageKeys).toEqual([
       'banger-roulette.clientId',
+      'banger-roulette.youtubeConsent',
+    ]);
+
+    // Changing the volume and the SFX toggle adds exactly the two preference
+    // keys and nothing else (#111).
+    await member.getByTestId('volume-toggle').click();
+    await member.getByTestId('playback-volume').fill('55');
+    await member.getByTestId('sfx-toggle').click();
+    const preferenceKeys = await member.evaluate(() =>
+      Object.keys(localStorage).sort(),
+    );
+    expect(preferenceKeys).toEqual([
+      'banger-roulette.clientId',
+      'banger-roulette.sfx',
+      'banger-roulette.volume',
       'banger-roulette.youtubeConsent',
     ]);
 

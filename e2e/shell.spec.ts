@@ -252,13 +252,14 @@ const PRIVACY = {
     embed: 'youtube-nocookie.com eingebettet',
     noTracking: 'keine Analyse-Tools und setzt keine Cookies',
     storage:
-      'zufällige Spieler-ID und deine YouTube-Zustimmung im localStorage',
+      'zufällige Spieler-ID, deine YouTube-Zustimmung und deine Einstellungen für Lautstärke, Stummschaltung und Soundeffekte, alles im localStorage',
   },
   en: {
     title: 'Privacy',
     embed: 'embedded from youtube-nocookie.com',
     noTracking: 'no analytics and sets no cookies',
-    storage: 'random player ID and your YouTube consent are stored',
+    storage:
+      "random player ID, your YouTube consent and your settings for volume, mute and sound effects are stored, all in your browser's localStorage",
   },
 } as const;
 
