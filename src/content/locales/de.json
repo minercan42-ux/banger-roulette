@@ -364,6 +364,8 @@
     "round": "Runde {{number}} · {{genre}}",
     "roundNoSongs": "Kein Song in dieser Runde.",
     "roundAllFailed": "Alle Songs dieser Runde bekamen einen Genre-Fail.",
+    "roundNoRaters": "Alle haben denselben Song eingereicht, alle bekommen den Festbonus.",
+    "roundNoWinner": "Diese Runde hat keinen Rundensieger.",
     "rematch": "Nochmal",
     "waitingHost": "Warte, bis der Host eine neue Runde startet …"
   },

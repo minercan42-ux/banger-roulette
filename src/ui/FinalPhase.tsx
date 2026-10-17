@@ -5,6 +5,7 @@ import {
   selectResults,
   selectStandings,
   selectViewerPermissions,
+  type RoundResultView,
   type StandingView,
 } from '../engine/selectors';
 import type { GameSession } from '../net/session';
@@ -16,6 +17,23 @@ interface FinalPhaseProps {
   state: GameState;
   viewerId: string;
   viewerConnectionId: string | null;
+}
+
+/** Why a round has no winning banger, derived from how its songs were scored. */
+function noWinnerKey(result: RoundResultView): string {
+  if (result.reason === 'noSongs') {
+    return 'final.roundNoSongs';
+  }
+  const { entries } = result;
+  if (entries.length > 0) {
+    if (entries.every((entry) => entry.genreFailed)) {
+      return 'final.roundAllFailed';
+    }
+    if (entries.every((entry) => entry.basis === 'noRaters')) {
+      return 'final.roundNoRaters';
+    }
+  }
+  return 'final.roundNoWinner';
 }
 
 /** FR-62 finale: podium, full standings, every round-winning banger, rematch. */
@@ -190,11 +208,7 @@ export function FinalPhase({
                     ))}
                   </ul>
                 ) : (
-                  <p className="br-read mt-1">
-                    {result.reason === 'noSongs'
-                      ? t('final.roundNoSongs')
-                      : t('final.roundAllFailed')}
-                  </p>
+                  <p className="br-read mt-1">{t(noWinnerKey(result))}</p>
                 )}
               </li>
             );
