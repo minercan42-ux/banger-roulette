@@ -317,6 +317,10 @@ function noteCreditTail(tail: string, versionTexts: Set<string>): void {
 
 function parseSong(media: MatchMedia): ParsedSong {
   const title = normalizeText(media.title);
+  // Read the dash parts of the raw title before anything is dropped: `parts`
+  // below has already lost bracket, pipe, credit and noise text, so the track
+  // side of an artist/track pair is only recoverable from this copy.
+  const rawParts = title.split(/\s-+\s/);
   const { rest, inner } = extractBrackets(title);
   const [main, ...afterPipe] = rest.split('|');
   // Preserve empty parts: an explicit but missing track must not fall back to
@@ -378,15 +382,19 @@ function parseSong(media: MatchMedia): ParsedSong {
   }
   const track = collapse(trimTrailingNoise(toWords(trackSource)));
   // The raw text the title carried before noise words, credits, pipe and
-  // bracket segments were dropped: the track part itself for an artist/track
-  // pair, the whole title otherwise.
-  const originalTrack = collapse(
-    toWords(credited.length === 2 ? parts[1] : title),
-  );
+  // bracket segments were dropped: the track side for an artist/track title,
+  // the whole title otherwise. It has to come from the raw title, never from
+  // `parts`: "| Song", "| Music", "(Song)" and "[Song]" are already gone there,
+  // which would make "Adele - Adele | Song" look like the genuine track
+  // "Adele". When the raw title carries no such second part at all (its only
+  // separator sat inside or next to a dropped bracket, "Adele(Live)- Adele"),
+  // the track side stays empty, which is uncertain and never links.
+  const rawTrack = credited.length === 2 ? (rawParts[1] ?? '') : title;
+  const originalTrack = collapse(toWords(rawTrack));
   // Stripping a credit, a bare noise suffix or a pipe/bracket segment must not
-  // manufacture a track equal to the artist ("Adele | Song" on the Adele Topic
-  // channel is not the track "Adele"). Keep that ambiguous parse out of
-  // metadata matching.
+  // manufacture a track equal to the artist ("Adele - Adele (Song)" and
+  // "Adele | Song" on the Adele Topic channel are not the track "Adele"). Keep
+  // that ambiguous parse out of metadata matching.
   channelOk &&= track !== '' && !(track === artist && track !== originalTrack);
   if (hasMarker(track)) {
     versionTexts.add(track);

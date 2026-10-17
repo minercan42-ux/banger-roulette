@@ -560,6 +560,41 @@ const separate: Row[] = [
     upload('Adele - Adele', 'Adele - Topic', 295),
   ],
   [
+    'artist-named track behind a pipe segment',
+    upload('Adele - Adele | Song', 'Adele - Topic', 295),
+    upload('Adele - Adele | Music', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a parenthesised segment',
+    upload('Adele - Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele - Adele (Music)', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a square-bracket segment',
+    upload('Adele - Adele [Song]', 'Adele - Topic', 295),
+    upload('Adele - Adele [Music]', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a pipe versus a parenthesised segment',
+    upload('Adele - Adele | Song', 'Adele', 295),
+    upload('Adele - Adele (Music)', 'Adele', 295),
+  ],
+  [
+    'artist-named track behind a pipe segment is not the bare artist',
+    upload('Adele - Adele | Song', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a parenthesised segment is not the bare artist',
+    upload('Adele - Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'artist-named track behind a square-bracket segment is not the bare artist',
+    upload('Adele - Adele [Song]', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
     'accepted false negative: one-sided featured credit (A & B vs A feat. B)',
     upload('Pink & Nate - Just Give Me a Reason', 'Pink', 242),
     upload('Pink - Just Give Me a Reason (feat. Nate)', 'Pink - Topic', 242),
@@ -603,6 +638,10 @@ describe('isSameSong', () => {
     'Adele -  - Official Audio',
     'Adele - Adele Lyrics',
     'Adele - Adele ft. Someone',
+    'Adele - Adele (Official Audio)',
+    'Adele - Adele [HD]',
+    'Adele - Adele | Official Video',
+    'Adele(Live)- Adele',
   ])(
     'never invents an artist-named track from the uncertain title %s',
     (title) => {
@@ -632,6 +671,39 @@ describe('isSameSong', () => {
     const pipe = upload('Adele | Song', 'Adele - Topic', 295);
     const bracket = upload('Adele (Song)', 'Adele - Topic', 295);
     expect(isSameSong(pipe, bracket)).toBe(false);
+  });
+
+  it('never links an artist-named track recovered from a dropped title segment', () => {
+    const variants = [
+      'Adele - Adele | Song',
+      'Adele - Adele | Music',
+      'Adele - Adele (Song)',
+      'Adele - Adele (Music)',
+      'Adele - Adele [Song]',
+      'Adele - Adele [Music]',
+    ];
+    const bare = upload('Adele', 'Adele - Topic', 295);
+    const uploads = variants.map((title) =>
+      upload(title, 'Adele - Topic', 295),
+    );
+    for (const one of uploads) {
+      expect(isSameSong(one, bare)).toBe(false);
+      expect(isSameSong(bare, one)).toBe(false);
+      expect(isSameSong(one, { ...bare, videoId: one.videoId })).toBe(true);
+      for (const other of uploads) {
+        if (one === other) {
+          continue;
+        }
+        expect(isSameSong(one, other)).toBe(false);
+        expect(isSameSong(other, one)).toBe(false);
+      }
+    }
+    // The genuine, unstripped self-titled track still links the bare artist
+    // upload, and never links an uncertain variant.
+    const genuine = upload('Adele - Adele', 'Adele - Topic', 295);
+    expect(isSameSong(genuine, bare)).toBe(true);
+    expect(isSameSong(bare, genuine)).toBe(true);
+    expect(isSameSong(genuine, uploads[0])).toBe(false);
   });
 
   it('keeps an identical videoId linked even on a denylisted channel', () => {
@@ -673,6 +745,17 @@ describe('groupSameSongs', () => {
       'Adele',
     ].map((title) => upload(title, 'Adele - Topic', 295));
     expect(groupSameSongs(songs)).toEqual([[0], [1], [2, 3]]);
+  });
+
+  it('does not group artist-named tracks that only survive dropping a segment', () => {
+    const songs = [
+      'Adele - Adele',
+      'Adele',
+      'Adele - Adele | Song',
+      'Adele - Adele (Music)',
+      'Adele - Adele [Song]',
+    ].map((title) => upload(title, 'Adele - Topic', 295));
+    expect(groupSameSongs(songs)).toEqual([[0, 1], [2], [3], [4]]);
   });
 
   it('is empty for no input and singleton for one', () => {
