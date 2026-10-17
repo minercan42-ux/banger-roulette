@@ -333,6 +333,13 @@ async function ratePlaying(page: Page, value = 8): Promise<RatingSummary> {
   }
 }
 
+/**
+ * Both row types render the total in a `br-lb__pts` cell: the displayed number
+ * (`aria-hidden`, "10.0") next to its `sr-only` label ("10.0 Punkte"). Scanning
+ * the row's spans for the label matched that cell's wrapper as well, whose
+ * textContent concatenates both numbers ("10.010.0 Punkte" -> 10.01); reading
+ * the cell's `aria-hidden` number takes exactly one formatted score per row.
+ */
 async function readScores(
   page: Page,
   testId: 'leaderboard-row' | 'final-standing-row',
@@ -343,10 +350,10 @@ async function readScores(
   for (let index = 0; index < count; index += 1) {
     const row = rows.nth(index);
     const id = (await row.getAttribute('data-player-id')) ?? '';
-    const texts = await row
-      .locator('span:not([data-testid])')
-      .allTextContents();
-    const scoreText = texts.find((text) => /Punkte|points/.test(text)) ?? '';
+    const scoreText = await row
+      .locator('.br-lb__pts [aria-hidden="true"]')
+      .first()
+      .innerText();
     const match = scoreText.match(/-?\d+(?:\.\d+)?/);
     scores.set(id, match ? Number(match[0]) : Number.NaN);
   }
