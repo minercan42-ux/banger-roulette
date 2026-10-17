@@ -309,8 +309,6 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
   - Künstler-Jaccard ab 0.5: "Pink" wäre "Pink Floyd" geworden.
 - **Belege:** #106, PR #114, #115, PR #116, `docs/OPEN_QUESTIONS.md`
 
-## Beschlossen, Umsetzung offen
-
 ### D-040 Nur noch "Fertig", Vorschau startet automatisch
 
 - **Datum:** 2026-10-17
@@ -318,18 +316,25 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Entscheidung:**
   - "Einreichung speichern" entfällt. "Fertig" reicht den Song ein und wartet auf die Bestätigung des Hosts.
   - Die Vorschau startet etwa 1 s nach dem Einfügen eines gültigen Links von selbst.
+  - (Owner) Der bestätigte Link wird im Hintergrund automatisch eingereicht, sobald die Vorschau läuft; ein Song zählt also auch ohne "Fertig" zum Ablauf der Zeit (Owner-Entscheidung 2026-10-17).
+  - (PM) Startpunkt-Änderungen werden nach 1 s nachgespeichert.
+  - (PM) Der Button "Vorschau abspielen" erscheint nur noch, wenn der Browser Autoplay blockiert.
+  - (PM) "Fertig" nach einem Neuladen ohne YouTube-Zustimmung schließt ab, wenn der Host genau diesen Link mit diesem Startpunkt schon hat (keine Anfrage an YouTube nötig); ohne gespeicherten Song bleibt der Zustimmungs-Hinweis.
+  - (PM) Ein abgelehntes Einreichen beendet den Klick mit Fehlermeldung, ohne stillen zweiten Versuch und ohne "fertig".
 - **Warum:** Wer den Link einfügt und sofort auf "Fertig" drückt, bekam eine Bestätigung, aber sein Song fehlte. In echten Spielen passiert das oft. Ein eigener Klick auf "Vorschau" ist unnötig.
-- **Belege:** #108
+- **Belege:** #108, [PR #121](https://github.com/minercan42-ux/banger-roulette/pull/121)
 
 ### D-041 Genre-Fail als Chip statt der 0
 
 - **Datum:** 2026-10-17
 - **Wer:** Owner (Chip mit Symbol), PM (zählt als 0)
-- **Entscheidung:** Der eigene Genre-Fail-Button entfällt, ein Symbol-Chip ersetzt die 0. Er setzt das Genre-Fail-Flag und zählt zugleich als Bewertung 0.
+- **Entscheidung:**
+  - Der eigene Genre-Fail-Button entfällt, ein Symbol-Chip ersetzt die 0. Er setzt das Genre-Fail-Flag und zählt zugleich als Bewertung 0.
+  - (PM) Der Genre-Fail-Chip ist der Bewertungswert 0; das eigene Event SET_GENRE_FAIL und das Feld genreFailFlags entfallen; das Flag ist bis zum Ende der Wiedergabe änderbar, eine Zahl hebt es auf.
 - **Warum:**
   - Ein Knopf weniger.
   - Wer "passt nicht zum Genre" sagt, gibt dem Song inhaltlich keine Punkte. So bleibt die Bedeutung des alten 0-Chips erhalten.
-- **Belege:** #109
+- **Belege:** #109, [PR #120](https://github.com/minercan42-ux/banger-roulette/pull/120)
 
 ### D-042 Skip-Abstimmung ab 90 %
 
@@ -338,15 +343,22 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Entscheidung:**
   - Wer bewertet hat, kann für Skip stimmen. Besitzer des Songs dürfen auch ohne Bewertung.
   - Ab 90 % der aktiven Spieler geht es für alle synchron zum nächsten Song.
+  - (PM) Schwelle ceil(9n/10) über die verbundenen Teilnehmer der Runde: bei 3 bis 9 Spielern müssen alle zustimmen, bei 10 Spielern 9. Getrennte Spieler zählen nicht (ihre Stimme zählt nach dem Wiederverbinden wieder). Nicht-Owner erst nach ihrer Bewertung (auch Genre-Fail), Owner jederzeit; Stimme zurücknehmbar. Netzwerkevent SKIP_VOTE.
 - **Warum:** Man muss nicht jeden Clip voll hören. Die Hürde von 90 % und die vorherige Bewertung verhindern, dass ein Song weggeskippt wird, bevor alle ihn gehört und bewertet haben.
-- **Belege:** #110
+- **Belege:** #110, [PR #122](https://github.com/minercan42-ux/banger-roulette/pull/122)
 
 ### D-043 Lautstärke startet bei 20 % und wird gespeichert, ohne Cookies
 
 - **Datum:** 2026-10-17
 - **Wer:** Owner (20 %, merken), PM (localStorage)
-- **Entscheidung:** Die Lautstärke startet bei 20 %. Lautstärke und Stummschaltung werden im localStorage gespeichert, nicht in Cookies.
+- **Entscheidung:**
+  - Die Lautstärke startet bei 20 %. Lautstärke und Stummschaltung werden im localStorage gespeichert, nicht in Cookies.
+  - (PM) Auch SFX an/aus wird gespeichert (banger-roulette.sfx). Nichts wird geschrieben, bevor der Nutzer eine Einstellung ändert. Gespeichert werden nur Präferenzen, kein Tracking, keine Cookies.
 - **Warum:**
   - YouTube startete zu laut.
   - Cookies würden bei jedem Aufruf an den Server gehen, ohne dass das etwas bringt, und der Datenschutzhinweis verspricht "keine Cookies".
-- **Belege:** #111
+- **Belege:** #111, [PR #119](https://github.com/minercan42-ux/banger-roulette/pull/119)
+
+## Beschlossen, Umsetzung offen
+
+Derzeit nichts offen.
