@@ -85,7 +85,7 @@
   --ease-wheel: cubic-bezier(0.12, 0.62, 0.08, 1);
   --ease-wobble: cubic-bezier(0.45, 0, 0.55, 1);
   --ease-pixel: steps(4, end);
-  --font-pixel: 'Jersey 10', ui-monospace, monospace;
+  --font-pixel: 'Jersey 10', 'Jersey 10 Fallback', ui-monospace, monospace;
   --font-label: Silkscreen, ui-monospace, monospace;
   --font-text: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -95,6 +95,25 @@
   src: url('/fonts/Jersey10-Regular.woff2') format('woff2');
   font-weight: 400;
   font-display: swap;
+}
+
+/*
+  Stand-in for Jersey 10 while it loads. Jersey 10 sets about 0.8 times as wide
+  as Arial, ui-monospace is far wider, so a heading that fits one line in
+  Jersey wrapped to two in the fallback and jumped back on swap (the forms
+  moved by a line on /r/:code, #83). Scaled Arial wraps like the real face.
+  Capitals are narrower still (about 0.6), so the all-caps logo has its own.
+*/
+@font-face {
+  font-family: 'Jersey 10 Fallback';
+  src: local('Arial'), local('Liberation Sans'), local('Helvetica');
+  size-adjust: 80%;
+}
+
+@font-face {
+  font-family: 'Jersey 10 Fallback Caps';
+  src: local('Arial'), local('Liberation Sans'), local('Helvetica');
+  size-adjust: 60%;
 }
 
 @font-face {
@@ -241,7 +260,11 @@
 
   /* ---------- Logo (type only, no mark) ---------- */
   .br-logo {
-    font: 400 64px/56px var(--font-pixel);
+    font:
+      400 64px/56px 'Jersey 10',
+      'Jersey 10 Fallback Caps',
+      ui-monospace,
+      monospace;
     letter-spacing: 1px;
     color: var(--color-cream);
     text-shadow:

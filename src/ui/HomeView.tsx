@@ -111,6 +111,9 @@ export function HomeView({
         and without a test id, so they only reserve their height. Swapping a
         short "Reconnecting" line for the forms moved the footer and, through
         the scrollbar that appeared, the whole panel (CLS on /r/:code, #53).
+        The same goes for the "enter a nickname" notice a new visitor gets once
+        the identity check resolves: a hidden copy of it holds its slot while
+        the check runs, so the fields below never move (#83).
       */}
       <div className="relative">
         {joining && (
@@ -129,6 +132,12 @@ export function HomeView({
           inert={joining}
           className={joining ? 'br-home__forms invisible' : 'br-home__forms'}
         >
+          {joining && (
+            <p aria-hidden="true" className="br-notice">
+              {t('home.identityMissing')}
+            </p>
+          )}
+
           {identityMissing && (
             <p
               data-testid="identity-missing"

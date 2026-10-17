@@ -193,8 +193,11 @@ export function Shell({ session }: { session: GameSession }) {
     (snapshot.error !== null && TRANSPORT_ERRORS.has(snapshot.error)
       ? snapshot.error
       : null);
+  // While a deep link reconnects, HomeView's own "Reconnecting" line speaks for
+  // the connection; a second "connecting" banner above the forms would push
+  // them down and back up again (#83).
   const showStatus =
-    snapshot.status !== 'idle' && snapshot.status !== 'connected';
+    !joining && snapshot.status !== 'idle' && snapshot.status !== 'connected';
 
   const brand = (
     <div className="br-table__brand">
