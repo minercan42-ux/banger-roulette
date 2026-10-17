@@ -11,7 +11,7 @@ web
 ## Users
 
 - **(owner)** Primary users are groups of 3-10 friends playing remotely, each on their own device (phone or PC), typically alongside a voice or video call.
-- **(repo)** SPEC.md scopes the MVP to a private circle of friends and keeps a later public version (phase 2) open without building it. Desktop browser first, responsive down to 360 px width, playable on a phone but not the primary target (SPEC.md section 2). The owner's "phone or PC" statement is the current word on device mix; the desktop-first priority in SPEC.md has not been revised.
+- **(owner)** Desktop first (owner decision 2026-10-17, confirms SPEC.md section 2): the desktop browser is the primary target; the layout stays responsive and playable down to 360 px width, but phone is not the primary target.
 - **(repo)** A room holds 3-10 players; the host is one of them. Players joining a running game start as spectators and play from the next round (FR-05).
 
 ## Product Purpose
