@@ -247,7 +247,18 @@ test('"Ohne Videos": the game runs without any request to YouTube', async ({
     await expect(
       host.page.getByTestId('submission-consent-required'),
     ).toBeVisible();
-    await expect(host.page.getByTestId('load-preview')).toBeDisabled();
+    // A pasted link starts no preview and sends no request without consent.
+    await host.page
+      .getByTestId('song-link')
+      .fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    await host.page.waitForTimeout(1500);
+    await expect(
+      host.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    expect(host.youtubeRequests()).toEqual([]);
+    await expect(
+      host.page.getByTestId('submission-consent-required'),
+    ).toBeVisible();
 
     const medias = pages.map((_, index) => mediaFor(1, index));
     for (const [index, page] of pages.entries()) {

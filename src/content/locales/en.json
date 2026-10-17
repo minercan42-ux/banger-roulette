@@ -211,9 +211,8 @@
     "linkHint": "Supported: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com and m.youtube.com. Other domains are rejected.",
     "linkInvalid": "Not a valid YouTube link. Please enter a supported URL.",
     "consentRequired": "YouTube videos are off. Grant consent in the menu to listen and validate.",
-    "loadPreview": "Load preview",
     "previewPlay": "Play preview",
-    "statusIdle": "No preview loaded",
+    "statusIdle": "Paste a link, the preview starts by itself.",
     "statusLoading": "Loading preview …",
     "statusReady": "Preview ready",
     "statusPlaying": "Preview playing",
@@ -223,7 +222,7 @@
     "previewUnavailable": "The preview is unavailable (code {{code}}). The video is therefore not confirmed.",
     "previewFailed": "The preview could not be started. Please try again.",
     "metadataFailed": "The metadata could not be loaded.",
-    "autoplayBlocked": "The browser blocked playback. Please click “Play preview” again.",
+    "autoplayBlocked": "Your browser blocked the preview. Click “Play preview”, then “Done”.",
     "startLabel": "Start point (seconds)",
     "setStart": "Set start point",
     "minus1": "−1 s",
@@ -232,8 +231,6 @@
     "plus5": "+5 s",
     "durationLabel": "Video length: {{duration}} s",
     "clipLabel": "Clip: {{clip}} s from the start point",
-    "save": "Save submission",
-    "savedNotice": "Submission saved.",
     "savedHeading": "Your submission",
     "savedStart": "Starts at {{start}}",
     "remove": "Remove submission",
@@ -243,7 +240,8 @@
     "progressDone": "done",
     "progressOpen": "open",
     "spectatorOnly": "You are a spectator and may submit from the next round.",
-    "previewRequired": "A playing preview first confirms that the video is playable."
+    "finishing": "Submitting …",
+    "finishSkipHint": "Without a link you sit this round out."
   },
   "linked": {
     "heading": "Spiritually Linked",

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   selectSettings,
@@ -22,6 +28,7 @@ import {
   type PreviewPlayer,
   type PreviewStatus,
 } from '../player/preview';
+import type { Media } from '../shared/primitives';
 import type { GameState } from '../shared/game';
 import { useEmbedConsent } from './embed-consent';
 import { formatDuration, genreName } from './format';
@@ -34,8 +41,67 @@ import { SongCard } from './pf/SongCard';
 import { PhaseTimer } from './pf/Stat';
 import { useVolumeStore } from './volume-store';
 
+/** Quiet time after the last link edit before the preview starts by itself. */
+const AUTO_PREVIEW_DEBOUNCE_MS = 1000;
+/** Quiet time after the last start-point edit before it is saved. */
+const AUTOSAVE_DEBOUNCE_MS = 1000;
+/** How long "Fertig" waits for a loading preview to prove the video plays. */
+const FINISH_VALIDATION_TIMEOUT_MS = 15_000;
+
 /** Current preview lifecycle, extended with "nothing loaded yet" and "loading". */
 type PanelStatus = PreviewStatus | { type: 'idle' } | { type: 'loading' };
+
+type ValidationResult =
+  'playing' | 'error' | 'autoplayBlocked' | 'aborted' | 'timeout';
+
+type SaveOutcome =
+  | { kind: 'saved' }
+  | { kind: 'skipped' }
+  | { kind: 'rejected'; reason: string };
+
+interface ValidationWaiter {
+  generation: number;
+  settle: (result: ValidationResult) => void;
+}
+
+/** Mutable panel internals that async callbacks and timers share. */
+interface PanelRefs {
+  generation: number;
+  abort: AbortController | null;
+  player: PreviewPlayer | null;
+  host: HTMLDivElement | null;
+  /** Set while the current generation's preview proved the video plays. */
+  validated: { videoId: string; duration: number } | null;
+  metadata: OEmbedMetadata | null;
+  status: PanelStatus;
+  /** The video the current preview generation was started for. */
+  videoId: string | null;
+  previewTimer: ReturnType<typeof setTimeout> | null;
+  autosaveTimer: ReturnType<typeof setTimeout> | null;
+  /** The newest in-flight submit; saves queue behind it. */
+  saving: Promise<SaveOutcome> | null;
+  waiters: Set<ValidationWaiter>;
+  finishing: boolean;
+}
+
+/** The latest rendered inputs, readable from timers and async callbacks. */
+interface DraftRef {
+  linkText: string;
+  startSeconds: number;
+  permissions: ViewerPermissions;
+  consent: boolean;
+}
+
+function clearTimers(refs: PanelRefs) {
+  if (refs.previewTimer !== null) {
+    clearTimeout(refs.previewTimer);
+    refs.previewTimer = null;
+  }
+  if (refs.autosaveTimer !== null) {
+    clearTimeout(refs.autosaveTimer);
+    refs.autosaveTimer = null;
+  }
+}
 
 interface SubmissionPanelProps {
   session: GameSession;
@@ -89,9 +155,11 @@ function statusKey(status: PanelStatus): string {
 /**
  * FR-20..FR-26 submission UI. All network/player work is generation-guarded:
  * a metadata or preview result for a superseded link is discarded and can
- * neither flip the current status nor enable save. Consent gates every YouTube
- * load (script, iframe, thumbnail); a reload shows the saved submission as
- * text only until the tab consents again.
+ * neither flip the current status nor validate the link. A validated preview
+ * submits its link by itself; "Fertig" submits whatever is pasted and
+ * finishes only after the host holds it. Consent gates every YouTube load
+ * (script, iframe, thumbnail); a reload shows the saved submission as text
+ * only until the tab consents again.
  */
 export function SubmissionPanel({
   session,
@@ -123,25 +191,52 @@ export function SubmissionPanel({
   const [status, setStatus] = useState<PanelStatus>({ type: 'idle' });
   const [metadata, setMetadata] = useState<OEmbedMetadata | null>(null);
   const [busy, setBusy] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
 
-  const stateRef = useRef({
+  const stateRef = useRef<PanelRefs>({
     generation: 0,
-    abort: null as AbortController | null,
-    player: null as PreviewPlayer | null,
-    host: null as HTMLDivElement | null,
-    validated: null as { videoId: string; duration: number } | null,
+    abort: null,
+    player: null,
+    host: null,
+    validated: null,
+    metadata: null,
+    status: { type: 'idle' },
+    videoId: null,
+    previewTimer: null,
+    autosaveTimer: null,
+    saving: null,
+    waiters: new Set(),
+    finishing: false,
+  });
+  // The latest draft for timers and async callbacks, which must never read a
+  // stale render closure.
+  const draftRef = useRef<DraftRef>({
+    linkText: initial.link,
+    startSeconds: initial.startSeconds,
+    permissions,
+    consent,
+  });
+  useLayoutEffect(() => {
+    draftRef.current = { linkText, startSeconds, permissions, consent };
   });
 
   const teardown = useCallback(() => {
-    stateRef.current.generation += 1;
-    stateRef.current.abort?.abort();
-    stateRef.current.abort = null;
-    stateRef.current.player?.destroy();
-    stateRef.current.player = null;
-    stateRef.current.validated = null;
+    const refs = stateRef.current;
+    refs.generation += 1;
+    clearTimers(refs);
+    refs.abort?.abort();
+    refs.abort = null;
+    refs.player?.destroy();
+    refs.player = null;
+    refs.validated = null;
+    refs.metadata = null;
+    refs.status = { type: 'idle' };
+    refs.videoId = null;
+    for (const waiter of [...refs.waiters]) {
+      waiter.settle('aborted');
+    }
   }, [stateRef]);
-
   useEffect(() => teardown, [teardown]);
 
   // The top-bar volume control also drives the preview player.
@@ -202,132 +297,283 @@ export function SubmissionPanel({
     parsed !== null &&
     status.type === 'playing' &&
     metadata?.videoId === parsed.videoId;
-  const canSave = editable && previewValid;
   const savedMedia = choices.media;
 
-  async function loadPreview() {
-    if (parsed === null) {
-      setNoticeKey('submission.linkInvalid');
-      return;
-    }
-    if (!consent) {
-      return;
-    }
-    if (!permissions.canSubmit || busy) {
-      return;
-    }
+  function latestMedia(): Media | null {
+    const snapshot = session.getSnapshot();
+    return snapshot.state === null
+      ? null
+      : selectViewerChoices(snapshot.state, viewerId).media;
+  }
+
+  function publishStatus(next: PanelStatus) {
+    stateRef.current.status = next;
+    setStatus(next);
+  }
+
+  /** Drops the preview and its UI state, e.g. after a validation timeout. */
+  function discardPreview() {
     teardown();
-    const generation = (stateRef.current.generation += 1);
+    setStatus({ type: 'idle' });
+    setMetadata(null);
+  }
+
+  function settleWaiters(generation: number, result: ValidationResult) {
+    for (const waiter of [...stateRef.current.waiters]) {
+      if (waiter.generation === generation) {
+        waiter.settle(result);
+      }
+    }
+  }
+
+  /**
+   * Resolves once the preview of `generation` validates the link. A preview
+   * that is already playing resolves at once; a stale generation is aborted.
+   */
+  function waitForValidation(
+    generation: number,
+    timeoutMs: number,
+  ): Promise<ValidationResult> {
+    const refs = stateRef.current;
+    if (generation !== refs.generation) {
+      return Promise.resolve('aborted');
+    }
+    if (refs.validated !== null) {
+      return Promise.resolve('playing');
+    }
+    if (refs.status.type === 'error') {
+      return Promise.resolve('error');
+    }
+    return new Promise<ValidationResult>((resolve) => {
+      const waiter: ValidationWaiter = {
+        generation,
+        settle: (result) => {
+          clearTimeout(timer);
+          refs.waiters.delete(waiter);
+          resolve(result);
+        },
+      };
+      const timer = setTimeout(() => waiter.settle('timeout'), timeoutMs);
+      refs.waiters.add(waiter);
+    });
+  }
+
+  /** The media the validated preview stands for, or null while unvalidated. */
+  function buildMedia(): Media | null {
+    const refs = stateRef.current;
+    const draft = draftRef.current;
+    const link = parseYouTubeLink(draft.linkText);
+    const { validated, metadata: meta } = refs;
+    if (
+      !draft.permissions.canSubmit ||
+      link === null ||
+      validated === null ||
+      meta === null ||
+      validated.videoId !== link.videoId ||
+      meta.videoId !== link.videoId
+    ) {
+      return null;
+    }
+    return {
+      videoId: link.videoId,
+      title: meta.title,
+      channel: meta.channel,
+      thumbnail: meta.thumbnail,
+      durationSeconds: validated.duration,
+      startSeconds: clampStart(draft.startSeconds, validated.duration),
+    };
+  }
+
+  /**
+   * Submits the validated draft. Saves are serialized through `saving`, so a
+   * later call sees the result of an earlier one and an unchanged draft sends
+   * nothing.
+   */
+  function save(): Promise<SaveOutcome> {
+    const refs = stateRef.current;
+    const previous = refs.saving;
+    const run = (async (): Promise<SaveOutcome> => {
+      await previous;
+      const media = buildMedia();
+      if (media === null) {
+        return { kind: 'skipped' };
+      }
+      const current = latestMedia();
+      if (
+        current !== null &&
+        current.videoId === media.videoId &&
+        current.startSeconds === media.startSeconds
+      ) {
+        return { kind: 'saved' };
+      }
+      const result = await session.dispatch({ type: 'SUBMIT_SONG', media });
+      return result.status === 'rejected'
+        ? { kind: 'rejected', reason: result.reason }
+        : { kind: 'saved' };
+    })();
+    refs.saving = run;
+    void run.then(() => {
+      if (refs.saving === run) {
+        refs.saving = null;
+      }
+    });
+    return run;
+  }
+
+  function autosave() {
+    void save().then((outcome) => {
+      if (outcome.kind === 'rejected') {
+        setNoticeKey(`errors.${outcome.reason}`);
+      }
+    });
+  }
+
+  /** Start-point edits of a validated preview are saved after a quiet second. */
+  function scheduleAutosave() {
+    const refs = stateRef.current;
+    if (refs.validated === null) {
+      return;
+    }
+    if (refs.autosaveTimer !== null) {
+      clearTimeout(refs.autosaveTimer);
+    }
+    refs.autosaveTimer = setTimeout(() => {
+      refs.autosaveTimer = null;
+      autosave();
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  function updateStart(next: (current: number) => number) {
+    setStartSeconds(next);
+    scheduleAutosave();
+  }
+
+  /**
+   * Starts the preview of one link and returns its generation. Everything
+   * async below is guarded by that generation: a result for a replaced link
+   * can neither flip the status nor validate anything.
+   */
+  function startPreview(videoId: string, startAt: number): number {
+    teardown();
+    const refs = stateRef.current;
+    const generation = (refs.generation += 1);
     const controller = new AbortController();
-    stateRef.current.abort = controller;
-    setStatus({ type: 'loading' });
+    refs.abort = controller;
+    refs.videoId = videoId;
+    publishStatus({ type: 'loading' });
     setMetadata(null);
     setNoticeKey(null);
-    const signal = controller.signal;
+    void runPreview(generation, videoId, startAt, controller.signal);
+    return generation;
+  }
+
+  async function runPreview(
+    generation: number,
+    videoId: string,
+    startAt: number,
+    signal: AbortSignal,
+  ) {
+    const refs = stateRef.current;
     try {
-      const meta = await fetchMetadata(parsed.videoId, signal);
-      if (generation !== stateRef.current.generation) {
+      const meta = await fetchMetadata(videoId, signal);
+      if (generation !== refs.generation) {
         return;
       }
+      refs.metadata = meta;
       setMetadata(meta);
-      const host = stateRef.current.host;
+      const host = refs.host;
       if (host === null) {
         throw new Error('preview host missing');
       }
       const player = await createPreview(host, {
-        videoId: parsed.videoId,
-        startSeconds,
+        videoId,
+        startSeconds: startAt,
         volume: useVolumeStore.getState().volume,
         muted: useVolumeStore.getState().muted,
         title: t('submission.previewPlay'),
         signal,
         onStatus: (next) => {
-          if (generation !== stateRef.current.generation) {
+          if (generation !== refs.generation) {
             return;
           }
           if (next.type === 'playing') {
-            stateRef.current.validated = {
-              videoId: parsed.videoId,
-              duration: next.durationSeconds,
-            };
+            refs.validated = { videoId, duration: next.durationSeconds };
             setStartSeconds((current) =>
               clampStart(current, next.durationSeconds),
             );
           } else {
-            stateRef.current.validated = null;
+            refs.validated = null;
           }
-          setStatus(next);
+          publishStatus(next);
+          if (next.type === 'playing') {
+            autosave();
+            settleWaiters(generation, 'playing');
+          } else if (next.type === 'error') {
+            settleWaiters(generation, 'error');
+          } else if (next.type === 'autoplayBlocked') {
+            settleWaiters(generation, 'autoplayBlocked');
+          }
         },
       });
-      if (generation !== stateRef.current.generation) {
+      if (generation !== refs.generation) {
         player.destroy();
         return;
       }
-      stateRef.current.player = player;
+      refs.player = player;
       // The control may have moved while the player was loading.
       player.setVolume(useVolumeStore.getState().volume);
       player.setMuted(useVolumeStore.getState().muted);
+      if (refs.status.type !== 'error') {
+        player.play();
+      }
     } catch (error) {
-      if (generation !== stateRef.current.generation) {
+      if (generation !== refs.generation) {
         return;
       }
       if (error instanceof PreviewError && error.code === 'ABORTED') {
         return;
       }
-      setStatus({ type: 'error', code: 0 });
+      publishStatus({ type: 'error', code: 0 });
       setNoticeKey(
         error instanceof OEmbedError
           ? 'submission.metadataFailed'
           : 'submission.previewFailed',
       );
+      settleWaiters(generation, 'error');
     }
   }
 
-  async function save() {
-    if (
-      parsed === null ||
-      metadata === null ||
-      stateRef.current.validated === null ||
-      stateRef.current.validated.videoId !== parsed.videoId ||
-      status.type !== 'playing' ||
-      stateRef.current.player?.videoId() !== parsed.videoId
-    ) {
-      setNoticeKey('submission.previewRequired');
-      return;
+  /** One timer per link edit: a valid link then previews and plays by itself. */
+  function schedulePreview() {
+    const refs = stateRef.current;
+    if (refs.previewTimer !== null) {
+      clearTimeout(refs.previewTimer);
     }
-    if (!permissions.canSubmit || busy) {
-      return;
-    }
-    setBusy(true);
-    setNoticeKey(null);
-    const result = await session.dispatch({
-      type: 'SUBMIT_SONG',
-      media: {
-        videoId: parsed.videoId,
-        title: metadata.title,
-        channel: metadata.channel,
-        thumbnail: metadata.thumbnail,
-        durationSeconds: stateRef.current.validated.duration,
-        startSeconds: clampStart(
-          startSeconds,
-          stateRef.current.validated.duration,
-        ),
-      },
-    });
-    setBusy(false);
-    setNoticeKey(
-      result.status === 'rejected'
-        ? `errors.${result.reason}`
-        : 'submission.savedNotice',
-    );
+    refs.previewTimer = setTimeout(() => {
+      refs.previewTimer = null;
+      const draft = draftRef.current;
+      const link = parseYouTubeLink(draft.linkText);
+      if (link === null) {
+        if (draft.linkText.trim() !== '') {
+          setNoticeKey('submission.linkInvalid');
+        }
+        return;
+      }
+      if (!draft.consent || !draft.permissions.canSubmit) {
+        return;
+      }
+      startPreview(link.videoId, draft.startSeconds);
+    }, AUTO_PREVIEW_DEBOUNCE_MS);
   }
 
   async function remove() {
     if (!permissions.canSubmit || !choices.submitted || busy) {
       return;
     }
+    clearTimers(stateRef.current);
     setBusy(true);
     setNoticeKey(null);
+    await stateRef.current.saving;
     const result = await session.dispatch({ type: 'REMOVE_SUBMISSION' });
     setBusy(false);
     if (result.status === 'rejected') {
@@ -341,16 +587,110 @@ export function SubmissionPanel({
     setStartSeconds(0);
   }
 
-  async function finish() {
-    if (!permissions.canFinishSubmission || busy) {
+  /** True when the host already holds this link at this (clamped) start. */
+  function savedMatches(videoId: string, startAt: number): boolean {
+    const media = latestMedia();
+    return (
+      media !== null &&
+      media.videoId === videoId &&
+      clampStart(startAt, media.durationSeconds) === media.startSeconds
+    );
+  }
+
+  /**
+   * Makes sure the pasted link is validated and submitted. Returns true once
+   * the host holds it; otherwise the reason is already shown to the player.
+   */
+  async function validateAndSave(
+    videoId: string,
+    startAt: number,
+  ): Promise<boolean> {
+    const refs = stateRef.current;
+    const reusable =
+      refs.videoId === videoId &&
+      refs.status.type !== 'idle' &&
+      refs.status.type !== 'error';
+    const generation = reusable
+      ? refs.generation
+      : startPreview(videoId, startAt);
+    const result = await waitForValidation(
+      generation,
+      FINISH_VALIDATION_TIMEOUT_MS,
+    );
+    switch (result) {
+      case 'playing': {
+        const outcome = await save();
+        if (outcome.kind === 'rejected') {
+          setNoticeKey(`errors.${outcome.reason}`);
+        }
+        return outcome.kind === 'saved';
+      }
+      case 'autoplayBlocked':
+        setNoticeKey('submission.autoplayBlocked');
+        return false;
+      case 'timeout':
+        discardPreview();
+        setNoticeKey('submission.previewFailed');
+        return false;
+      case 'error':
+      case 'aborted':
+        // An error is already on screen (preview-error or a notice).
+        return false;
+    }
+  }
+
+  async function submitAndFinish() {
+    const draft = draftRef.current;
+    const link = parseYouTubeLink(draft.linkText);
+    if (link === null && draft.linkText.trim() !== '') {
+      setNoticeKey('submission.linkInvalid');
       return;
     }
-    setBusy(true);
-    setNoticeKey(null);
+    if (link !== null) {
+      await stateRef.current.saving;
+      if (!savedMatches(link.videoId, draft.startSeconds)) {
+        if (!draft.consent) {
+          setNoticeKey('submission.consentRequired');
+          return;
+        }
+        if (!(await validateAndSave(link.videoId, draft.startSeconds))) {
+          return;
+        }
+      }
+    }
     const result = await session.dispatch({ type: 'FINISH_SUBMISSION' });
-    setBusy(false);
     if (result.status === 'rejected') {
       setNoticeKey(`errors.${result.reason}`);
+    }
+  }
+
+  /**
+   * "Fertig": submits the pasted link, waits for the host to hold it and only
+   * then finishes. Whatever fails here leaves the player unfinished.
+   */
+  async function finish() {
+    const refs = stateRef.current;
+    if (refs.finishing || !permissions.canFinishSubmission || busy) {
+      return;
+    }
+    refs.finishing = true;
+    // Inside the click gesture, so a blocked preview may start audibly.
+    if (
+      refs.player !== null &&
+      (refs.status.type === 'ready' || refs.status.type === 'autoplayBlocked')
+    ) {
+      refs.player.play();
+    }
+    clearTimers(refs);
+    setBusy(true);
+    setFinishing(true);
+    setNoticeKey(null);
+    try {
+      await submitAndFinish();
+    } finally {
+      refs.finishing = false;
+      setBusy(false);
+      setFinishing(false);
     }
   }
 
@@ -500,6 +840,7 @@ export function SubmissionPanel({
               setNoticeKey(null);
               setLinkText(nextLink);
               setStartSeconds(parseYouTubeLink(nextLink)?.startSeconds ?? 0);
+              schedulePreview();
             }}
           />
 
@@ -519,29 +860,18 @@ export function SubmissionPanel({
           )}
 
           <div className="br-row">
-            <Button
-              tone="blue"
-              data-testid="load-preview"
-              onClick={() => {
-                void loadPreview();
-              }}
-              disabled={!editable || parsed === null || !consent}
-            >
-              {t('submission.loadPreview')}
-            </Button>
-            <Button
-              tone="slate"
-              data-testid="preview-play"
-              onClick={() => {
-                stateRef.current.player?.play();
-              }}
-              disabled={
-                !editable ||
-                !(status.type === 'ready' || status.type === 'autoplayBlocked')
-              }
-            >
-              {t('submission.previewPlay')}
-            </Button>
+            {status.type === 'autoplayBlocked' && (
+              <Button
+                tone="blue"
+                data-testid="preview-play"
+                onClick={() => {
+                  stateRef.current.player?.play();
+                }}
+                disabled={!editable}
+              >
+                {t('submission.previewPlay')}
+              </Button>
+            )}
             <span
               data-testid="preview-status"
               data-state={status.type}
@@ -601,7 +931,7 @@ export function SubmissionPanel({
               disabled={!editable || !previewValid}
               onChange={(event) => {
                 const next = Number(event.target.value);
-                setStartSeconds(clampStart(next, duration));
+                updateStart(() => clampStart(next, duration));
               }}
             />
             <Button
@@ -613,7 +943,8 @@ export function SubmissionPanel({
                 if (player === null) {
                   return;
                 }
-                setStartSeconds(clampStart(player.currentTime(), duration));
+                const position = player.currentTime();
+                updateStart(() => clampStart(position, duration));
               }}
               disabled={!editable || !previewValid}
             >
@@ -633,7 +964,7 @@ export function SubmissionPanel({
                 size="sm"
                 data-testid={testId}
                 onClick={() =>
-                  setStartSeconds((current) =>
+                  updateStart((current) =>
                     clampStart(current + delta, duration),
                   )
                 }
@@ -656,26 +987,30 @@ export function SubmissionPanel({
             </p>
           )}
 
-          {noticeKey && (
-            <p
-              data-testid="submission-notice"
-              role="status"
-              className="br-notice"
-            >
-              {t(noticeKey)}
-            </p>
-          )}
+          {noticeKey &&
+            !(
+              noticeKey === 'submission.linkInvalid' &&
+              linkText.trim() !== '' &&
+              parsed === null
+            ) && (
+              <p
+                data-testid="submission-notice"
+                role="status"
+                className="br-notice"
+              >
+                {t(noticeKey)}
+              </p>
+            )}
+
+          {linkText.trim() === '' &&
+            !choices.submitted &&
+            permissions.canFinishSubmission && (
+              <p data-testid="submission-finish-hint" className="br-read">
+                {t('submission.finishSkipHint')}
+              </p>
+            )}
 
           <div className="br-row">
-            <Button
-              data-testid="save-submission"
-              onClick={() => {
-                void save();
-              }}
-              disabled={!canSave}
-            >
-              {t('submission.save')}
-            </Button>
             <Button
               tone="red"
               data-testid="remove-submission"
@@ -689,12 +1024,13 @@ export function SubmissionPanel({
             <Button
               tone="blue"
               data-testid="finish-submission"
+              aria-busy={finishing}
               onClick={() => {
                 void finish();
               }}
               disabled={!permissions.canFinishSubmission || busy}
             >
-              {t('submission.finish')}
+              {finishing ? t('submission.finishing') : t('submission.finish')}
             </Button>
           </div>
 

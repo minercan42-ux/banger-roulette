@@ -199,21 +199,28 @@ async function captureGenre(page: Page): Promise<GenreSnapshot> {
   };
 }
 
-/** Full submission path: link, preview, play, save, done (FR-20..FR-26); the consent came from the start gate. */
+/**
+ * Full submission path: link, automatic preview, autosave, done (FR-20..FR-26);
+ * the consent came from the start gate. A browser that blocks the autoplay
+ * shows the play button, which this clicks as the user would.
+ */
 async function submitSong(page: Page, videoId: string): Promise<void> {
   const link = page.getByTestId('song-link');
   await expect(link).toBeVisible({ timeout: 30_000 });
   await link.fill(`https://www.youtube.com/watch?v=${videoId}`);
-  await page.getByTestId('load-preview').click();
   const status = page.getByTestId('preview-status');
-  await expect(status).toHaveAttribute('data-state', 'ready', {
-    timeout: 60_000,
-  });
-  await page.getByTestId('preview-play').click();
-  await expect(status).toHaveAttribute('data-state', 'playing', {
-    timeout: 60_000,
-  });
-  await page.getByTestId('save-submission').click();
+  const play = page.getByTestId('preview-play');
+  await expect
+    .poll(
+      async () => {
+        if (await play.isVisible()) {
+          await play.click();
+        }
+        return status.getAttribute('data-state');
+      },
+      { timeout: 60_000 },
+    )
+    .toBe('playing');
   await expect(page.getByTestId('submission-saved')).toBeVisible({
     timeout: 30_000,
   });

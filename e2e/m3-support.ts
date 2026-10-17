@@ -239,21 +239,20 @@ export async function ensureConsent(page: Page): Promise<void> {
   );
 }
 
-/** Loads the preview for a link and proves it reached PLAYING. */
+/**
+ * Pastes a link and proves the automatic preview reaches PLAYING without any
+ * further click (the preview starts about a second after the last edit).
+ */
 export async function startPlayingPreview(
   page: Page,
   url: string,
 ): Promise<void> {
   await page.getByTestId('song-link').fill(url);
-  await page.getByTestId('load-preview').click();
-  const status = page.getByTestId('preview-status');
-  await expect(status).toHaveAttribute('data-state', 'ready', {
-    timeout: 15000,
-  });
-  await page.getByTestId('preview-play').click();
-  await expect(status).toHaveAttribute('data-state', 'playing', {
-    timeout: 15000,
-  });
+  await expect(page.getByTestId('preview-status')).toHaveAttribute(
+    'data-state',
+    'playing',
+    { timeout: 15000 },
+  );
 }
 
 export interface SubmitSongOptions {
@@ -261,7 +260,11 @@ export interface SubmitSongOptions {
   setStart?: boolean;
 }
 
-/** Full consumer path: consent, link, validated preview, start, save. */
+/**
+ * Full consumer path: consent, link, validated preview, start. The validated
+ * link is saved by itself; this waits until the host holds it at the start
+ * shown in the field.
+ */
 export async function submitSongViaUi(
   page: Page,
   url: string,
@@ -275,5 +278,15 @@ export async function submitSongViaUi(
   for (let index = 0; index < (options.plus5 ?? 0); index += 1) {
     await page.getByTestId('start-plus-5').click();
   }
-  await page.getByTestId('save-submission').click();
+  const start = Number(await page.getByTestId('start-seconds').inputValue());
+  const clientId = (await snapshot(page)).clientId;
+  await expect
+    .poll(
+      async () =>
+        (await stateOf(page))?.round?.submissions?.[clientId]?.media
+          .startSeconds,
+      { timeout: 15000 },
+    )
+    .toBe(start);
+  await expect(page.getByTestId('submission-saved')).toBeVisible();
 }
