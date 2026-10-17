@@ -11,7 +11,7 @@ Status: complete, playable MVP (M0–M6) in production at [banger-roulette.verce
 - Live 0-10 rating during playback, anonymous reveal with a leaderboard, genre-fail flags with an explicit "off" penalty setting, finale and rematch ([M5](https://github.com/minercan42-ux/banger-roulette/pull/7), [#44](https://github.com/minercan42-ux/banger-roulette/pull/44)).
 - Synthesized casino sound effects (no audio files) with an on/off toggle in the header ([#52](https://github.com/minercan42-ux/banger-roulette/pull/52)); Pixel-Filz design tokens (the former casino tokens and utilities are removed, [#71](https://github.com/minercan42-ux/banger-roulette/issues/71)), chips and a global focus ring on the frame ([#39](https://github.com/minercan42-ux/banger-roulette/pull/39)).
 - German and English UI, 360 px layout, reduced motion, keyboard operation and screen-reader phase announcements ([#40](https://github.com/minercan42-ux/banger-roulette/pull/40)).
-- Persistent privacy notice on every screen: YouTube is embedded from `youtube-nocookie.com` only after the one-time consent from the start popup, no analytics, no cookies, only a random player ID and the YouTube consent flag in localStorage ([#55](https://github.com/minercan42-ux/banger-roulette/pull/55), NFR-04).
+- Persistent privacy notice on every screen: YouTube is embedded from `youtube-nocookie.com` only after the one-time consent from the start popup, no analytics, no cookies, only a random player ID, the YouTube consent flag and the volume/mute/SFX preferences in localStorage ([#55](https://github.com/minercan42-ux/banger-roulette/pull/55), [#111](https://github.com/minercan42-ux/banger-roulette/issues/111), NFR-04).
 - Gates in CI: 250 kB gzip initial-JS budget ([#47](https://github.com/minercan42-ux/banger-roulette/pull/47)), Lighthouse Performance desktop ≥ 90 and mobile ≥ 80, median of three runs ([#49](https://github.com/minercan42-ux/banger-roulette/pull/49)), and a strict-CSP regression with zod in jitless mode so no `eval` probe fires ([#48](https://github.com/minercan42-ux/banger-roulette/pull/48)).
 
 - Product and architecture spec: [SPEC.md](SPEC.md)
@@ -32,7 +32,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The landing page and DE/EN language switch work without configuration; room actions require the two public Supabase values. `/r/CODE` discovers the live room and rebinds a retained identity after reload, otherwise asks for a nickname. Only two items are stored locally: the random `clientId` (identity) and the YouTube embedding consent (`banger-roulette.youtubeConsent`); no game or nickname is persisted. The newest accepted tab is writable, older tabs remain read-only.
+The landing page and DE/EN language switch work without configuration; room actions require the two public Supabase values. `/r/CODE` discovers the live room and rebinds a retained identity after reload, otherwise asks for a nickname. Only four items are stored locally: the random `clientId` (identity), the YouTube embedding consent (`banger-roulette.youtubeConsent`) and the two UI preferences `banger-roulette.volume` (`{ level, muted }`) and `banger-roulette.sfx` (`{ enabled }`); no game or nickname is persisted. The newest accepted tab is writable, older tabs remain read-only.
 
 Copy `.env.example` to `.env.local` yourself and fill only `VITE_SUPABASE_URL` (HTTPS project URL) and `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`). Never use Secret/service_role, upload `.env.local` or share credentials in agent prompts. YouTube IFrame/oEmbed needs no Google API key.
 

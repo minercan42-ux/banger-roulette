@@ -5,6 +5,7 @@ import {
   assembleRoom,
   closeStages,
   enterSubmission,
+  harnessContext,
   newStage,
   startPlayingPreview,
   submitSongViaUi,
@@ -83,14 +84,14 @@ test('desktop: speaker at the right end of the top bar, popover by mouse and key
     await page.keyboard.press('Enter');
     await expect(popover).toBeVisible();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(slider).toHaveAttribute('aria-valuetext', '70 percent');
-    await expect(slider).toHaveAttribute('data-value', '70');
-    await expect(mute).toHaveAttribute('data-level', 'high');
+    await expect(slider).toHaveAttribute('aria-valuetext', '20 percent');
+    await expect(slider).toHaveAttribute('data-value', '20');
+    await expect(mute).toHaveAttribute('data-level', 'low');
 
     await slider.focus();
     await page.keyboard.press('ArrowLeft');
-    await expect(slider).toHaveAttribute('data-value', '69');
-    await expect(slider).toHaveAttribute('aria-valuetext', '69 percent');
+    await expect(slider).toHaveAttribute('data-value', '19');
+    await expect(slider).toHaveAttribute('aria-valuetext', '19 percent');
     await page.keyboard.press('Home');
     await expect(slider).toHaveAttribute('data-value', '0');
     await expect(mute).toHaveAttribute('data-level', 'muted');
@@ -144,12 +145,28 @@ test('desktop: speaker at the right end of the top bar, popover by mouse and key
     await slider.fill('0');
     await expect(mute).toHaveAttribute('data-level', 'muted');
     await mute.click();
-    await expect(slider).toHaveAttribute('data-value', '70');
-    await expect(mute).toHaveAttribute('data-level', 'high');
+    await expect(slider).toHaveAttribute('data-value', '20');
+    await expect(mute).toHaveAttribute('data-level', 'low');
 
-    // In memory only: no new storage key (privacy notice unchanged).
-    const keys = await page.evaluate(() => Object.keys(window.localStorage));
-    expect(keys.filter((key) => /volume|mute/i.test(key))).toEqual([]);
+    // The preference is remembered (#111): 55 % plus mute survive a reload.
+    await slider.fill('55');
+    await mute.click();
+    await expect(mute).toHaveAttribute('data-muted', 'true');
+    expect(
+      await page.evaluate(() => localStorage.getItem('banger-roulette.volume')),
+    ).toBe(JSON.stringify({ level: 55, muted: true }));
+
+    await page.reload();
+    await page.waitForFunction(() => window.__banger !== undefined);
+    await expect(page.getByTestId('playback-mute')).toHaveAttribute(
+      'data-muted',
+      'true',
+    );
+    await openPopover(page);
+    await expect(page.getByTestId('playback-volume')).toHaveAttribute(
+      'data-value',
+      '55',
+    );
   } finally {
     await closeStages([stage]);
   }
@@ -224,7 +241,10 @@ test('the control drives the preview and the playback player; the panel slider i
     await expect
       .poll(async () =>
         (await youTubeCalls(host)).some(
-          (call) => call.type === 'volume' && call.value === 33,
+          (call) =>
+            call.type === 'volume' &&
+            call.videoId === SONG_A &&
+            call.value === 33,
         ),
       )
       .toBe(true);
@@ -233,7 +253,7 @@ test('the control drives the preview and the playback player; the panel slider i
     await expect
       .poll(async () => {
         const volumes = (await youTubeCalls(host)).filter(
-          (call) => call.type === 'volume',
+          (call) => call.type === 'volume' && call.videoId === SONG_A,
         );
         return volumes.at(-1)?.value;
       })
@@ -261,8 +281,21 @@ test('the control drives the preview and the playback player; the panel slider i
     await expect(host.getByTestId('playback-mute')).toHaveCount(1);
     await expect(host.getByTestId('playback-mute')).toBeVisible();
 
+    // The playback player's own calls: `playback.ts` is the only caller of
+    // `cueVideoById`, so the first cue names the song it is running (the
+    // submission preview and the warmed-up player share this call log, see
+    // `e2e/m4-support.ts`). The playback order is shuffled, so that id is read
+    // instead of assumed to be the host's SONG_A (#113 review).
+    const calls = await youTubeCalls(host);
+    const cueIndex = calls.findIndex((call) => call.type === 'cue');
+    expect(cueIndex).toBeGreaterThanOrEqual(0);
+    const playingVideo = calls[cueIndex]?.videoId;
+
     const lastAudio = async (type: 'volume' | 'mute' | 'unmute') =>
-      (await youTubeCalls(host)).filter((call) => call.type === type).at(-1);
+      (await youTubeCalls(host))
+        .slice(cueIndex)
+        .filter((call) => call.type === type && call.videoId === playingVideo)
+        .at(-1);
 
     // The playing video follows the slider ...
     await openPopover(host);
@@ -282,5 +315,80 @@ test('the control drives the preview and the playback player; the panel slider i
       .toContainEqual(expect.objectContaining({ type: 'unmute' }));
   } finally {
     await closeStages(stages);
+  }
+});
+
+test('blocked storage starts at 20 % and the control keeps working', async ({
+  browser,
+}) => {
+  const context = await harnessContext(browser, { locale: 'en-US' });
+  // Site data blocked: every preference read and write throws. The harness
+  // reads `clientId` unguarded before any UI runs (e2e/harness.tsx), so that
+  // one key still passes through; the app itself has to cope with the rest.
+  await context.addInitScript(() => {
+    const real = window.localStorage;
+    const blocked = (): never => {
+      throw new Error('storage blocked');
+    };
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => ({
+        getItem: (key: string) =>
+          key === 'banger-roulette.clientId' ? real.getItem(key) : blocked(),
+        setItem: (key: string, value: string) => {
+          if (key === 'banger-roulette.clientId') {
+            real.setItem(key, value);
+            return;
+          }
+          blocked();
+        },
+        removeItem: (key: string) => {
+          if (key === 'banger-roulette.clientId') {
+            real.removeItem(key);
+            return;
+          }
+          blocked();
+        },
+      }),
+    });
+  });
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+  });
+  try {
+    await page.goto('/');
+    await page.waitForFunction(() => window.__banger !== undefined);
+
+    // The block is real: reading the preference key throws in this page.
+    expect(
+      await page.evaluate(() => {
+        try {
+          localStorage.getItem('banger-roulette.volume');
+          return 'read';
+        } catch {
+          return 'blocked';
+        }
+      }),
+    ).toBe('blocked');
+
+    // A failed read falls back to the default instead of crashing the app.
+    await openPopover(page);
+    const slider = page.getByTestId('playback-volume');
+    const mute = page.getByTestId('playback-mute');
+    await expect(slider).toHaveAttribute('data-value', '20');
+    await expect(mute).toHaveAttribute('data-level', 'low');
+
+    // Changing the preference writes nowhere and still works for this load.
+    await slider.fill('55');
+    await expect(slider).toHaveAttribute('data-value', '55');
+    await mute.click();
+    await expect(mute).toHaveAttribute('data-muted', 'true');
+    await expect(mute).toHaveAttribute('data-level', 'muted');
+
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
   }
 });

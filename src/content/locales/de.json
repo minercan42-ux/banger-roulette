@@ -79,7 +79,7 @@
     "title": "Datenschutz",
     "embed": "Videos werden von youtube-nocookie.com eingebettet, und zwar erst nach deiner Zustimmung im Start-Popup (\"Los geht's\"). Mit \"Ohne Videos\" wird nichts von YouTube geladen.",
     "noTracking": "Diese App nutzt keine Analyse-Tools und setzt keine Cookies.",
-    "storage": "Gespeichert werden nur eine zufällige Spieler-ID und deine YouTube-Zustimmung im localStorage deines Browsers, damit dich ein Neuladen wiedererkennt. Die Zustimmung kannst du im Menü jederzeit widerrufen. Kein Konto, kein Spielstand."
+    "storage": "Gespeichert werden nur eine zufällige Spieler-ID, deine YouTube-Zustimmung und deine Einstellungen für Lautstärke, Stummschaltung und Soundeffekte, alles im localStorage deines Browsers. So erkennt dich ein Neuladen wieder und deine Einstellungen bleiben. Die Zustimmung kannst du im Menü jederzeit widerrufen. Kein Konto, kein Spielstand."
   },
   "gate": {
     "title": "Bereit für Banger Roulette?",

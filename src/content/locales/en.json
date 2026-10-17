@@ -79,7 +79,7 @@
     "title": "Privacy",
     "embed": "Videos are embedded from youtube-nocookie.com, and only after you consent in the start popup (\"Let's go\"). With \"No videos\" nothing is loaded from YouTube.",
     "noTracking": "This app uses no analytics and sets no cookies.",
-    "storage": "Only a random player ID and your YouTube consent are stored in your browser's localStorage, so a reload recognizes you. You can revoke the consent in the menu at any time. No account, no saved game."
+    "storage": "Only a random player ID, your YouTube consent and your settings for volume, mute and sound effects are stored, all in your browser's localStorage. That way a reload recognizes you and keeps your settings. You can revoke the consent in the menu at any time. No account, no saved game."
   },
   "gate": {
     "title": "Ready for Banger Roulette?",

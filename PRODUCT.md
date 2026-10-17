@@ -46,7 +46,7 @@ web
 ## Brand Commitments
 
 - **(owner)** The Pixel-Filz casino look is binding. docs/design/pixel-filz/ is the design system: red felt, anthracite panels, Spieltisch (game table) layout.
-- **(owner)** No accounts and no tracking. Only the random player ID and the YouTube consent are stored.
+- **(owner)** No accounts and no tracking. Only the random player ID, the YouTube consent and the volume/mute/SFX preferences are stored.
 - **(repo)** Tone and voice rules live in docs/design/pixel-filz/README.md (informal "du", short, cheeky, never mean; error texts factual). SPEC.md section 6 forbids unlicensed copyrighted assets and third-party logos. The fonts (Jersey 10, Silkscreen) are SIL OFL 1.1 and ship with their licenses.
 - **(repo)** The Pixel-Filz directory is labeled a plan in its own README; implemented parts in `src/ui/` follow it. Agents implement from it only on an assigned task issue (AGENTS.md rule 7).
 
@@ -61,7 +61,7 @@ web
 1. **The song and the taste are the content.** Every screen serves choosing, hearing, rating or revealing songs; chrome, decoration and motion never compete with the music or bury the genre and song information.
 2. **Anonymity is protected until the reveal.** With anonymity on (the default), no element before the reveal may disclose who owns a song (AK-3); the reveal is the payoff and is staged as one.
 3. **Everyone hears the same moment.** Synchronized playback and shared timers drive the design: players should trust that the others are hearing the same thing now, and failures (ads, buffering, blocked playback) degrade without stalling the group.
-4. **Zero friction to join, nothing kept.** No accounts, no tracking; join by link, one click to start. Only the random player ID and the YouTube consent are stored, and consent stays revocable.
+4. **Zero friction to join, nothing kept.** No accounts, no tracking; join by link, one click to start. Only the random player ID, the YouTube consent and the volume/mute/SFX preferences are stored, and consent stays revocable.
 5. **Built for friends on a call.** Rounds are quick (SPEC.md: fast rounds), and the fun comes from timing and tone between friends, not from explanations.
 
 ## Accessibility & Inclusion
