@@ -128,7 +128,7 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 
 - **Datum:** 2026-10-15 bis 2026-10-17
 - **Wer:** Owner, PM
-- **Entscheidung:** `../playtest/bots.mjs` liegt außerhalb des Repos. Die Bots reichen innerhalb von 2 Sekunden ein. Das langsamere, realistischere Verhalten gibt es mit `--slow`.
+- **Entscheidung:** `../playtest/bots.mjs` liegt außerhalb des Repos. Die Bots beginnen das Einreichen nach höchstens 2 Sekunden Wartezeit (danach folgen noch Vorschau und Speichern). Das langsamere, realistischere Verhalten gibt es mit `--slow`.
 - **Warum:** Der Owner braucht Mitspieler zum Testen, ohne Freunde einzuladen. Die Bots sind ein Werkzeug und kein Produktbestandteil. Bot 1 ließ sich zu viel Zeit, und das bremste die Testrunden.
 
 ### D-014 Label `playtest`
@@ -241,7 +241,7 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 
 - **Datum:** 2026-10-16
 - **Wer:** PM
-- **Entscheidung:** Die Tabelle mit Uhr-Offset, RTT und Drift erscheint nur mit `?debug=1`.
+- **Entscheidung:** Die Tabelle mit Uhr-Offset, RTT und Drift erscheint nur im Debug-Modus (`?debug=1` in der URL oder localStorage `banger-roulette.debug` = `1`).
 - **Warum:** Für Spieler sind das Entwicklerdaten. Tests und Live-Smoke brauchen sie weiterhin.
 - **Belege:** #99, PR #102
 
