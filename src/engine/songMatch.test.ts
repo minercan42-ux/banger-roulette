@@ -30,9 +30,9 @@ const linked: Row[] = [
     upload('Never Gonna Give You Up', 'Rick Astley - Topic', 213),
   ],
   [
-    'official video vs lyric video on another channel',
+    'official video vs lyric video on the artist Topic channel',
     upload('Adele - Hello (Official Music Video)', 'Adele', 367),
-    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 366),
+    upload('Adele - Hello (Lyrics)', 'Adele - Topic', 366),
   ],
   [
     'VEVO channel vs official audio',
@@ -105,8 +105,33 @@ const linked: Row[] = [
   ],
   [
     'track with trailing lyrics word',
-    upload('Coldplay - Yellow Lyrics', 'Lyrics Hub', 270),
+    upload('Coldplay - Yellow Lyrics', 'Coldplay - Topic', 270),
     upload('Coldplay - Yellow (Official Video)', 'Coldplay', 269),
+  ],
+  [
+    'artist, Topic and VEVO channels of one artist',
+    upload('Hello', 'Adele', 295),
+    upload('Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'AdeleVEVO against the artist channel',
+    upload('Hello', 'AdeleVEVO', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'Records suffix on the channel',
+    upload('Adele - Hello', 'Adele Records', 295),
+    upload('Adele - Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'identical unknown subtitle on both uploads',
+    upload('Artist - Hello (Goodbye)', 'Artist', 240),
+    upload('Artist - Hello [Goodbye] (Official Audio)', 'Artist - Topic', 240),
+  ],
+  [
+    'credit tail without a marker is dropped',
+    upload('Daft Punk - Get Lucky ft. Pharrell Williams', 'Daft Punk', 240),
+    upload('Daft Punk - Get Lucky', 'DaftPunkVEVO', 240),
   ],
   [
     'original mix is not a version marker',
@@ -302,8 +327,16 @@ const separate: Row[] = [
   ],
   [
     'artists share only one of four tokens',
-    upload('The Black Eyed Peas Crew - Pump It', 'x', 213),
-    upload('Peas Orchestra Band Live - Pump It', 'y', 213),
+    upload(
+      'The Black Eyed Peas Crew - Pump It',
+      'The Black Eyed Peas Crew',
+      213,
+    ),
+    upload(
+      'Peas Orchestra Band Live - Pump It',
+      'Peas Orchestra Band Live',
+      213,
+    ),
   ],
   [
     'mashup vs original',
@@ -314,6 +347,112 @@ const separate: Row[] = [
     'piano version vs original',
     upload('Coldplay - Clocks (Piano Version)', 'Coldplay', 307),
     upload('Coldplay - Clocks', 'Coldplay', 307),
+  ],
+  [
+    'live recording with credit tail vs studio (ft.)',
+    upload(
+      'Daft Punk - Get Lucky ft. Pharrell Williams live',
+      'Daft Punk',
+      240,
+    ),
+    upload('Daft Punk - Get Lucky', 'Daft Punk - Topic', 240),
+  ],
+  [
+    'live recording with credit tail vs studio (feat.)',
+    upload(
+      'Daft Punk - Get Lucky feat. Pharrell Williams live',
+      'Daft Punk',
+      240,
+    ),
+    upload('Daft Punk - Get Lucky', 'DaftPunkVEVO', 240),
+  ],
+  [
+    'live recording with credit tail vs studio (featuring)',
+    upload(
+      'Daft Punk - Get Lucky featuring Pharrell Williams live',
+      'Daft Punk',
+      240,
+    ),
+    upload('Daft Punk - Get Lucky', 'Daft Punk', 240),
+  ],
+  [
+    'remix hidden behind a bracketed credit',
+    upload(
+      'Daft Punk - Get Lucky (ft. Pharrell Williams remix)',
+      'Daft Punk',
+      240,
+    ),
+    upload('Daft Punk - Get Lucky', 'Daft Punk', 240),
+  ],
+  [
+    'artists AB and A B are different artists',
+    upload('AB - Hello', 'AB', 240),
+    upload('A B - Hello', 'A B', 240),
+  ],
+  [
+    'different bracketed subtitles',
+    upload('Artist - Hello (Goodbye)', 'Artist', 240),
+    upload('Artist - Hello (Again)', 'Artist', 240),
+  ],
+  [
+    'bracketed subtitle on one upload only',
+    upload('Artist - Hello (Goodbye)', 'Artist', 240),
+    upload('Artist - Hello', 'Artist - Topic', 240),
+  ],
+  [
+    'different pipe subtitles',
+    upload('Artist - Hello | Goodbye', 'Artist', 240),
+    upload('Artist - Hello | Again', 'Artist', 240),
+  ],
+  [
+    'different dash subtitles',
+    upload('Artist - Hello - Goodbye', 'Artist', 240),
+    upload('Artist - Hello - Again', 'Artist', 240),
+  ],
+  [
+    'Intro on two different albums',
+    upload('Artist - Intro [Album One]', 'Artist', 60),
+    upload('Artist - Intro [Album Two]', 'Artist', 60),
+  ],
+  [
+    'Untitled on two different albums',
+    upload('Artist - Untitled (Album One)', 'Artist', 180),
+    upload('Artist - Untitled (Album Two)', 'Artist', 180),
+  ],
+  [
+    'Track 1 on two different albums',
+    upload('Artist - Track 1 | Album One', 'Artist', 180),
+    upload('Artist - Track 1 | Album Two', 'Artist', 180),
+  ],
+  [
+    'karaoke channel without any marker (Sing King)',
+    upload('Adele - Hello', 'Sing King', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'lyric channel is not the artist',
+    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 295),
+    upload('Adele - Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'two third-party channels never link each other',
+    upload('Adele - Hello', 'Sing King', 295),
+    upload('Adele - Hello', '7clouds', 295),
+  ],
+  [
+    'fan upload that only lists the artist in the title',
+    upload('Lyrics Hub - Hello', 'Lyrics Hub', 295),
+    upload('Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'accepted false negative: "with" credit is not parsed',
+    upload('Daft Punk - Get Lucky with Pharrell Williams', 'Daft Punk', 240),
+    upload('Daft Punk - Get Lucky', 'Daft Punk', 240),
+  ],
+  [
+    'accepted false negative: unbracketed Remastered 2011',
+    upload('Queen - Bohemian Rhapsody Remastered 2011', 'Queen', 355),
+    upload('Queen - Bohemian Rhapsody', 'Queen', 355),
   ],
 ];
 
@@ -336,7 +475,7 @@ describe('isSameSong', () => {
 describe('groupSameSongs', () => {
   const official = upload('Adele - Hello (Official Video)', 'Adele', 367);
   const topic = upload('Hello', 'Adele - Topic', 367);
-  const lyrics = upload('Adele - Hello (Lyrics)', 'Lyrics Hub', 366);
+  const lyrics = upload('Adele - Hello (Lyrics)', 'AdeleVEVO', 366);
   const richie = upload('Lionel Richie - Hello', 'Lionel Richie', 367);
   const live = upload('Adele - Hello (Live)', 'Adele', 367);
 

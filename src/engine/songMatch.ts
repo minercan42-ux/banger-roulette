@@ -3,7 +3,8 @@ import type { Media } from '../shared/primitives';
 /**
  * Host-side, deterministic "same song" rule for Spiritually Linked groups
  * (issue #106). Two submissions are the same song when their video ids are
- * equal, or when duration, version markers, track name and artist all agree.
+ * equal, or when both channels belong to the artist and duration, version
+ * markers, unknown title parts, track name and artist all agree.
  * False positives are worse than false negatives, so every guard errs on the
  * side of "not linked". Pure: no randomness, no clock, no I/O.
  */
@@ -110,7 +111,14 @@ const NOISE =
  */
 const TRAILING_NOISE =
   /\s(?:official (?:hd )?(?:music )?(?:video|audio|lyric video|lyrics|visuali[sz]er)|lyric video|lyrics?|music video|visuali[sz]er|full (?:song|video|audio)|hd|hq|4k)$/;
-const FEATURING = /\s(?:feat|ft|featuring)\b\.?.*$/;
+const FEATURING = /\s(?:feat|ft|featuring)\b\.?(.*)$/;
+const CREDIT_START = /^(?:feat|ft|featuring)\b\.?/;
+/** The only words a channel name may carry on top of the artist's name. */
+const CHANNEL_SUFFIX_WORDS: readonly string[] = [
+  'official',
+  'music',
+  'records',
+];
 const BRACKETS =
   /\([^()[\]{}]*\)|\[[^()[\]{}]*\]|\{[^()[\]{}]*\}|【[^】]*】|「[^」]*」|『[^』]*』|〈[^〉]*〉|《[^》]*》/g;
 const ARTIST_STOPWORDS: ReadonlySet<string> = new Set(['and', 'x']);
@@ -122,6 +130,10 @@ interface ParsedSong {
   track: string;
   /** Sorted text of every version-bearing segment, joined. */
   versionKey: string;
+  /** Sorted text of every unknown bracket/pipe segment, joined. */
+  extraKey: string;
+  /** The uploading channel is the artist's own (channel guard). */
+  channelOk: boolean;
 }
 
 /** NFKC, lowercase, strip Latin diacritics, unify quotes and dashes. */
@@ -189,16 +201,28 @@ function extractBrackets(title: string): { rest: string; inner: string[] } {
   }
 }
 
-function channelArtist(channel: string): string {
-  return collapse(
-    toWords(
-      channel
-        .replace(/\s*-\s*topic\s*$/, '')
-        .replace(/vevo\s*$/, '')
-        .replace(/\bofficial\b/g, ' ')
-        .replace(/\bmusic\b/g, ' '),
-    ),
-  );
+/**
+ * The artist a channel stands for: " - Topic", a trailing "VEVO" and the
+ * trailing words Official, Music and Records are dropped, nothing else.
+ * CamelCase VEVO names ("LionelRichieVEVO") are split into words first.
+ */
+function channelKey(rawChannel: string): string {
+  const raw = /vevo\s*$/i.test(rawChannel)
+    ? rawChannel.replace(
+        /(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu,
+        ' ',
+      )
+    : rawChannel;
+  const base = normalizeText(raw).replace(/\s+-\s*topic\s*$/, '');
+  const words = collapse(toWords(base)).replace(/\s*vevo$/, '');
+  const tokens = words.split(' ').filter((token) => token !== '');
+  while (
+    tokens.length > 0 &&
+    CHANNEL_SUFFIX_WORDS.includes(tokens[tokens.length - 1])
+  ) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
 }
 
 function trimTrailingNoise(track: string): string {
@@ -212,16 +236,51 @@ function trimTrailingNoise(track: string): string {
   }
 }
 
+/**
+ * A bracket or pipe segment. Credits only matter when they hide a version
+ * marker ("(feat. X live)"); noise vanishes; a marker segment is compared as
+ * text; anything else is unknown and stays part of the comparison key, so
+ * "Hello (Goodbye)" never equals "Hello (Again)".
+ */
+function classifySegment(
+  segment: string,
+  versionTexts: Set<string>,
+  extras: string[],
+): void {
+  const credit = CREDIT_START.exec(segment.trim());
+  if (credit) {
+    noteCreditTail(segment.trim().slice(credit[0].length), versionTexts);
+    return;
+  }
+  const cleaned = cleanSegment(segment);
+  if (cleaned === '') {
+    return;
+  }
+  if (hasMarker(cleaned)) {
+    versionTexts.add(cleaned);
+  } else {
+    extras.push(cleaned);
+  }
+}
+
+/** The text after ft./feat./featuring may carry "live", "remix" and so on. */
+function noteCreditTail(tail: string, versionTexts: Set<string>): void {
+  const cleaned = cleanSegment(tail);
+  if (cleaned !== '' && hasMarker(cleaned)) {
+    versionTexts.add(cleaned);
+  }
+}
+
 function parseSong(media: MatchMedia): ParsedSong {
   const title = normalizeText(media.title);
   const { rest, inner } = extractBrackets(title);
   const [main, ...afterPipe] = rest.split('|');
-  const segments = [...inner, ...afterPipe];
   const parts = main
     .split(/\s-+\s/)
     .map((part) => part.trim())
     .filter((part) => part !== '');
   const versionTexts = new Set<string>();
+  const extras: string[] = [];
 
   // Trailing " - " parts that are noise are dropped; marker-only ones (or any
   // marker part beyond the artist/track pair) become version segments.
@@ -239,29 +298,35 @@ function parseSong(media: MatchMedia): ParsedSong {
       break;
     }
   }
-  for (const segment of segments) {
-    const cleaned = cleanSegment(segment);
-    if (cleaned !== '' && hasMarker(cleaned)) {
-      versionTexts.add(cleaned);
-    }
+  for (const segment of [...inner, ...afterPipe]) {
+    classifySegment(segment, versionTexts, extras);
   }
 
-  const credited = parts.map((part) => part.replace(FEATURING, ''));
-  const channelName = normalizeText(media.channel);
+  // Version information is read from the credit tail before the credit is cut.
+  const credited = parts.map((part) => {
+    const found = FEATURING.exec(part);
+    if (!found) {
+      return part;
+    }
+    noteCreditTail(found[1], versionTexts);
+    return part.slice(0, found.index);
+  });
+  const channel = channelKey(media.channel);
   let artist: string;
   let trackSource: string;
   if (credited.length === 2) {
     artist = toWords(credited[0]);
     trackSource = credited[1];
   } else {
-    artist = channelArtist(channelName);
+    artist = channel;
     trackSource = credited.join(' ');
   }
+  artist = collapse(artist);
   const track = collapse(trimTrailingNoise(toWords(trackSource)));
   if (hasMarker(track)) {
     versionTexts.add(track);
   }
-  const channelWords = toWords(channelName);
+  const channelWords = toWords(normalizeText(media.channel));
   for (const marker of CHANNEL_MARKERS) {
     const found = marker.exec(channelWords);
     if (found) {
@@ -269,9 +334,11 @@ function parseSong(media: MatchMedia): ParsedSong {
     }
   }
   return {
-    artist: collapse(artist),
+    artist,
     track,
     versionKey: [...versionTexts].sort().join('|'),
+    extraKey: [...extras].sort().join('|'),
+    channelOk: tokensAlike(channel, artist),
   };
 }
 
@@ -283,11 +350,12 @@ function artistTokens(artist: string): Set<string> {
   );
 }
 
-function sameArtist(a: string, b: string): boolean {
+/** Equal normalized strings, or token Jaccard >= ARTIST_JACCARD_MIN. */
+function tokensAlike(a: string, b: string): boolean {
   if (a === '' || b === '') {
     return false;
   }
-  if (a === b || a.replaceAll(' ', '') === b.replaceAll(' ', '')) {
+  if (a === b) {
     return true;
   }
   const left = artistTokens(a);
@@ -330,13 +398,19 @@ export function preparedSameSong(a: PreparedMatch, b: PreparedMatch): boolean {
   if (!durationsClose(a.media.durationSeconds, b.media.durationSeconds)) {
     return false;
   }
-  if (a.parsed.versionKey !== b.parsed.versionKey) {
+  if (!a.parsed.channelOk || !b.parsed.channelOk) {
+    return false;
+  }
+  if (
+    a.parsed.versionKey !== b.parsed.versionKey ||
+    a.parsed.extraKey !== b.parsed.extraKey
+  ) {
     return false;
   }
   if (a.parsed.track === '' || a.parsed.track !== b.parsed.track) {
     return false;
   }
-  return sameArtist(a.parsed.artist, b.parsed.artist);
+  return tokensAlike(a.parsed.artist, b.parsed.artist);
 }
 
 export function isSameSong(a: MatchMedia, b: MatchMedia): boolean {

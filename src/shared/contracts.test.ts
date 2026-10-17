@@ -126,6 +126,55 @@ describe('wire contracts', () => {
     state.results[0]!.playerDeltas[a] = 42;
     expect(GameStateSchema.safeParse(state).success).toBe(false);
   });
+  it('normalizes songs without memberVideoIds from older hosts', () => {
+    const state = playback();
+    state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
+    const song = state.round!.songs[0]!;
+    state.results = [
+      {
+        number: 1,
+        genre,
+        reason: 'normal',
+        songs: [
+          {
+            song,
+            scoreTenths: 100,
+            ratingCount: 3,
+            banger: true,
+            basis: 'ratings',
+            flaggerIds: [],
+            genreFailed: false,
+            winner: true,
+            bonus: 20,
+            ownerDeltas: { [a]: 120 },
+          },
+        ],
+        playerDeltas: { [a]: 120 },
+      },
+    ];
+    const legacy = structuredClone(state) as unknown as {
+      round: { songs: Record<string, unknown>[] };
+      results: { songs: { song: Record<string, unknown> }[] }[];
+    };
+    delete legacy.round.songs[0]!.memberVideoIds;
+    delete legacy.results[0]!.songs[0]!.song.memberVideoIds;
+    const parsed = GameStateSchema.parse(legacy);
+    expect(parsed.round!.songs[0]!.memberVideoIds).toEqual([
+      song.media.videoId,
+    ]);
+    expect(parsed.results[0]!.songs[0]!.song.memberVideoIds).toEqual([
+      song.media.videoId,
+    ]);
+    expect(parsed).toEqual(state);
+    // A present but invalid array is still rejected, never repaired.
+    for (const invalid of [[], null, 'x', [song.media.videoId, 7]]) {
+      legacy.round.songs[0]!.memberVideoIds = invalid;
+      expect(GameStateSchema.safeParse(legacy).success).toBe(false);
+    }
+    delete legacy.round.songs[0]!.memberVideoIds;
+    legacy.results[0]!.songs[0]!.song.memberVideoIds = [];
+    expect(GameStateSchema.safeParse(legacy).success).toBe(false);
+  });
   it('validates scored song basis, banger and bonus invariants', () => {
     const state = playback();
     state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
@@ -444,6 +493,29 @@ describe('wire contracts', () => {
     const state = playback();
     mutate(state);
     expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
+  it('accepts a SNAPSHOT from an older host without memberVideoIds', () => {
+    const state = playback();
+    const legacy = structuredClone(state) as unknown as {
+      round: { songs: Record<string, unknown>[] };
+    };
+    delete legacy.round.songs[0]!.memberVideoIds;
+    const parsed = NetworkEventSchema.parse({
+      protocolVersion: 1,
+      roomCode: state.roomCode,
+      roomId,
+      senderId: a,
+      connectionId: b,
+      hostEpoch: 0,
+      sentAt: 0,
+      body: {
+        type: 'SNAPSHOT',
+        recipientId: null,
+        ackClientId: null,
+        state: legacy,
+      },
+    });
+    expect(parsed.body.type === 'SNAPSHOT' && parsed.body.state).toEqual(state);
   });
   it('limits missing roomId to discovery and verifies snapshot authority', () => {
     const state = fixture();

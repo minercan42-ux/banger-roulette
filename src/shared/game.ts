@@ -32,7 +32,7 @@ const SubmissionSchema = z.strictObject({
   media: MediaSchema,
   acceptedOrder: Int,
 });
-export const SongSchema = z.strictObject({
+const SongObjectSchema = z.strictObject({
   /** Canonical media: the first accepted submission of the song group. */
   media: MediaSchema,
   /**
@@ -43,6 +43,27 @@ export const SongSchema = z.strictObject({
   ownerIds: Ids.min(1),
   clipSeconds: Seconds.positive(),
 });
+/**
+ * Snapshots from a host that predates #106 carry no `memberVideoIds`; such a
+ * song was always a single-video group. A missing field becomes
+ * `[media.videoId]`; a present but invalid array still fails validation.
+ */
+function withLegacyMembers(value: unknown): unknown {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    'memberVideoIds' in value ||
+    !('media' in value) ||
+    typeof value.media !== 'object' ||
+    value.media === null ||
+    !('videoId' in value.media) ||
+    typeof value.media.videoId !== 'string'
+  ) {
+    return value;
+  }
+  return { ...value, memberVideoIds: [value.media.videoId] };
+}
+export const SongSchema = z.preprocess(withLegacyMembers, SongObjectSchema);
 export type Song = z.infer<typeof SongSchema>;
 export const RoundSchema = z.strictObject({
   number: z.number().int().min(1).max(20),
