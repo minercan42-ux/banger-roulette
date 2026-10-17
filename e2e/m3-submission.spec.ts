@@ -294,7 +294,11 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
   try {
     const [host, ...rest] = stages;
     await assembleRoom(host, rest);
-    await enterSubmission(stages.map((stage) => stage.page));
+    // Dario picks "Ohne Videos" at the start gate: audio on, no consent.
+    await enterSubmission(
+      stages.map((stage) => stage.page),
+      { withoutVideos: [stages[3].page] },
+    );
 
     const forbidden: Array<[Stage, string, string]> = [
       [stages[0], BLOCKED_100, '100'],
@@ -317,12 +321,14 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
       expect(state?.round?.submissions?.[playerId]).toBeUndefined();
     }
 
-    // Consent gate: nothing external may load before the checkbox is checked.
+    // Consent gate: nothing external may load before the consent is granted.
     const dario = stages[3];
     const external = dario.youtubeRequests;
     await dario.page.getByTestId('song-link').fill(watchUrl(VALID_D));
-    await dario.page.getByTestId('load-preview').click();
-    await expect(dario.page.getByTestId('submission-notice')).toBeVisible();
+    await expect(dario.page.getByTestId('load-preview')).toBeDisabled();
+    await expect(
+      dario.page.getByTestId('submission-consent-required'),
+    ).toBeVisible();
     await dario.page.waitForTimeout(300);
     expect(external()).toEqual([]);
     await expect(dario.page.getByTestId('save-submission')).toBeDisabled();
@@ -595,6 +601,8 @@ test('pause and tab takeover discard old preview validation', async ({
     expect(
       (await stateOf(host.page))?.round?.submissions?.[brunoId],
     ).toBeUndefined();
+    // The stored consent carries over, only the one-tap sound gate remains.
+    await unlockSound(replacement);
     await submitSongViaUi(replacement, watchUrl(VALID_B));
     await waitForSubmissionMedia(host.page, brunoId, VALID_B);
   } finally {

@@ -4,6 +4,7 @@ import type { GameState } from '../src/shared/game';
 import {
   assembleRoom,
   closeStages,
+  ensureConsent,
   enterSubmission,
   harnessContext,
   joinRoom,
@@ -19,7 +20,6 @@ import {
 import {
   audibleCalls,
   classifyAudibleCalls,
-  consentToPlayback,
   detectPreStartLeaks,
   enablePlaybackDebug,
   playbackStateWithClock,
@@ -509,7 +509,6 @@ test('host pause freezes playback, resume re-syncs and a reload rejoins', async 
       timeout: 20000,
     });
     await unlockSound(dario.page);
-    await consentToPlayback(dario.page);
     await waitForPlaybackState(dario.page, 'playing', 25000);
     const rejoined = playbackTiming(await stateOf(dario.page));
     expect(rejoined.index).toBe(0);
@@ -544,7 +543,11 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     const [alice, bruno, cleo, dario] = stages;
     const code = await assembleRoom(alice, stages.slice(1));
     await setSettings(alice.page, { submissionSeconds: 30, clipSeconds: 60 });
-    await enterSubmission(stages.map((stage) => stage.page));
+    // Cleo picks "Ohne Videos" at the start gate and never grants the consent.
+    await enterSubmission(
+      stages.map((stage) => stage.page),
+      { withoutVideos: [cleo.page] },
+    );
     // Alice and Bruno submit the same video (linked), Dario a distinct one,
     // Cleo submits nothing: she stays an unconsenting participant listener.
     await submitSongViaUi(alice.page, watchUrl(SONG_A));
@@ -567,7 +570,9 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
 
     // Consent gate: no external YouTube traffic and an empty host node.
     expect(alice.youtubeRequests().length).toBeGreaterThan(0);
-    await expect(cleo.page.getByTestId('playback-consent')).toBeVisible();
+    await expect(
+      cleo.page.getByTestId('playback-consent-required'),
+    ).toBeVisible();
     await cleo.page.waitForTimeout(400);
     expect(cleo.youtubeRequests()).toEqual([]);
     await expect(cleo.page.getByTestId('playback-host')).toBeVisible();
@@ -631,7 +636,7 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     });
     await expect(cleo.page.getByTestId('read-only-indicator')).toBeVisible();
     await expect(cleo.page.getByTestId('playback-bound-tab')).toBeVisible();
-    await cleo.page.getByTestId('playback-consent').check();
+    await ensureConsent(cleo.page);
     const boundFlag = cleo.page.getByTestId('playback-flag');
     await expect(boundFlag).toBeVisible();
     await expect(boundFlag).toBeDisabled();
@@ -649,7 +654,7 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     await expect(spectator.getByTestId('playback-spectator')).toBeVisible();
     await spectator.waitForTimeout(400);
     expect(spectatorRequests()).toEqual([]);
-    await spectator.getByTestId('playback-consent').check();
+    await unlockSound(spectator);
     const spectatorFlag = spectator.getByTestId('playback-flag');
     await expect(spectatorFlag).toBeVisible();
     await expect(spectatorFlag).toBeDisabled();
@@ -671,7 +676,11 @@ test('the playback player is pre-warmed during SUBMISSION and reused into PLAYBA
   try {
     const [alice, bruno] = stages;
     await assembleRoom(alice, stages.slice(1));
-    await enterSubmission(stages.map((stage) => stage.page));
+    // Bruno picks "Ohne Videos"; submitting a song later grants the consent.
+    await enterSubmission(
+      stages.map((stage) => stage.page),
+      { withoutVideos: [bruno.page] },
+    );
 
     // (a) Before consent: the stable host slot exists, but there is no playback
     // iframe and no external YouTube traffic of any kind.

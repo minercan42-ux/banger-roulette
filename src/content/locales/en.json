@@ -77,9 +77,26 @@
   },
   "privacy": {
     "title": "Privacy",
-    "embed": "Videos are embedded from youtube-nocookie.com, and only after you consent in this tab.",
+    "embed": "Videos are embedded from youtube-nocookie.com, and only after you consent in the start popup (\"Let's go\"). With \"No videos\" nothing is loaded from YouTube.",
     "noTracking": "This app uses no analytics and sets no cookies.",
-    "storage": "The only stored item is a random player ID in your browser's localStorage, so a reload recognizes you. No account, no saved game."
+    "storage": "Only a random player ID and your YouTube consent are stored in your browser's localStorage, so a reload recognizes you. You can revoke the consent in the menu at any time. No account, no saved game."
+  },
+  "gate": {
+    "title": "Ready for Banger Roulette?",
+    "body": "Songs play as YouTube videos embedded from youtube-nocookie.com, and the game plays sounds.",
+    "privacy": "One click is enough: only \"Let's go\" loads videos from YouTube and turns on sound. You can revoke the consent in the menu at any time.",
+    "accept": "Let's go",
+    "decline": "No videos",
+    "compactTitle": "Start sound",
+    "compactBody": "Your browser only allows audio after a tap.",
+    "compactAccept": "Tap to start"
+  },
+  "consent": {
+    "statusLabel": "YouTube videos",
+    "on": "Allowed",
+    "off": "Off",
+    "revoke": "Revoke YouTube consent",
+    "grant": "Allow YouTube videos"
   },
   "lobby": {
     "heading": "Lobby",
@@ -187,8 +204,7 @@
     "linkLabel": "YouTube link",
     "linkHint": "Supported: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com and m.youtube.com. Other domains are rejected.",
     "linkInvalid": "Not a valid YouTube link. Please enter a supported URL.",
-    "consentLabel": "I agree that YouTube content (preview player and thumbnail) is loaded.",
-    "consentRequired": "Please consent to YouTube embedding first.",
+    "consentRequired": "YouTube videos are off. Grant consent in the menu to listen and validate.",
     "loadPreview": "Load preview",
     "previewPlay": "Play preview",
     "statusIdle": "No preview loaded",
@@ -238,8 +254,7 @@
     "spectator": "You are watching; your tab plays along but cannot write.",
     "boundTab": "Another tab holds the write connection. This tab only listens and cannot flag songs.",
     "ownersHidden": "Owner names follow at the reveal.",
-    "consentRequired": "YouTube playback stays disabled until you consent.",
-    "consentLabel": "I agree that YouTube content (player and thumbnail) is loaded.",
+    "consentRequired": "YouTube videos are off. Grant consent in the menu to load playback.",
     "progressLabel": "Playback progress",
     "timeLeft": "{{time}} left",
     "volumeLabel": "Volume",

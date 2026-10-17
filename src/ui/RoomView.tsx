@@ -9,7 +9,8 @@ import {
 } from '../engine/selectors';
 import type { GameSession, SessionSnapshot } from '../net/session';
 import type { GameState } from '../shared/game';
-import { useEmbedConsent } from './embed-consent';
+import { ConsentControl } from './ConsentControl';
+import { declineConsent, grantConsent, useEmbedConsent } from './embed-consent';
 import { FinalPhase } from './FinalPhase';
 import { GenreSpin } from './GenreSpin';
 import { HostControls } from './HostControls';
@@ -29,6 +30,7 @@ import { RosterList } from './RosterList';
 import { SettingsForm } from './SettingsForm';
 import { SfxDirector } from './SfxDirector';
 import { SoundControl } from './SoundControl';
+import { StartGate } from './StartGate';
 import { SubmissionPanel } from './SubmissionPanel';
 import { useSoundUnlock } from './useSoundUnlock';
 
@@ -75,7 +77,7 @@ export function RoomView({
   // and reused into PLAYBACK. It exists only while the viewer consented and the
   // phase is SUBMISSION or PLAYBACK; any other phase (or withdrawal) destroys
   // it. The plan is unknown during SUBMISSION, so only the player is warmed.
-  const { consented } = useEmbedConsent();
+  const { consented, state: consentState } = useEmbedConsent();
   const playbackView = selectPlayback(state, viewerId, snapshot.connectionId);
   const playbackHostRef = useRef<HTMLDivElement | null>(null);
   const playback = usePlaybackController({
@@ -94,6 +96,28 @@ export function RoomView({
     canWriteSelf,
     self?.soundUnlocked ?? false,
   );
+
+  // One start gate for the YouTube consent and the audio unlock. It opens for
+  // a seated player while the consent is undecided, or while this page load's
+  // audio is still locked. Esc closes only the one-tap form (consent already
+  // decided); the status control then offers a manual retry.
+  const [gateDismissed, setGateDismissed] = useState(false);
+  const needsAudio = canWriteSelf && !sound.soundReady;
+  const gateOpen =
+    self !== undefined &&
+    (consentState === 'undecided' || (needsAudio && !gateDismissed));
+
+  async function acceptGate() {
+    if (consentState === 'undecided') {
+      grantConsent();
+    }
+    await sound.enable();
+  }
+
+  async function declineGate() {
+    declineConsent();
+    await sound.enable();
+  }
 
   async function copyLink() {
     try {
@@ -116,7 +140,13 @@ export function RoomView({
   }
 
   const lobby = room.phase === 'LOBBY';
-  const soundControl = <SoundControl sound={sound} canWrite={canWriteSelf} />;
+  const soundControl = (
+    <SoundControl
+      sound={sound}
+      canWrite={canWriteSelf}
+      canRetry={gateDismissed && consentState !== 'undecided'}
+    />
+  );
 
   const stage = (
     <div data-testid="room-view" data-phase={room.phase} className="space-y-4">
@@ -334,44 +364,63 @@ export function RoomView({
           </p>
         )}
       </Panel>
+      <ConsentControl />
       {!lobby && soundControl}
     </>
   );
 
   return (
-    <TableLayout
-      top={
-        <>
-          {brand}
-          <div className="br-table__meta">
-            <span className="br-label">{t('lobby.roomCodeLabel')}:</span>
-            <span data-testid="room-code" className="br-code br-code--bar">
-              {room.roomCode}
-            </span>
-          </div>
-          {controls}
-        </>
-      }
-      phaseBar={
-        lobby ? undefined : (
-          <PhaseSummary session={session} state={state} room={room} />
-        )
-      }
-      notices={notices}
-      side={
-        <RosterList
-          roster={roster}
-          phase={room.phase}
-          canKick={permissions.canKick}
-          onKick={(playerId) => {
-            void kick(playerId);
+    <>
+      {gateOpen && (
+        <StartGate
+          consent={consentState}
+          busy={sound.busy}
+          errorKey={sound.errorKey}
+          onAccept={() => {
+            void acceptGate();
+          }}
+          onDecline={() => {
+            void declineGate();
+          }}
+          onDismiss={() => {
+            setGateDismissed(true);
           }}
         />
-      }
-      stage={stage}
-      actions={actions}
-      drawer={drawer}
-      footer={footer}
-    />
+      )}
+      <TableLayout
+        top={
+          <>
+            {brand}
+            <div className="br-table__meta">
+              <span className="br-label">{t('lobby.roomCodeLabel')}:</span>
+              <span data-testid="room-code" className="br-code br-code--bar">
+                {room.roomCode}
+              </span>
+            </div>
+            {controls}
+          </>
+        }
+        phaseBar={
+          lobby ? undefined : (
+            <PhaseSummary session={session} state={state} room={room} />
+          )
+        }
+        notices={notices}
+        side={
+          <RosterList
+            roster={roster}
+            phase={room.phase}
+            canKick={permissions.canKick}
+            onKick={(playerId) => {
+              void kick(playerId);
+            }}
+          />
+        }
+        stage={stage}
+        actions={actions}
+        drawer={drawer}
+        footer={footer}
+      />
+    </>
   );
 }

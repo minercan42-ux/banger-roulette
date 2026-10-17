@@ -488,9 +488,6 @@ test('AK-2: a duplicated song cannot be rated by its owners, who both score it',
       if (playing === DUP) {
         // Both owners see "your song" and cannot flag it; the uninvolved
         // third player gets the bar and may flag it.
-        for (const page of pages) {
-          await page.getByTestId('playback-consent').check();
-        }
         for (const page of [host.page, bob.page]) {
           await expect(page.getByTestId('rating-own')).toBeVisible();
           await expect(page.getByTestId('rating-bar')).toHaveCount(0);
@@ -659,9 +656,6 @@ test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async
     ];
     const rate: RatingFn = (rater, song) => values[rater]?.[song] ?? null;
     await advanceToSong(pages, SONG_D, { medias, value: rate });
-    // The genre-fail button lives behind the per-tab embedding consent.
-    await host.page.getByTestId('playback-consent').check();
-    await bob.page.getByTestId('playback-consent').check();
     const flagHost = host.page.getByTestId('playback-flag');
     await flagHost.click();
     await expect(flagHost).toHaveAttribute('data-flagged', 'true');

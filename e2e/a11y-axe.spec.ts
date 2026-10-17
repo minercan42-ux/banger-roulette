@@ -130,11 +130,12 @@ for (const { name, locale, viewport } of VARIANTS) {
       await assembleRoom(host, stages.slice(1));
       await setSettings(host.page, { rounds: 1 });
       await expect(host.page.getByTestId('roster')).toBeVisible();
-      await scan(host.page, 'Lobby', findings);
+      await scan(host.page, 'StartGate', findings);
 
       for (const page of players) {
         await unlockSound(page);
       }
+      await scan(host.page, 'Lobby', findings);
       await host.page.getByTestId('start-game').click();
       await waitForPhase(host.page, 'GENRE_SPIN');
       await scan(host.page, 'GENRE_SPIN', findings);

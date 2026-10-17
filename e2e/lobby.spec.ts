@@ -99,8 +99,16 @@ async function waitForActivePlayers(page: Page, count: number): Promise<void> {
     .toBe(count);
 }
 
+/** Passes the start gate; idempotent for a page that already did. */
 async function unlockSound(page: Page): Promise<void> {
-  await page.getByTestId('sound-consent').click();
+  const accept = page.getByTestId('start-gate-accept');
+  const unlocked = page.locator(
+    '[data-testid="sound-status"][data-unlocked="true"]',
+  );
+  await expect(accept.or(unlocked).first()).toBeAttached();
+  if ((await accept.count()) > 0) {
+    await accept.click();
+  }
   await expect(page.getByTestId('sound-status')).toHaveAttribute(
     'data-unlocked',
     'true',
@@ -151,7 +159,7 @@ test('three contexts create, join by code and deep link with host-only rules', a
       'data-ready',
       'false',
     );
-    await host.getByTestId('sound-consent').click();
+    await host.getByTestId('start-gate-accept').click();
     await expect(host.getByTestId('sound-status')).toHaveAttribute(
       'data-unlocked',
       'true',
@@ -182,6 +190,7 @@ test('the genre-fail penalty switches off to 0 and back on to -3', async ({
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
+    await unlockSound(host);
     const member = await openHarness(memberContext);
     await joinRoom(member, code, 'Member');
 
@@ -262,6 +271,7 @@ test('custom genre list saves with one language and shows live validation', asyn
   try {
     const host = await openHarness(hostContext);
     const code = await createRoom(host, 'Host');
+    await unlockSound(host);
     const member = await openHarness(memberContext);
     await joinRoom(member, code, 'Member');
 
@@ -451,7 +461,7 @@ test('a host second tab rebinds identity: old tab read-only, new tab writes', as
     await expect(memberSecond.getByTestId('read-only-indicator')).toHaveCount(
       0,
     );
-    await expect(memberSecond.getByTestId('sound-consent')).toBeEnabled();
+    await expect(memberSecond.getByTestId('start-gate-accept')).toBeEnabled();
     // Members never gain host powers, only the write connection.
     await expect(memberSecond.getByTestId('settings-rounds')).toBeDisabled();
   } finally {
@@ -581,9 +591,15 @@ test('reload keeps the retained identity and score without game persistence', as
     // Three flat 5.0 songs tie, so every owner gets 5.0 plus the 2.0 bonus (tenths).
     expect(scoreBefore).toBe(70);
 
-    // Only the identity is stored locally, never the game.
-    const storageKeys = await member.evaluate(() => Object.keys(localStorage));
-    expect(storageKeys).toEqual(['banger-roulette.clientId']);
+    // Only the identity and the YouTube consent are stored locally, never the
+    // game (NFR-04).
+    const storageKeys = await member.evaluate(() =>
+      Object.keys(localStorage).sort(),
+    );
+    expect(storageKeys).toEqual([
+      'banger-roulette.clientId',
+      'banger-roulette.youtubeConsent',
+    ]);
 
     await member.reload();
     await expect(member.getByTestId('room-view')).toBeVisible({
@@ -749,6 +765,7 @@ test('copy link falls back to manual sharing when the clipboard is denied', asyn
   try {
     const page = await openHarness(context);
     const code = await createRoom(page, 'Sharer');
+    await unlockSound(page);
     await page.getByTestId('copy-link').click();
     const fallback = page.getByTestId('copy-link-fallback');
     await expect(fallback).toBeVisible();
@@ -772,6 +789,15 @@ test('room view stays within 360px and switches language without reload', async 
   try {
     const page = await openHarness(context);
     await createRoom(page, 'Mobile');
+
+    // The start gate fits the 360 px viewport: a dialog, fully on screen.
+    const gate = page.getByTestId('start-gate');
+    await expect(gate).toBeVisible();
+    const gateBox = await gate
+      .getByRole('dialog')
+      .evaluate((element) => element.getBoundingClientRect().toJSON());
+    expect(gateBox.left).toBeGreaterThanOrEqual(0);
+    expect(gateBox.right).toBeLessThanOrEqual(360);
 
     const widths = await page.evaluate(() => ({
       innerWidth: window.innerWidth,

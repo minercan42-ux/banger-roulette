@@ -134,8 +134,38 @@ export async function joinRoom(
   await expect(page.getByTestId('room-view')).toBeVisible();
 }
 
+/**
+ * The start gate's one click ("Los geht's", or "Tippen zum Starten" once the
+ * consent is stored): grants the YouTube consent and unlocks audio.
+ */
 export async function unlockSound(page: Page): Promise<void> {
-  await page.getByTestId('sound-consent').click();
+  const accept = page.getByTestId('start-gate-accept');
+  const unlocked = page.locator(
+    '[data-testid="sound-status"][data-unlocked="true"]',
+  );
+  // Idempotent: a page that already passed the gate has nothing to click.
+  await expect(accept.or(unlocked).first()).toBeAttached();
+  if ((await accept.count()) > 0) {
+    await accept.click();
+  }
+  await expect(page.getByTestId('start-gate')).toHaveCount(0);
+  await expect(page.getByTestId('sound-status')).toHaveAttribute(
+    'data-unlocked',
+    'true',
+  );
+}
+
+/** "Ohne Videos": unlocks audio but grants no YouTube consent. */
+export async function unlockSoundWithoutVideos(page: Page): Promise<void> {
+  const decline = page.getByTestId('start-gate-decline');
+  const unlocked = page.locator(
+    '[data-testid="sound-status"][data-unlocked="true"]',
+  );
+  await expect(decline.or(unlocked).first()).toBeAttached();
+  if ((await decline.count()) > 0) {
+    await decline.click();
+  }
+  await expect(page.getByTestId('start-gate')).toHaveCount(0);
   await expect(page.getByTestId('sound-status')).toHaveAttribute(
     'data-unlocked',
     'true',
@@ -180,18 +210,33 @@ export async function setSettings(
 }
 
 /** Unlocks sound everywhere, starts the game and lands on the SUBMISSION phase. */
-export async function enterSubmission(players: Page[]): Promise<void> {
+export async function enterSubmission(
+  players: Page[],
+  options: { withoutVideos?: readonly Page[] } = {},
+): Promise<void> {
   const [host, ...others] = players;
   for (const player of players) {
-    await unlockSound(player);
+    if (options.withoutVideos?.includes(player)) {
+      await unlockSoundWithoutVideos(player);
+    } else {
+      await unlockSound(player);
+    }
   }
   await host.getByTestId('start-game').click();
   await waitForPhase(host, 'SUBMISSION');
   await Promise.all(others.map((player) => waitForPhase(player, 'SUBMISSION')));
 }
 
+/** Makes sure the YouTube consent is granted (the drawer offers it after "Ohne Videos"). */
 export async function ensureConsent(page: Page): Promise<void> {
-  await page.getByTestId('youtube-consent').check();
+  const grant = page.getByTestId('consent-grant');
+  if ((await grant.count()) > 0) {
+    await grant.click();
+  }
+  await expect(page.getByTestId('consent-status')).toHaveAttribute(
+    'data-consented',
+    'true',
+  );
 }
 
 /** Loads the preview for a link and proves it reached PLAYING. */

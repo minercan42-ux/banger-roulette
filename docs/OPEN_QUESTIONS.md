@@ -63,7 +63,7 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 
 ## M3 integration decisions and evidence
 
-- Separate per-tab embedding checkbox gates metadata, scripts, frames and thumbnails. It is not stored; reload retains accepted media from the host snapshot only. Unsaved edits are not persisted.
+- The embedding consent gates metadata, scripts, frames and thumbnails (no per-phase checkbox since #96); reload retains accepted media from the host snapshot only. Unsaved edits are not persisted.
 - `t=` accepts whole seconds or h/m/s components; malformed or unsafe-integer timestamps reject the link instead of silently guessing. Start selection remains within the actual video length, and the engine bounds the clip's end.
 - The three-second first PLAYBACK preroll presents anonymous-safe linked songs without inserting a new engine phase or delaying authoritative deadlines. Single-song rounds use their existing REVEAL phase and zero-score rule. M4 uses every song's existing three-second preroll for cueing.
 - Real YouTube/oEmbed runtime smoke used three actual UI/session/engine clients over the test transport: official video M7lc1UVf-VE played, duration 1343 seconds, t=42 restored, +1 saved at 43, pause destroyed the iframe and disabled saving after resume, Done removed the editor, DE switched without reload and 360px had no horizontal overflow. Roulette and player screenshots were inspected; no browser runtime errors were recorded. This is not a live Supabase timing claim.
@@ -73,7 +73,7 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 ## M4 integration decisions and runtime gates
 
 - Reuse existing snapshot playback timestamps and session clock synchronization; no new protocol event, reducer transition or network ticker. A privacy-safe playback selector is the only engine addition.
-- Embedding consent is in-memory per tab, shared between submission and playback and lost on reload. Local volume defaults to 70%, with mute/volume retained across songs for the controller's lifetime (song selection through playback of one round).
+- Embedding consent (#96) is one stored choice (`banger-roulette.youtubeConsent`), collected by the start gate and shared by submission, playback and reveal; the drawer revokes it. "Ohne Videos" is not stored and also unlocks audio, so the player can still be ready to start. After a reload only the one-tap sound gate appears (browsers need a gesture per page load). Local volume defaults to 70%, with mute/volume retained across songs for the controller's lifetime (song selection through playback of one round).
 - CUED gates scheduled play. Late cue or buffering catches up only on actual PLAYING; errors skip locally and never extend authoritative deadlines. Seeking above 750 ms drift uses a one-second cooldown and an independent deadline because YouTube seeks cancel `endSeconds`.
 - Real unmocked YouTube/oEmbed was exercised in four isolated UI/session/engine contexts over the test transport: three consented players plus one nonconsenting listener. First PLAYING for the official example video arrived 3608/4570/4723 ms after the common planned start; later drift samples were -508/-434/-309 ms. AK-7's real cold-start ±500 ms criterion was not met. This run predates two later player fixes (embed-load CUED race, pre-start PLAYING) and is not a live Supabase timing claim; the debug overlay retains the failed start measurements.
 - After the pre-start PLAYING fix, one controller with the API already loaded played the same video against real YouTube with a 15-second preroll. First PLAYING arrived 619 ms after `startAt`. Drift stayed between -561 and -625 ms, below the 750 ms correction threshold, and the independent deadline ended the clip. This single warm-player sample also misses ±500 ms; it is not a multi-client acceptance result.
@@ -89,7 +89,7 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - No drag-and-drop library (bundle budget NFR-01): native HTML5 drag-and-drop for desktop, tap-to-append for touch, up/down buttons for keyboard. Each discrete change sends the complete ranking; the host rate limit (burst 20, 10/s) is never approached by a human.
 - Reveal order is "ascending placement": round winners always come last, other songs by ascending Borda. A genre-failed song with the highest Borda is revealed before the winner instead of looking like one.
 - Advancing out of VOTING and REVEAL stays deadline-driven or automatic (everyone finished). No host "skip" button was added; the engine's host `ADVANCE` remains available to tests.
-- The voting re-listen player and voting/reveal thumbnails reuse the per-tab embedding consent; without consent nothing is loaded from YouTube.
+- The voting re-listen player and voting/reveal thumbnails reuse the shared embedding consent; without consent nothing is loaded from YouTube.
 - A quorum or host pause during VOTING empties the write-target lists. For voters who have not finished, the voting view now keeps the foreign songs visible read-only with a pause notice instead of "no foreign songs to rank"; finished voters keep their read-only ballot.
 
 ## Live multiplayer evidence (2026-10-14, after the Supabase Realtime incident)

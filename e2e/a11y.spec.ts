@@ -116,10 +116,6 @@ async function submitSongByKeyboard(page: Page, url: string): Promise<void> {
   await page.keyboard.type(url);
   await expect(page.getByTestId('song-link')).toHaveValue(url);
 
-  await tabTo(page, { testId: 'youtube-consent' });
-  await page.keyboard.press(' ');
-  await expect(page.getByTestId('youtube-consent')).toBeChecked();
-
   await tabTo(page, { testId: 'load-preview' });
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('preview-status')).toHaveAttribute(
@@ -329,8 +325,9 @@ test('one player completes the round from Lobby to Finale with the keyboard only
     }
     await setSettings(host.page, { rounds: 1 });
 
-    // The audited player unlocks sound and starts the game by keyboard.
-    await tabTo(host.page, { testId: 'sound-consent' });
+    // The audited player passes the start gate and starts the game by
+    // keyboard: the gate takes focus on open, Enter accepts.
+    await expect(host.page.getByTestId('start-gate-accept')).toBeFocused();
     await host.page.keyboard.press('Enter');
     await expect(host.page.getByTestId('sound-status')).toHaveAttribute(
       'data-unlocked',

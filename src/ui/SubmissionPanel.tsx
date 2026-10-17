@@ -117,7 +117,7 @@ export function SubmissionPanel({
 
   const [linkText, setLinkText] = useState(initial.link);
   const [startSeconds, setStartSeconds] = useState(initial.startSeconds);
-  const { consented: consent, setConsent } = useEmbedConsent();
+  const { consented: consent } = useEmbedConsent();
   const [status, setStatus] = useState<PanelStatus>({ type: 'idle' });
   const [metadata, setMetadata] = useState<OEmbedMetadata | null>(null);
   const [busy, setBusy] = useState(false);
@@ -141,6 +141,21 @@ export function SubmissionPanel({
   }, [stateRef]);
 
   useEffect(() => teardown, [teardown]);
+
+  // Revoking the consent (drawer) stops the preview player at once.
+  useEffect(() => {
+    if (!consent) {
+      teardown();
+    }
+  }, [consent, teardown]);
+  const [seenConsent, setSeenConsent] = useState(consent);
+  if (seenConsent !== consent) {
+    setSeenConsent(consent);
+    if (!consent) {
+      setStatus({ type: 'idle' });
+      setMetadata(null);
+    }
+  }
 
   // Snapshot callbacks cancel validation as soon as the write scope closes.
   useEffect(
@@ -180,7 +195,6 @@ export function SubmissionPanel({
       return;
     }
     if (!consent) {
-      setNoticeKey('submission.consentRequired');
       return;
     }
     if (!permissions.canSubmit || busy) {
@@ -479,25 +493,11 @@ export function SubmissionPanel({
             </p>
           )}
 
-          <label className="br-check">
-            <input
-              type="checkbox"
-              data-testid="youtube-consent"
-              checked={consent}
-              disabled={!editable}
-              onChange={(event) => {
-                const accepted = event.target.checked;
-                setConsent(accepted);
-                if (!accepted) {
-                  teardown();
-                  setStatus({ type: 'idle' });
-                  setMetadata(null);
-                }
-              }}
-              className="br-check__input"
-            />
-            <span>{t('submission.consentLabel')}</span>
-          </label>
+          {!consent && (
+            <p data-testid="submission-consent-required" className="br-notice">
+              {t('submission.consentRequired')}
+            </p>
+          )}
 
           <div className="br-row">
             <Button
@@ -506,7 +506,7 @@ export function SubmissionPanel({
               onClick={() => {
                 void loadPreview();
               }}
-              disabled={!editable || parsed === null}
+              disabled={!editable || parsed === null || !consent}
             >
               {t('submission.loadPreview')}
             </Button>
