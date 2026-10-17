@@ -84,12 +84,7 @@ export function PlaybackPhase({
   const { consented } = useEmbedConsent();
   const now = useSessionNow(session, true, PROGRESS_FRAME_MS);
 
-  const aliveRef = useRef(true);
-  const videoIdRef = useRef<string | null>(null);
   const planRef = useRef<PlaybackPlan | null>(null);
-
-  const [noticeKey, setNoticeKey] = useState<string | null>(null);
-  const [flagBusy, setFlagBusy] = useState(false);
 
   // The controller is owned by RoomView (M4 AK-7 pre-warm): it is created
   // during SUBMISSION and reused into PLAYBACK. This view only drives it.
@@ -112,15 +107,7 @@ export function PlaybackPhase({
             deadlineAt: view.deadlineAt,
             pausedAt: view.pausedAt,
           };
-    videoIdRef.current = view?.song.videoId ?? null;
   }, [view]);
-
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
 
   // Push the current plan into the lifted controller; the room creates it
   // plan-less and it adopts this plan on its first update.
@@ -166,31 +153,6 @@ export function PlaybackPhase({
   const ownersVisible = view.song.ownersVisible && view.song.owners.length > 0;
   const rttLabel = clock.rttMs === null ? '–' : `${Math.round(clock.rttMs)} ms`;
   const boundTab = choices.isParticipant && !permissions.canWrite;
-
-  async function flagGenreFail() {
-    if (view === null || !view.canFlag || flagBusy) {
-      return;
-    }
-    const videoId = view.song.videoId;
-    setFlagBusy(true);
-    setNoticeKey(null);
-    const result = await session.dispatch({
-      type: 'SET_GENRE_FAIL',
-      videoId,
-      flagged: true,
-    });
-    if (!aliveRef.current) {
-      return;
-    }
-    setFlagBusy(false);
-    // A stale result for a song that already moved on must not touch the UI.
-    if (videoIdRef.current !== videoId) {
-      return;
-    }
-    if (result.status === 'rejected') {
-      setNoticeKey(`errors.${result.reason}`);
-    }
-  }
 
   return (
     <Panel
@@ -395,39 +357,6 @@ export function PlaybackPhase({
               className="br-notice br-notice--error"
             >
               {t('playback.errorHint', { code: errorCode })}
-            </p>
-          )}
-
-          <div className="br-row">
-            <Button
-              tone="red"
-              size="sm"
-              data-testid="playback-flag"
-              data-flagged={view.flaggedByViewer}
-              disabled={!view.canFlag || flagBusy}
-              onClick={() => {
-                void flagGenreFail();
-              }}
-            >
-              {t('playback.flag')}
-            </Button>
-            {view.flaggedByViewer && (
-              <span
-                data-testid="playback-flag-note"
-                className="br-read text-red-text"
-              >
-                {t('playback.flagged')}
-              </span>
-            )}
-          </div>
-
-          {noticeKey && (
-            <p
-              data-testid="playback-notice"
-              role="status"
-              className="br-notice"
-            >
-              {t(noticeKey)}
             </p>
           )}
         </div>

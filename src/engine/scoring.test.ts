@@ -15,7 +15,6 @@ function songsFor(songOwners: string[]): Song[] {
 function roundWith(
   songs: Song[],
   ratings: Record<string, Record<string, number>>,
-  flags: Record<string, string[]> = {},
   participantIds: string[] = owners,
 ): Round {
   return {
@@ -28,7 +27,6 @@ function roundWith(
     songs,
     playbackOrder: songs.map((song) => song.media.videoId),
     ratings,
-    genreFailFlags: flags,
   };
 }
 
@@ -152,7 +150,6 @@ describe('scoreRound', () => {
         {
           [id(3)]: { [videoId(1)]: 5, [videoId(2)]: 5 },
         },
-        {},
         [id(1), id(2), id(3)],
       ),
       makeSettings(),
@@ -180,7 +177,7 @@ describe('scoreRound', () => {
     };
     const participants = [id(1), id(2), id(3)];
     const result = scoreRound(
-      roundWith([song], {}, {}, participants),
+      roundWith([song], {}, participants),
       makeSettings(),
     );
     expect(songOf(result, videoId(1))).toMatchObject({
@@ -198,7 +195,7 @@ describe('scoreRound', () => {
     });
     // The linked-points setting must not halve the fixed no-rater bonus.
     const half = scoreRound(
-      roundWith([song], {}, {}, participants),
+      roundWith([song], {}, participants),
       makeSettings({ linkedPoints: 'halfCeil' }),
     );
     expect(half.playerDeltas).toEqual({
@@ -211,7 +208,7 @@ describe('scoreRound', () => {
   it('scores an unrated song zero but keeps it in the bonus race', () => {
     const songs = songsFor([id(1), id(2)]);
     const result = scoreRound(
-      roundWith(songs, {}, {}, [id(1), id(2), id(3)]),
+      roundWith(songs, {}, [id(1), id(2), id(3)]),
       makeSettings(),
     );
     for (const video of [videoId(1), videoId(2)]) {
@@ -230,59 +227,67 @@ describe('scoreRound', () => {
     });
   });
 
+  it('counts a genre-fail 0 in the mean without failing the song alone', () => {
+    const songs = songsFor([id(1), id(2)]);
+    const result = scoreRound(
+      roundWith(songs, {
+        [id(2)]: { [videoId(1)]: 10 },
+        [id(3)]: { [videoId(1)]: 10 },
+        [id(4)]: { [videoId(1)]: 0 },
+      }),
+      makeSettings(),
+    );
+    // (10 + 10 + 0) / 3 = 6.67 -> 6.7; one of three is no majority.
+    expect(songOf(result, videoId(1))).toMatchObject({
+      scoreTenths: 67,
+      ratingCount: 3,
+      banger: false,
+      genreFailed: false,
+      flaggerIds: [id(4)],
+      winner: true,
+      bonus: 20,
+    });
+  });
+
   it('penalises a genre fail and excludes it from the winner bonus', () => {
     const songs = songsFor([id(1), id(2)]);
     const result = scoreRound(
-      roundWith(
-        songs,
-        {
-          [id(2)]: { [videoId(1)]: 8 },
-          [id(3)]: { [videoId(1)]: 8, [videoId(2)]: 5 },
-          [id(4)]: { [videoId(1)]: 8, [videoId(2)]: 5 },
-        },
-        {
-          [id(2)]: [videoId(1)],
-          [id(3)]: [videoId(1)],
-          [id(4)]: [videoId(2)],
-        },
-      ),
+      roundWith(songs, {
+        [id(2)]: { [videoId(1)]: 0 },
+        [id(3)]: { [videoId(1)]: 0, [videoId(2)]: 5 },
+        [id(4)]: { [videoId(1)]: 8, [videoId(2)]: 0 },
+      }),
       makeSettings(),
     );
     const failed = songOf(result, videoId(1));
+    // (0 + 0 + 8) / 3 = 2.67 -> 2.7; two of three eligible rated 0.
     expect(failed).toMatchObject({
-      scoreTenths: 80,
+      scoreTenths: 27,
       genreFailed: true,
       winner: false,
       bonus: 0,
       flaggerIds: [id(2), id(3)],
     });
-    // 8.0 of points minus the full 3.0 genre-fail penalty.
-    expect(failed.ownerDeltas[id(1)]).toBe(50);
+    // 2.7 of points minus the full 3.0 genre-fail penalty.
+    expect(failed.ownerDeltas[id(1)]).toBe(-3);
     const winner = songOf(result, videoId(2));
     expect(winner).toMatchObject({
-      scoreTenths: 50,
+      scoreTenths: 25,
       genreFailed: false,
       winner: true,
       bonus: 20,
     });
     expect(winner.flaggerIds).toEqual([id(4)]);
-    expect(result.playerDeltas).toEqual({
-      [id(1)]: 50,
-      [id(2)]: 70,
-      [id(3)]: 0,
-      [id(4)]: 0,
-    });
   });
 
-  it('requires a strict majority of the eligible raters to flag', () => {
+  it('requires a strict majority of the eligible raters at 0', () => {
     const songs = songsFor([id(1), id(2)]);
-    const base = {
-      [id(2)]: { [videoId(1)]: 8 },
-      [id(3)]: { [videoId(1)]: 8 },
-      [id(4)]: { [videoId(1)]: 8 },
-    };
     const minority = scoreRound(
-      roundWith(songs, base, { [id(2)]: [videoId(1)] }),
+      roundWith(songs, {
+        [id(2)]: { [videoId(1)]: 0 },
+        [id(3)]: { [videoId(1)]: 8 },
+        [id(4)]: { [videoId(1)]: 8 },
+      }),
       makeSettings(),
     );
     expect(songOf(minority, videoId(1))).toMatchObject({
@@ -291,9 +296,10 @@ describe('scoreRound', () => {
       bonus: 20,
     });
     const majority = scoreRound(
-      roundWith(songs, base, {
-        [id(2)]: [videoId(1)],
-        [id(3)]: [videoId(1)],
+      roundWith(songs, {
+        [id(2)]: { [videoId(1)]: 0 },
+        [id(3)]: { [videoId(1)]: 0 },
+        [id(4)]: { [videoId(1)]: 8 },
       }),
       makeSettings(),
     );
@@ -302,6 +308,40 @@ describe('scoreRound', () => {
       winner: false,
       bonus: 0,
     });
+  });
+
+  it('removes the flagger when a 0 becomes a 7', () => {
+    const songs = songsFor([id(1), id(2)]);
+    const rated = (second: number) =>
+      scoreRound(
+        roundWith(songs, {
+          [id(2)]: { [videoId(1)]: 0 },
+          [id(3)]: { [videoId(1)]: second },
+          [id(4)]: { [videoId(1)]: 0 },
+        }),
+        makeSettings(),
+      );
+    expect(songOf(rated(0), videoId(1)).flaggerIds).toEqual([
+      id(2),
+      id(3),
+      id(4),
+    ]);
+    const switched = songOf(rated(7), videoId(1));
+    expect(switched.flaggerIds).toEqual([id(2), id(4)]);
+    expect(switched).toMatchObject({ scoreTenths: 23, genreFailed: true });
+    const both = songOf(
+      scoreRound(
+        roundWith(songs, {
+          [id(2)]: { [videoId(1)]: 7 },
+          [id(3)]: { [videoId(1)]: 7 },
+          [id(4)]: { [videoId(1)]: 0 },
+        }),
+        makeSettings(),
+      ),
+      videoId(1),
+    );
+    expect(both.flaggerIds).toEqual([id(4)]);
+    expect(both.genreFailed).toBe(false);
   });
 
   it('halves linked points with ceiling, the bonus included', () => {
@@ -325,7 +365,7 @@ describe('scoreRound', () => {
       [id(4)]: { [videoId(1)]: 8, [videoId(2)]: 5 },
     };
     const full = scoreRound(
-      roundWith(songs, ratings, {}, [id(1), id(2), id(3), id(4)]),
+      roundWith(songs, ratings, [id(1), id(2), id(3), id(4)]),
       makeSettings(),
     );
     expect(songOf(full, videoId(1))).toMatchObject({
@@ -335,7 +375,7 @@ describe('scoreRound', () => {
     });
     expect(full.playerDeltas[id(1)]).toBe(93);
     const half = scoreRound(
-      roundWith(songs, ratings, {}, [id(1), id(2), id(3), id(4)]),
+      roundWith(songs, ratings, [id(1), id(2), id(3), id(4)]),
       makeSettings({ linkedPoints: 'halfCeil' }),
     );
     // ceil((73 + 20) / 2) = ceil(46.5) = 47
@@ -347,22 +387,15 @@ describe('scoreRound', () => {
   it('keeps the genre-fail penalty full in half-ceil mode', () => {
     const songs = songsFor([id(1), id(2)]);
     const result = scoreRound(
-      roundWith(
-        songs,
-        {
-          [id(2)]: { [videoId(1)]: 8 },
-          [id(3)]: { [videoId(1)]: 8 },
-          [id(4)]: { [videoId(1)]: 8 },
-        },
-        {
-          [id(2)]: [videoId(1)],
-          [id(3)]: [videoId(1)],
-        },
-      ),
+      roundWith(songs, {
+        [id(2)]: { [videoId(1)]: 0 },
+        [id(3)]: { [videoId(1)]: 0 },
+        [id(4)]: { [videoId(1)]: 10 },
+      }),
       makeSettings({ linkedPoints: 'halfCeil' }),
     );
-    // ceil(80 / 2) = 40, then the full 3.0 penalty -> 1.0.
-    expect(result.playerDeltas[id(1)]).toBe(10);
+    // (0 + 0 + 10) / 3 = 3.3; ceil(33 / 2) = 17, then the full 3.0 penalty -> -1.3.
+    expect(result.playerDeltas[id(1)]).toBe(-13);
   });
 
   it('awards nothing in a round without songs', () => {

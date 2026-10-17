@@ -261,8 +261,8 @@ interface RatingSummary {
   rated: number;
   /** Songs that showed "your song" instead of a bar. */
   own: number;
-  /** Whether the genre-fail button was ever enabled on an owned song. */
-  ownFlagEnabled: boolean;
+  /** Whether the genre-fail chip (rating-chip-0) was ever enabled on an owned song. */
+  ownGenreFailEnabled: boolean;
 }
 
 /**
@@ -273,7 +273,11 @@ interface RatingSummary {
  */
 async function ratePlaying(page: Page, value = 8): Promise<RatingSummary> {
   const seen = new Set<string>();
-  const summary: RatingSummary = { rated: 0, own: 0, ownFlagEnabled: false };
+  const summary: RatingSummary = {
+    rated: 0,
+    own: 0,
+    ownGenreFailEnabled: false,
+  };
   const room = page.getByTestId('room-view');
   for (;;) {
     const phase = await room
@@ -298,11 +302,11 @@ async function ratePlaying(page: Page, value = 8): Promise<RatingSummary> {
         summary.own += 1;
         if (
           await page
-            .getByTestId('playback-flag')
+            .getByTestId('rating-chip-0')
             .isEnabled()
             .catch(() => false)
         ) {
-          summary.ownFlagEnabled = true;
+          summary.ownGenreFailEnabled = true;
         }
         await assertNoOwnerLeak(page);
       } else if (await chip.isEnabled().catch(() => false)) {
@@ -623,7 +627,7 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
   });
   // AK-2 and AK-3 while the songs play: every player rates the two songs they
   // do not own (the linked song counts as one song owned by Alice and Bob),
-  // sees "your song" instead of a bar for their own, can neither rate nor flag
+  // sees "your song" instead of a bar for their own, can neither rate nor genre-fail
   // it, and no owner nickname shows up in the rating section.
   const round1Rated = await Promise.all(
     players.map((player) => ratePlaying(player.page)),
@@ -638,9 +642,10 @@ test('live smoke: 4-player game on the deployment covers AK-1..AK-5', async ({
     expect(summary.rated, 'every foreign song is rated through the bar').toBe(
       2,
     );
-    expect(summary.ownFlagEnabled, 'AK-2: owners cannot flag their song').toBe(
-      false,
-    );
+    expect(
+      summary.ownGenreFailEnabled,
+      'AK-2: owners cannot genre-fail their song',
+    ).toBe(false);
   }
   await Promise.all(
     players.map((player) => waitPhase(player.page, 'REVEAL', 60_000)),

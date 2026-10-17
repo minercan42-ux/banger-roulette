@@ -28,11 +28,6 @@ export const ClientActionSchema = z.discriminatedUnion('type', [
     songId: VideoId,
     value: Rating,
   }),
-  z.strictObject({
-    type: z.literal('SET_GENRE_FAIL'),
-    videoId: VideoId,
-    flagged: z.boolean(),
-  }),
   z.strictObject({ type: z.literal('ADVANCE') }),
   z.strictObject({ type: z.literal('PAUSE') }),
   z.strictObject({ type: z.literal('RESUME'), forceBelowMinimum: z.boolean() }),

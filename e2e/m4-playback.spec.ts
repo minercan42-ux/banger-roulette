@@ -282,13 +282,13 @@ test('the sync diagnostics stay hidden from players until the debug switch is on
     const text = await page.getByTestId('playback-phase').innerText();
     expect(text).not.toContain(String(Math.round(timing.startAt)));
     expect(text).not.toContain(String(Math.round(timing.deadlineAt)));
-    // Volume, mute and the genre-fail flag stay available (volume and mute
+    // Volume, mute and the rating bar (with its genre-fail chip) stay available (volume and mute
     // live in the top bar since #107; the slider sits in its popover).
     await expect(page.getByTestId('playback-mute')).toBeVisible();
     await page.getByTestId('volume-toggle').click();
     await expect(page.getByTestId('playback-volume')).toBeVisible();
     await page.getByTestId('volume-toggle').click();
-    await expect(page.getByTestId('playback-flag')).toBeVisible();
+    await expect(page.getByTestId('rating-section')).toBeVisible();
 
     // localStorage `banger-roulette.debug` turns the table on.
     await page.evaluate(() => {
@@ -612,22 +612,21 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     }
     await expect(alice.page.getByTestId('playback-title')).toBeVisible();
 
-    // Genre-Fail gate: own/linked songs are never targets, others are.
+    // Genre-Fail chip gate: own/linked songs get no bar, others get chip 0.
     const ownerIds = owners.get(order[0]!) ?? [];
     const aliceId = (await snapshot(alice.page)).clientId;
     const expectedEnabled = ownerIds.length > 0 && !ownerIds.includes(aliceId);
-    const flag = alice.page.getByTestId('playback-flag');
+    const chip = alice.page.getByTestId('rating-chip-0');
     if (expectedEnabled) {
-      await expect(flag).toBeEnabled();
-      await flag.click();
-      await expect(flag).toHaveAttribute('data-flagged', 'true');
-      await expect(flag).toBeDisabled();
-      const flagged = (await stateOf(alice.page))?.round?.genreFailFlags[
-        aliceId
-      ];
-      expect(flagged).toContain(order[0]!);
+      await expect(chip).toBeEnabled();
+      await expect(chip).toHaveAttribute('data-kind', 'genre-fail');
+      await chip.click();
+      await expect(chip).toHaveAttribute('aria-pressed', 'true');
+      const given = (await stateOf(alice.page))?.round?.ratings[aliceId];
+      expect(given?.[order[0]!]).toBe(0);
     } else {
-      await expect(flag).toBeDisabled();
+      await expect(alice.page.getByTestId('rating-own')).toBeVisible();
+      await expect(chip).toHaveCount(0);
     }
 
     // A second tab of the same identity takes over the write connection: the
@@ -640,12 +639,15 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     await expect(cleo.page.getByTestId('read-only-indicator')).toBeVisible();
     await expect(cleo.page.getByTestId('playback-bound-tab')).toBeVisible();
     await ensureConsent(cleo.page);
-    const boundFlag = cleo.page.getByTestId('playback-flag');
-    await expect(boundFlag).toBeVisible();
-    await expect(boundFlag).toBeDisabled();
+    const cleoId = (await snapshot(cleo.page)).clientId;
+    if ((owners.get(order[0]!) ?? []).includes(cleoId)) {
+      await expect(cleo.page.getByTestId('rating-own')).toBeVisible();
+    } else {
+      await expect(cleo.page.getByTestId('rating-chip-0')).toBeDisabled();
+    }
 
     // A genuinely new identity that joins mid-round is a spectator: it may not
-    // flag. Check zero traffic before consent, then test the visible flag gate.
+    // rate. Check zero traffic before consent, then test the missing rating bar.
     const spectatorContext = await harnessContext(browser, {
       locale: 'en-US',
     });
@@ -658,9 +660,8 @@ test('consent gates playback traffic and privacy and flag gates hold', async ({
     await spectator.waitForTimeout(400);
     expect(spectatorRequests()).toEqual([]);
     await unlockSound(spectator);
-    const spectatorFlag = spectator.getByTestId('playback-flag');
-    await expect(spectatorFlag).toBeVisible();
-    await expect(spectatorFlag).toBeDisabled();
+    await expect(spectator.getByTestId('rating-section')).toHaveCount(0);
+    await expect(spectator.getByTestId('rating-chip-0')).toHaveCount(0);
     await spectatorContext.close();
   } finally {
     await closeStages(stages);

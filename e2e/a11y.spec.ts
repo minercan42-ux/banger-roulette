@@ -383,6 +383,23 @@ test('one player completes the round from Lobby to Finale with the keyboard only
     const index = playing?.phase.type === 'PLAYBACK' ? playing.phase.index : 0;
     const songId = playing?.round?.playbackOrder[index] as string;
 
+    // Genre-fail chip by keyboard: it is chip 0 and replaces a number.
+    await tabTo(host.page, { testId: 'rating-chip-0' });
+    await expect(host.page.getByTestId('rating-chip-0')).toHaveAccessibleName(
+      /Genre.?fail/i,
+    );
+    await host.page.keyboard.press('Enter');
+    await expect(host.page.getByTestId('rating-chip-0')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect
+      .poll(
+        async () =>
+          (await stateOf(host.page))?.round?.ratings[hostId]?.[songId],
+      )
+      .toBe(0);
+
     // Rating by keyboard: pick a chip, then change it.
     await tabTo(host.page, { testId: 'rating-chip-7' });
     await host.page.keyboard.press('Enter');

@@ -75,9 +75,8 @@ export const RoundSchema = z.strictObject({
   nextSubmissionOrder: Int,
   songs: z.array(SongSchema).max(10),
   playbackOrder: VideoIds,
-  /** Live 0-10 ratings: rater id -> video id -> rating (FR-40). */
+  /** Live 0-10 ratings: rater id -> video id -> rating (FR-40). 0 is genre-fail. */
   ratings: z.record(Id, z.record(VideoId, Rating)),
-  genreFailFlags: z.record(Id, VideoIds),
 });
 export type Round = z.infer<typeof RoundSchema>;
 /** All scores below are integer tenths of a point (73 shows as 7.3). */
@@ -294,7 +293,6 @@ export const GameStateSchema = z
           ...Object.keys(round.submissions),
           ...round.submissionDoneIds,
           ...Object.keys(round.ratings),
-          ...Object.keys(round.genreFailFlags),
         ].some((id) => !participant(id))
       )
         issue('Round action by nonparticipant');
@@ -345,17 +343,6 @@ export const GameStateSchema = z
           })
         )
           issue('Invalid, own or unplayed rated song');
-      for (const [id, flags] of Object.entries(round.genreFailFlags))
-        if (
-          flags.some(
-            (video) =>
-              !videos.includes(video) ||
-              round.songs
-                .find((s) => s.media.videoId === video)
-                ?.ownerIds.includes(id),
-          )
-        )
-          issue('Invalid or own flagged song');
     }
     for (const result of state.results) {
       if (!genreIds.includes(result.genre.id)) issue('Unknown result genre');

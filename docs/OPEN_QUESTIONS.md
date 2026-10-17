@@ -14,7 +14,7 @@ The owner replaced the former voting phase (Borda ranking) with a live 0-10 rati
 - A banger (at least one rating, all 10) gets a longer reveal slot (`BANGER_REVEAL_MS = 5000`).
 - Old voting snapshots are not migrated: a running room from before this release is not supported (no compatibility shim, no ballot import).
 - `RoundResult.reason` is `normal` or `noSongs`; `singleSong` is removed.
-- The genre-fail flag is set once per song during PLAYBACK; the retract-until-finished behaviour of the old voting phase is gone.
+- Genre-fail is the rating 0 (chip 0 of the rating bar, #109): it is changeable like any rating until PLAYBACK ends, and a number replaces it.
 
 | Area               | Approved default                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ The user explicitly approved squash-merging PR #2 before a separate Preview chec
 - Exact fractional clipSeconds are retained; playback durations use `max(1, round(clipSeconds * 1000))` integer milliseconds for deadlineAt. Positive clips always advance time, with at most millisecond quantization rather than changing chosen media metadata.
 - A round where raters exist but nobody rated has every song at 0.0, so every eligible song receives the approved +2 tie bonus. A positive score threshold would be a separate product change.
 - Ten admitted active identities is a hard cap even on reconnect. Already admitted present bindings are never evicted automatically; an active identity may rebind a tab without another slot. Inactive JOIN returns `ROOM_FULL` while full; Presence removes absent bindings first and recovers retained inactive bindings in joinedAt/code-unit order only into free slots. Overflow stays disconnected with score/drafts/identity retained until capacity frees. Left/kicked identities are not auto-restored by Presence.
-- UI write hints and rating/flag target lists require the local `viewerConnectionId`, not just clientId. Stale tabs remain read-only after a real rebind while their own stored choices stay readable. A bound player can change a rating until PLAYBACK ends; a genre-fail flag is set once.
+- UI write hints and rating target lists require the local `viewerConnectionId`, not just clientId. Stale tabs remain read-only after a real rebind while their own stored choices stay readable. A bound player can change a rating (genre-fail is the rating 0) until PLAYBACK ends.
 
 ## M2 integration decisions
 

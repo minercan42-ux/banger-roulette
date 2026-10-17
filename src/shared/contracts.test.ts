@@ -83,7 +83,6 @@ function playback(): GameState {
     ],
     playbackOrder: [media.videoId],
     ratings: {},
-    genreFailFlags: {},
   };
   return state;
 }
@@ -470,9 +469,9 @@ describe('wire contracts', () => {
       },
     ],
     [
-      'own flag',
+      'own genre-fail rating',
       (s: GameState) => {
-        s.round!.genreFailFlags[a] = ['dQw4w9WgXcQ'];
+        s.round!.ratings[a] = { dQw4w9WgXcQ: 0 };
       },
     ],
     [

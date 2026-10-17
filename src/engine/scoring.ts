@@ -57,8 +57,9 @@ export function scoreRound(round: Round, settings: Settings): RoundResult {
         allTens &&= given === MAX_RATING;
       }
     }
-    const flaggerIds = eligible.filter((participantId) =>
-      (round.genreFailFlags[participantId] ?? []).includes(videoId),
+    // Rating 0 is the genre-fail chip (FR-40/FR-41).
+    const flaggerIds = eligible.filter(
+      (participantId) => round.ratings[participantId]?.[videoId] === 0,
     );
     const basis: ScoredSong['basis'] =
       eligible.length === 0 ? 'noRaters' : count === 0 ? 'noRating' : 'ratings';
