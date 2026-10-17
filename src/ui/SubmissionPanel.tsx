@@ -32,6 +32,7 @@ import { Hand } from './pf/Hand';
 import { Panel, PanelTitle } from './pf/Panel';
 import { SongCard } from './pf/SongCard';
 import { PhaseTimer } from './pf/Stat';
+import { useVolumeStore } from './volume-store';
 
 /** Current preview lifecycle, extended with "nothing loaded yet" and "loading". */
 type PanelStatus = PreviewStatus | { type: 'idle' } | { type: 'loading' };
@@ -143,6 +144,20 @@ export function SubmissionPanel({
 
   useEffect(() => teardown, [teardown]);
 
+  // The top-bar volume control also drives the preview player.
+  useEffect(
+    () =>
+      useVolumeStore.subscribe((next, previous) => {
+        if (next.volume !== previous.volume) {
+          stateRef.current.player?.setVolume(next.volume);
+        }
+        if (next.muted !== previous.muted) {
+          stateRef.current.player?.setMuted(next.muted);
+        }
+      }),
+    [],
+  );
+
   // Revoking the consent (drawer) stops the preview player at once.
   useEffect(() => {
     if (!consent) {
@@ -222,6 +237,8 @@ export function SubmissionPanel({
       const player = await createPreview(host, {
         videoId: parsed.videoId,
         startSeconds,
+        volume: useVolumeStore.getState().volume,
+        muted: useVolumeStore.getState().muted,
         title: t('submission.previewPlay'),
         signal,
         onStatus: (next) => {
@@ -247,6 +264,9 @@ export function SubmissionPanel({
         return;
       }
       stateRef.current.player = player;
+      // The control may have moved while the player was loading.
+      player.setVolume(useVolumeStore.getState().volume);
+      player.setMuted(useVolumeStore.getState().muted);
     } catch (error) {
       if (generation !== stateRef.current.generation) {
         return;

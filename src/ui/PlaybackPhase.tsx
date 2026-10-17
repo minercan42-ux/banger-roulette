@@ -29,7 +29,6 @@ interface PlaybackPhaseProps {
   viewerConnectionId: string | null;
 }
 
-const DEFAULT_VOLUME = 70;
 const PROGRESS_FRAME_MS = 200;
 
 /** Human label for every controller status plus the pre-consent "idle". */
@@ -95,8 +94,6 @@ export function PlaybackPhase({
   // The controller is owned by RoomView (M4 AK-7 pre-warm): it is created
   // during SUBMISSION and reused into PLAYBACK. This view only drives it.
   const controller = usePlaybackControllerContext();
-  const volume = controller?.volume ?? DEFAULT_VOLUME;
-  const muted = controller?.muted ?? false;
   const diagnostics = controller?.diagnostics ?? null;
 
   const planKey =
@@ -400,37 +397,6 @@ export function PlaybackPhase({
               {t('playback.errorHint', { code: errorCode })}
             </p>
           )}
-
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="br-check">
-              <span>{t('playback.volumeLabel')}</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                data-testid="playback-volume"
-                data-value={volume}
-                value={volume}
-                onChange={(event) => {
-                  controller?.setVolume(Number(event.target.value));
-                }}
-              />
-            </label>
-            <label className="br-check">
-              <input
-                type="checkbox"
-                data-testid="playback-mute"
-                data-muted={muted}
-                checked={muted}
-                onChange={(event) => {
-                  controller?.setMuted(event.target.checked);
-                }}
-                className="br-check__input"
-              />
-              <span>{t('playback.muteLabel')}</span>
-            </label>
-          </div>
 
           <div className="br-row">
             <Button

@@ -282,9 +282,12 @@ test('the sync diagnostics stay hidden from players until the debug switch is on
     const text = await page.getByTestId('playback-phase').innerText();
     expect(text).not.toContain(String(Math.round(timing.startAt)));
     expect(text).not.toContain(String(Math.round(timing.deadlineAt)));
-    // Volume, mute and the genre-fail flag stay available.
-    await expect(page.getByTestId('playback-volume')).toBeVisible();
+    // Volume, mute and the genre-fail flag stay available (volume and mute
+    // live in the top bar since #107; the slider sits in its popover).
     await expect(page.getByTestId('playback-mute')).toBeVisible();
+    await page.getByTestId('volume-toggle').click();
+    await expect(page.getByTestId('playback-volume')).toBeVisible();
+    await page.getByTestId('volume-toggle').click();
     await expect(page.getByTestId('playback-flag')).toBeVisible();
 
     // localStorage `banger-roulette.debug` turns the table on.

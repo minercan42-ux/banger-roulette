@@ -15,6 +15,7 @@ import {
   type PlaybackDiagnostics,
   type PlaybackPlan,
 } from '../player/playback';
+import { useVolumeStore } from './volume-store';
 
 /**
  * The room-wide playback controller handle (M4 AK-7). It is owned by RoomView
@@ -23,10 +24,6 @@ import {
  */
 export interface PlaybackControllerHandle {
   diagnostics: PlaybackDiagnostics | null;
-  volume: number;
-  muted: boolean;
-  setVolume(value: number): void;
-  setMuted(value: boolean): void;
   /** Applies the current clip plan; the first call adopts a plan-less player. */
   update(plan: PlaybackPlan): void;
   recover(): void;
@@ -40,8 +37,6 @@ export function usePlaybackControllerContext(): PlaybackControllerHandle | null 
   return useContext(PlaybackControllerContext);
 }
 
-const DEFAULT_VOLUME = 70;
-
 export interface UsePlaybackControllerOptions {
   session: GameSession;
   /** True while this tab consented and the phase is SUBMISSION or PLAYBACK. */
@@ -49,8 +44,6 @@ export interface UsePlaybackControllerOptions {
   title: string;
   /** The one stable host element the player is appended to, owned by RoomView. */
   hostRef: RefObject<HTMLElement | null>;
-  initialVolume?: number;
-  initialMuted?: boolean;
 }
 
 /**
@@ -71,16 +64,10 @@ export function usePlaybackController(
   const generationRef = useRef(0);
   const planRef = useRef<PlaybackPlan | null>(null);
   const titleRef = useRef(title);
-  const volumeRef = useRef(options.initialVolume ?? DEFAULT_VOLUME);
-  const mutedRef = useRef(options.initialMuted ?? false);
 
   const [diagnostics, setDiagnostics] = useState<PlaybackDiagnostics | null>(
     null,
   );
-  const [volume, setVolumeState] = useState(
-    options.initialVolume ?? DEFAULT_VOLUME,
-  );
-  const [muted, setMutedState] = useState(options.initialMuted ?? false);
   /**
    * The latest plan key. Its change re-runs the creation effect, so a pre-warm
    * that failed can be retried when the next song's plan arrives.
@@ -136,8 +123,8 @@ export function usePlaybackController(
         }
       },
       signal: abort.signal,
-      volume: volumeRef.current,
-      muted: mutedRef.current,
+      volume: useVolumeStore.getState().volume,
+      muted: useVolumeStore.getState().muted,
     })
       .then((instance) => {
         if (generation !== generationRef.current) {
@@ -150,8 +137,8 @@ export function usePlaybackController(
         if (planRef.current !== null) {
           instance.update(planRef.current);
         }
-        instance.setVolume(volumeRef.current);
-        instance.setMuted(mutedRef.current);
+        instance.setVolume(useVolumeStore.getState().volume);
+        instance.setMuted(useVolumeStore.getState().muted);
       })
       .catch(() => {
         // The iframe API itself could not start: this client is skipped, it
@@ -193,28 +180,27 @@ export function usePlaybackController(
     controllerRef.current?.recover();
   }, []);
 
-  const setVolume = useCallback((value: number) => {
-    volumeRef.current = value;
-    setVolumeState(value);
-    controllerRef.current?.setVolume(value);
-  }, []);
-
-  const setMuted = useCallback((value: boolean) => {
-    mutedRef.current = value;
-    setMutedState(value);
-    controllerRef.current?.setMuted(value);
-  }, []);
+  // The top-bar control owns volume and mute (volume-store); every change is
+  // pushed into the live player. A player created later reads the store.
+  useEffect(
+    () =>
+      useVolumeStore.subscribe((next, previous) => {
+        if (next.volume !== previous.volume) {
+          controllerRef.current?.setVolume(next.volume);
+        }
+        if (next.muted !== previous.muted) {
+          controllerRef.current?.setMuted(next.muted);
+        }
+      }),
+    [],
+  );
 
   return useMemo(
     () => ({
       diagnostics,
-      volume,
-      muted,
-      setVolume,
-      setMuted,
       update,
       recover,
     }),
-    [diagnostics, volume, muted, setVolume, setMuted, update, recover],
+    [diagnostics, update, recover],
   );
 }

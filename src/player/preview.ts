@@ -38,6 +38,9 @@ export interface PreviewPlayer {
   play(): void;
   pause(): void;
   seek(seconds: number): void;
+  /** 0..100, applied immediately once the player is ready. */
+  setVolume(value: number): void;
+  setMuted(value: boolean): void;
   currentTime(): number;
   duration(): number;
   videoId(): string | null;
@@ -49,6 +52,10 @@ export interface PreviewOptions {
   startSeconds: number;
   title: string;
   onStatus: (status: PreviewStatus) => void;
+  /** Initial 0..100 volume, applied once the player is ready. */
+  volume?: number;
+  /** Initial mute, applied once the player is ready. */
+  muted?: boolean;
   signal?: AbortSignal;
 }
 
@@ -60,12 +67,20 @@ class PreviewSession implements PreviewPlayer {
   private readyResolve: (() => void) | null = null;
   private readyReject: ((error: PreviewError) => void) | null = null;
   private initializationError: number | null = null;
+  private volume: number;
+  private muted: boolean;
+  /** What the player was last told, so a fresh unmuted player is never "unmuted". */
+  private appliedVolume: number | null = null;
+  private appliedMute = false;
   private readonly abortListener = () => this.destroy();
 
   constructor(
     private readonly container: HTMLElement,
     private readonly options: PreviewOptions,
-  ) {}
+  ) {
+    this.volume = options.volume ?? 100;
+    this.muted = options.muted ?? false;
+  }
 
   async start(): Promise<void> {
     if (
@@ -122,6 +137,9 @@ class PreviewSession implements PreviewPlayer {
       this.destroy();
       throw error;
     }
+    // The player object exists only after the constructor returns; a ready
+    // event delivered inside it could not apply the audio yet.
+    this.applyAudio();
     if (this.initializationError === null) {
       this.emit({ type: 'ready' });
     }
@@ -154,6 +172,16 @@ class PreviewSession implements PreviewPlayer {
   duration(): number {
     const value = this.player?.getDuration() ?? 0;
     return Number.isFinite(value) ? value : 0;
+  }
+
+  setVolume(value: number): void {
+    this.volume = Math.min(100, Math.max(0, Math.round(value)));
+    this.applyAudio();
+  }
+
+  setMuted(value: boolean): void {
+    this.muted = value;
+    this.applyAudio();
   }
 
   videoId(): string | null {
@@ -209,9 +237,29 @@ class PreviewSession implements PreviewPlayer {
     if (this.destroyed) {
       return;
     }
+    this.applyAudio();
     this.readyResolve?.();
     this.readyResolve = null;
     this.readyReject = null;
+  }
+
+  /** Hands the user's volume and mute to the (ready) player; only changes are sent. */
+  private applyAudio(): void {
+    if (this.destroyed || this.player === null) {
+      return;
+    }
+    if (this.volume !== this.appliedVolume) {
+      this.player.setVolume(this.volume);
+      this.appliedVolume = this.volume;
+    }
+    if (this.muted !== this.appliedMute) {
+      if (this.muted) {
+        this.player.mute();
+      } else {
+        this.player.unMute();
+      }
+      this.appliedMute = this.muted;
+    }
   }
 
   private handleStateChange(event: YouTubeEvent): void {
