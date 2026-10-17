@@ -40,6 +40,7 @@ This is how work on Banger Roulette is organized. It binds every agent in this r
 - **Commit identity.** `minercan42-ux <291378615+minercan42-ux@users.noreply.github.com>`. The owner's private address must never appear in a commit; GitHub blocks such pushes.
 - **Owner-only actions.** Accounts, billing, keys, repository settings and model limits are changed only by the owner. The PM describes the click path and waits.
 - **Limits.** When a model provider reports a quota or rate limit, the PM finishes or parks the affected work, keeps partial worktree state, tells the owner, and resumes with fresh agents that continue from the worktree.
+- **Decision log.** Every owner decision, and every decision the PM takes on the owner's behalf, gets an entry in `docs/DECISIONS.md` (German, focused on why, with rejected alternatives and links), in the same PR or a small docs PR right after. Entries are never deleted; superseded ones are marked `Status: ersetzt durch D-xxx`. Agent-level technical defaults stay in `docs/OPEN_QUESTIONS.md`, architecture in `docs/ADR-*.md`.
 
 ## Visual work
 
