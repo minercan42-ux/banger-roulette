@@ -54,3 +54,5 @@ api/           Vercel functions (time, oembed)
 e2e/           Playwright tests
 docs/          ADRs, ARCHITECTURE, SECURITY, OPEN_QUESTIONS, ROADMAP
 ```
+
+Product context for design and copy work (users, purpose, binding commitments): `PRODUCT.md` at the repo root. SPEC.md still wins on conflicts.
