@@ -210,6 +210,10 @@ test('announces every phase transition including the lobby boundary but stays si
 test('stays silent when a running room is reloaded, then announces later transitions', async ({
   browser,
 }) => {
+  // Three stages, a reload and a whole phase hand-off on one runner: that
+  // exceeds the 30 s default on the Firefox/WebKit runners (same reason as the
+  // sibling test above).
+  test.setTimeout(120_000);
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice' }),
     newStage(browser, { nickname: 'Bob' }),
