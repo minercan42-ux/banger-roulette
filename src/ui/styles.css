@@ -471,8 +471,22 @@
   .br-genre.is-in {
     animation: br-pop-in var(--dur-pop) var(--ease-spring) both;
   }
+  /*
+   * The repeating bump (br-genre-bump) scales the name by 1.1 and tilts it 2deg.
+   * The name is capped to 88% of the plate content box and centred, so its
+   * peak width (about 100% of the content box) stays inside the plate and the
+   * stage clip, and up to three wrapped lines stay inside the plate padding.
+   * Names that wrap further (data-long) skip the repeating bump: their scaled
+   * height would leave the plate; only the one-time pop-in runs.
+   */
   .br-genre.is-in .br-genre__name {
-    animation: br-bump 2.6s var(--ease-out) 600ms infinite;
+    max-width: 88%;
+    margin-inline: auto;
+    overflow-wrap: anywhere;
+    animation: br-genre-bump 2.6s var(--ease-out) 600ms infinite;
+  }
+  .br-genre.is-in .br-genre__name[data-long='true'] {
+    animation: none;
   }
   /* The result plate that stays on the table (SUBMISSION): smaller, no bump. */
   .br-genre--calm {
@@ -1178,6 +1192,17 @@
     }
     40% {
       transform: scale(1.18) rotate(-3deg);
+    }
+  }
+  /* The genre name's own bump: gentler than br-bump (scale 1.1, tilt 2deg)
+     so up to three wrapped lines stay inside the plate padding. */
+  @keyframes br-genre-bump {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.1) rotate(-2deg);
     }
   }
   @keyframes br-shake {
