@@ -364,6 +364,8 @@
     "round": "Round {{number}} · {{genre}}",
     "roundNoSongs": "No song in this round.",
     "roundAllFailed": "Every song in this round got a genre fail.",
+    "roundNoRaters": "Everyone submitted the same song, so everyone gets the fixed bonus.",
+    "roundNoWinner": "This round has no round winner.",
     "rematch": "Play again",
     "waitingHost": "Waiting for the host to start a new game …"
   },
