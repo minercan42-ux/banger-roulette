@@ -726,6 +726,21 @@ const separate: Row[] = [
     upload('A.Muse - Song', 'A.Muse', 200),
     upload('Amuse - Song', 'Amuse', 200),
   ],
+  [
+    'uppercase words elsewhere in the title never authorise a track initialism',
+    upload('POD - My P.O.D.', 'POD', 200),
+    upload('POD - My Pod', 'POD', 200),
+  ],
+  [
+    'an uppercase credit never authorises a track initialism',
+    upload('Artist - My P.O.D. (feat. POD)', 'Artist', 200),
+    upload('Artist - My Pod', 'Artist', 200),
+  ],
+  [
+    'a repeated track word keeps its own spelling (POD P.O.D. vs POD Pod)',
+    upload('Artist - POD P.O.D.', 'Artist', 200),
+    upload('Artist - POD Pod', 'Artist', 200),
+  ],
 ];
 
 describe('isSameSong', () => {
@@ -871,6 +886,16 @@ describe('groupSameSongs', () => {
     const c = upload('Artist - Song', 'Artist', 210);
     expect(isSameSong(a, c)).toBe(false);
     expect(groupSameSongs([a, b, c])).toEqual([[0, 1, 2]]);
+  });
+
+  it('keeps a dotted initialism and a plain spelling apart through a middle upload', () => {
+    const songs = [
+      upload('P.O.D. - Youth of the Nation', 'P.O.D.', 253),
+      upload('POD - Youth of the Nation', 'POD', 253),
+      upload('Pod - Youth of the Nation', 'Pod', 253),
+    ];
+    expect(isSameSong(songs[0], songs[2])).toBe(false);
+    expect(groupSameSongs(songs)).toEqual([[0, 1], [2]]);
   });
 
   it('does not group distinct noise-only and artist-named tracks', () => {

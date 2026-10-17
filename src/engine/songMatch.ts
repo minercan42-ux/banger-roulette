@@ -135,8 +135,8 @@ const NOISE =
  */
 const TRAILING_NOISE =
   /\s(?:official (?:hd )?(?:music )?(?:video|audio|lyric video|lyrics|visuali[sz]er)|lyric video|lyrics?|music video|visuali[sz]er|full (?:song|video|audio)|hd|hq|4k)$/;
-const FEATURING = /\s(?:feat|ft|featuring)\b\.?(.*)$/;
-const CREDIT_START = /^(?:feat|ft|featuring)\b\.?/;
+const FEATURING = /\s(?:feat|ft|featuring)\b\.?(.*)$/i;
+const CREDIT_START = /^(?:feat|ft|featuring)\b\.?/i;
 /** The only words a channel name may carry on top of the artist's name. */
 const CHANNEL_SUFFIX_WORDS: readonly string[] = [
   'official',
@@ -148,24 +148,25 @@ const BRACKETS =
 const ARTIST_STOPWORDS: ReadonlySet<string> = new Set(['and', 'x']);
 
 /**
- * How one source spells the words an initialism can stand for: the letters of
- * every dotted initialism in it, and every word of it written all uppercase.
- * A dotted initialism ("U.S.A.") is the same word as another dotted initialism
- * or its all-uppercase spelling ("USA"), never a mixed-case or lowercase word
- * ("Usa"), so ordinary words stay case-insensitive.
+ * How a source spelled one word: "U.S.A." is a dotted initialism, "USA" a
+ * solid all-uppercase word, "Usa" an ordinary word. A dotted initialism is the
+ * same word as another dotted initialism or a solid uppercase spelling, never
+ * a mixed-case or lowercase one, so ordinary words stay case-insensitive.
  */
-interface WordSpellings {
-  /** Lowercase letters of every dotted initialism, as the words read. */
-  dotted: ReadonlySet<string>;
-  /** Lowercase spelling of every all-uppercase word, as the words read. */
-  uppercase: ReadonlySet<string>;
+type WordKind = 'initialism' | 'upper' | 'word';
+
+/** One word of an artist, track or channel, with the spelling it had there. */
+interface SpelledWord {
+  /** Normalized word: lowercase, the dots of an initialism dropped. */
+  word: string;
+  kind: WordKind;
 }
 
 interface ParsedSong {
-  /** Normalized artist words ('' when unknown). */
-  artist: string;
-  /** Normalized track words ('' when unknown). */
-  track: string;
+  /** Artist words with their spelling (empty when unknown). */
+  artistWords: readonly SpelledWord[];
+  /** Track words with their spelling (empty when unknown). */
+  trackWords: readonly SpelledWord[];
   /** Sorted text of every version-bearing segment, joined. */
   versionKey: string;
   /** Sorted text of every unknown bracket/pipe segment, joined. */
@@ -176,23 +177,26 @@ interface ParsedSong {
    * standing in for an artist the title does not name.
    */
   channelOk: boolean;
-  /** Initialisms of the track source; uppercase words of the raw title. */
-  trackSpelling: WordSpellings;
-  /** Initialisms of the artist source, and its all-uppercase words. */
-  artistSpelling: WordSpellings;
 }
 
-/** NFKC, lowercase, strip Latin diacritics, unify quotes and dashes. */
-function normalizeText(value: string): string {
+/**
+ * NFKC, Latin diacritics stripped, quotes and dashes unified. Keeps the case,
+ * so the raw spelling of every word stays readable.
+ */
+function normalizeShape(value: string): string {
   return value
     .normalize('NFKC')
-    .toLowerCase()
     .normalize('NFD')
     .replace(/(?<=\p{Script=Latin}\p{M}*)\p{M}+/gu, '')
     .normalize('NFC')
     .replace(/[\u2018\u2019\u201B\u2032\u00B4`\u02BC]/g, "'")
     .replace(/[\u201C\u201D\u201E\u2033]/g, '"')
     .replace(/[\u2010-\u2015\u2212]/g, '-');
+}
+
+/** The shaped text in lower case, the form every comparison reads. */
+function normalizeText(value: string): string {
+  return normalizeShape(value).toLowerCase();
 }
 
 /** Words only: apostrophes vanish, "&" becomes "and", other punctuation spaces. */
@@ -209,44 +213,47 @@ function collapse(value: string): string {
 }
 
 /**
- * A whole token of two or more single letters, each followed by a dot (the
- * last dot optional), is one initialism: "U.S.A.", "U.S.A", "u.s.a." and
- * "R.E.M." read as "usa" and "rem". Only whole tokens count, so "A.Muse"
- * stays "a muse", and only letters, so "2.0" never joins. Must run before
- * toWords, which drops the dots.
+ * A whole dotted initialism ("U.S.A.", "U.S.A", "u.s.a.", "R.E.M.") or a
+ * plain word run. The dotted branch needs two or more single letters and a
+ * boundary on both sides: "A.Muse" stays "a" and "muse", "2.0" never joins.
  */
-const DOTTED_INITIALISM =
-  /(?<![\p{L}\p{N}])(?:\p{L}\.){2,}\p{L}?\.?(?![\p{L}\p{N}])/gu;
+const WORD_RUN =
+  /(?<![\p{L}\p{N}])(?:\p{L}\.)+\p{L}\.?(?![\p{L}\p{N}])|[\p{L}\p{N}]+/gu;
 
-/** A whole word of two or more capital letters: the solid initialism "USA". */
-const UPPERCASE_WORD = /(?<![\p{L}\p{N}])\p{Lu}{2,}(?![\p{L}\p{N}])/gu;
+/** A solid word of two or more capital letters: "USA", but not "Usa". */
+const UPPERCASE_WORD = /^\p{Lu}{2,}$/u;
 
-function collapseDottedAbbreviations(value: string): string {
-  return value.replace(DOTTED_INITIALISM, (initialism) =>
-    initialism.replace(/\./g, '').toLowerCase(),
-  );
+/** One word with the spelling the shaped source gave it. */
+function spelledWord(raw: string): SpelledWord {
+  // The first WORD_RUN branch matches only a dotted initialism, the second
+  // never contains a dot.
+  if (raw.includes('.')) {
+    return { word: raw.replace(/\./g, '').toLowerCase(), kind: 'initialism' };
+  }
+  return {
+    word: raw.toLowerCase(),
+    kind: UPPERCASE_WORD.test(raw) ? 'upper' : 'word',
+  };
 }
 
-/** The letters of every dotted initialism a text carries, as the words read. */
-function dottedInitialisms(value: string): ReadonlySet<string> {
-  return new Set(
-    [...value.matchAll(DOTTED_INITIALISM)].map((match) =>
-      collapseDottedAbbreviations(match[0]),
-    ),
-  );
+/**
+ * The words of a shaped text, each with the spelling it had there. Reads the
+ * same word sequence toWords does: apostrophes vanish, "&" becomes "and".
+ */
+function spelledWords(value: string): SpelledWord[] {
+  const prepared = value.replace(/'/g, '').replace(/&/g, ' and ');
+  return [...prepared.matchAll(WORD_RUN)].map((match) => spelledWord(match[0]));
 }
 
-/** Every word a raw text writes all uppercase, as the words read. */
-function uppercaseWords(value: string): ReadonlySet<string> {
-  return new Set(
-    [...value.matchAll(UPPERCASE_WORD)].map((match) => normalizeText(match[0])),
-  );
+/** The words of a token list, as every comparison reads them. */
+function wordsOf(words: readonly SpelledWord[]): string {
+  return words.map((token) => token.word).join(' ');
 }
 
 /** Segment text without remaster, "original mix" and noise words. */
 function cleanSegment(value: string): string {
   return collapse(
-    toWords(value)
+    toWords(normalizeText(value))
       .replace(REMASTER, ' ')
       .replace(ORIGINAL_MIX, ' ')
       .replace(NOISE, ' '),
@@ -285,26 +292,32 @@ function channelText(rawChannel: string): string {
 }
 
 /**
- * The artist a channel stands for: " - Topic", a trailing "VEVO" and the
- * trailing words Official, Music and Records are dropped, nothing else.
+ * The artist a channel stands for, as words: " - Topic", a trailing "VEVO"
+ * and the trailing words Official, Music and Records are dropped, nothing
+ * else.
  */
-function channelKey(rawChannel: string): string {
-  const base = normalizeText(channelText(rawChannel)).replace(
-    /\s+-\s*topic\s*$/,
+function channelKey(rawChannel: string): SpelledWord[] {
+  const base = normalizeShape(channelText(rawChannel)).replace(
+    /\s+-\s*topic\s*$/i,
     '',
   );
-  const words = collapse(toWords(collapseDottedAbbreviations(base))).replace(
-    /\s*vevo$/,
-    '',
-  );
-  const tokens = words.split(' ').filter((token) => token !== '');
-  while (
-    tokens.length > 0 &&
-    CHANNEL_SUFFIX_WORDS.includes(tokens[tokens.length - 1])
-  ) {
-    tokens.pop();
+  const words = spelledWords(base);
+  const last = words.at(-1);
+  if (last !== undefined && last.word.endsWith('vevo')) {
+    const word = last.word.slice(0, -'vevo'.length);
+    if (word === '') {
+      words.pop();
+    } else {
+      words[words.length - 1] = { ...last, word };
+    }
   }
-  return tokens.join(' ');
+  while (
+    words.length > 0 &&
+    CHANNEL_SUFFIX_WORDS.includes(words[words.length - 1].word)
+  ) {
+    words.pop();
+  }
+  return words;
 }
 
 const CAMEL_BOUNDARY = /(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu;
@@ -355,14 +368,18 @@ function isArtistFeedChannel(rawChannel: string): boolean {
   );
 }
 
-function trimTrailingNoise(track: string): string {
-  let current = track;
+/** Track words without the upload noise that trails the title. */
+function trimTrailingNoise(track: readonly SpelledWord[]): SpelledWord[] {
+  let current = [...track];
   for (;;) {
-    const next = current.replace(TRAILING_NOISE, '');
-    if (next === current) {
+    const found = TRAILING_NOISE.exec(wordsOf(current));
+    if (!found) {
       return current;
     }
-    current = next;
+    current = current.slice(
+      0,
+      current.length - found[0].trim().split(' ').length,
+    );
   }
 }
 
@@ -405,7 +422,8 @@ function noteCreditTail(tail: string, versionTexts: Set<string>): void {
 }
 
 function parseSong(media: MatchMedia): ParsedSong {
-  const title = normalizeText(media.title);
+  // The title keeps its case: every word must remember how it was spelled.
+  const title = normalizeShape(media.title);
   const { rest, inner } = extractBrackets(title);
   const [main, ...afterPipe] = rest.split('|');
   // Preserve empty parts: an explicit but missing track must not fall back to
@@ -444,129 +462,142 @@ function parseSong(media: MatchMedia): ParsedSong {
     noteCreditTail(found[1], versionTexts);
     return part.slice(0, found.index);
   });
-  const channel = channelKey(media.channel);
+  const channelWords = channelKey(media.channel);
   const channelJudge = judgeChannel(media.channel);
-  // The channel's spelling is read the way channelKey reads the name: split at
-  // the CamelCase boundaries and without the trailing "VEVO".
-  const channelName = channelText(media.channel).replace(/\s*vevo$/i, '');
-  const channelSpelling: WordSpellings = {
-    dotted: dottedInitialisms(normalizeText(channelName)),
-    uppercase: uppercaseWords(channelName),
-  };
-  const titleUppercaseWords = uppercaseWords(media.title);
-  let artist: string;
+  /** Featured artists, spelled as the title spells them. */
+  const creditWords = credits.flatMap((credit) => spelledWords(credit));
+  let artistWords: SpelledWord[];
   let trackSource: string;
-  let artistSpelling: WordSpellings;
   let channelOk: boolean;
   if (credited.length === 2) {
-    artist = collapse(toWords(collapseDottedAbbreviations(credited[0])));
+    artistWords = spelledWords(credited[0]);
     trackSource = credited[1];
-    // The title artist part has no raw text of its own once the title is
-    // normalized, so the whole title's uppercase words cover it.
-    artistSpelling = {
-      dotted: dottedInitialisms(credited[0]),
-      uppercase: titleUppercaseWords,
-    };
     // A lyric channel uploads the original recording, so the parsed artist and
     // track pair replaces the channel guard there (issue #133). Every other
     // guard still applies, and only lyric words are relaxed.
     channelOk =
       channelJudge.lyricOnly ||
       (!channelJudge.denied &&
-        isSubset(
-          channel,
-          collapse(`${artist} ${credits.map(toWords).join(' ')}`),
-        ) &&
-        spellingsAgree(artistSpelling, channelSpelling));
+        isSubset(channelWords, [...artistWords, ...creditWords]));
   } else {
     // No artist in the title: only Topic and VEVO channels name the artist.
     trackSource = credited.join(' ');
     const fromChannel =
       !channelJudge.denied && isArtistFeedChannel(media.channel);
-    artist = fromChannel ? channel : '';
-    artistSpelling = fromChannel
-      ? channelSpelling
-      : { dotted: new Set(), uppercase: new Set() };
-    channelOk = fromChannel && channel !== '';
+    artistWords = fromChannel ? channelWords : [];
+    channelOk = fromChannel && channelWords.length > 0;
   }
-  const track = collapse(
-    trimTrailingNoise(toWords(collapseDottedAbbreviations(trackSource))),
-  );
-  const trackSpelling: WordSpellings = {
-    dotted: dottedInitialisms(trackSource),
-    uppercase: titleUppercaseWords,
-  };
-  channelOk &&= track !== '';
-  if (track === artist) {
+  const trackWords = trimTrailingNoise(spelledWords(trackSource));
+  channelOk &&= trackWords.length > 0;
+  const track = wordsOf(trackWords);
+  if (track === wordsOf(artistWords)) {
     // A self-titled track is certain only when the whole, unstripped title
     // spells the artist once or as an exact artist/track pair. Preserve the
     // artist's punctuation; toWords would hide extra raw title text.
     const rawChannel = channelText(media.channel);
     const rawArtist = collapse(
       credited.length === 2
-        ? credited[0]
+        ? normalizeText(credited[0])
         : normalizeText(rawChannel)
             .replace(/\s+-\s*topic\s*$/, '')
             .replace(/\s*vevo$/, ''),
     );
-    const rawTitle = collapse(title);
+    const rawTitle = collapse(normalizeText(media.title));
     channelOk &&=
       rawTitle === rawArtist || rawTitle === `${rawArtist} - ${rawArtist}`;
   }
   if (hasMarker(track)) {
     versionTexts.add(track);
   }
-  const channelWords = toWords(normalizeText(media.channel));
+  const channelName = toWords(normalizeText(media.channel));
   for (const marker of CHANNEL_MARKERS) {
-    const found = marker.exec(channelWords);
+    const found = marker.exec(channelName);
     if (found) {
       versionTexts.add(`channel ${found[0]}`);
     }
   }
   return {
-    artist,
-    track,
+    artistWords,
+    trackWords,
     versionKey: [...versionTexts].sort().join('|'),
     extraKey: [...extras].sort().join('|'),
     channelOk,
-    trackSpelling,
-    artistSpelling,
   };
 }
 
-function artistTokens(artist: string): Set<string> {
-  return new Set(
-    artist
-      .split(' ')
-      .filter((token) => token !== '' && !ARTIST_STOPWORDS.has(token)),
+/** A dotted initialism never matches an ordinary mixed-case or lowercase word. */
+function spellingsClash(one: WordKind, other: WordKind): boolean {
+  return (
+    (one === 'initialism' && other === 'word') ||
+    (one === 'word' && other === 'initialism')
   );
 }
 
-/** A non-empty channel whose every token is among the artist's tokens. */
-function isSubset(channel: string, artistWords: string): boolean {
+/**
+ * Artist tokens by word, stop words dropped: a repeated word keeps the
+ * spelling of its first occurrence.
+ */
+function artistTokens(words: readonly SpelledWord[]): Map<string, WordKind> {
+  const tokens = new Map<string, WordKind>();
+  for (const { word, kind } of words) {
+    if (!ARTIST_STOPWORDS.has(word) && !tokens.has(word)) {
+      tokens.set(word, kind);
+    }
+  }
+  return tokens;
+}
+
+/** Same words in the same order, and no initialism meets an ordinary word. */
+function trackAgree(
+  one: readonly SpelledWord[],
+  other: readonly SpelledWord[],
+): boolean {
+  return (
+    one.length === other.length &&
+    one.every(
+      (token, index) =>
+        token.word === other[index].word &&
+        !spellingsClash(token.kind, other[index].kind),
+    )
+  );
+}
+
+/**
+ * Artist token sets must be equal (stop words and order ignored), so
+ * "Calvin Harris & Dua Lipa" still links "Dua Lipa & Calvin Harris" while
+ * "Pink" never links "Pink Floyd". A partial overlap is not enough: different
+ * songs must never be merged, recall may drop. The words must also be spelled
+ * alike: a dotted initialism never meets a mixed-case "Pod" (issue #133).
+ */
+function artistAgree(
+  one: readonly SpelledWord[],
+  other: readonly SpelledWord[],
+): boolean {
+  const own = artistTokens(one);
+  const theirs = artistTokens(other);
+  if (own.size === 0 || own.size !== theirs.size) {
+    return false;
+  }
+  return [...own].every(([word, kind]) => {
+    const otherKind = theirs.get(word);
+    return otherKind !== undefined && !spellingsClash(kind, otherKind);
+  });
+}
+
+/** A non-empty channel whose every token is among the artist's, spelled alike. */
+function isSubset(
+  channel: readonly SpelledWord[],
+  artistWords: readonly SpelledWord[],
+): boolean {
   const own = artistTokens(channel);
   if (own.size === 0) {
     return false;
   }
   const allowed = artistTokens(artistWords);
-  return [...own].every((token) => allowed.has(token));
-}
-
-/**
- * Both sides read every dotted initialism the same way: on the other side it
- * is either the same dotted initialism or the same letters written all
- * uppercase. A mixed-case or lowercase spelling ("Usa", "Pod") never counts,
- * so a dotted initialism never links an ordinary word (issue #133 review).
- */
-function spellingsAgree(one: WordSpellings, other: WordSpellings): boolean {
-  return (
-    [...one.dotted].every(
-      (letters) => other.dotted.has(letters) || other.uppercase.has(letters),
-    ) &&
-    [...other.dotted].every(
-      (letters) => one.dotted.has(letters) || one.uppercase.has(letters),
-    )
-  );
+  return [...own].every(([word, kind]) => {
+    const otherKind = allowed.get(word);
+    return otherKind !== undefined && !spellingsClash(kind, otherKind);
+  });
 }
 
 function durationsClose(a: number, b: number): boolean {
@@ -606,25 +637,27 @@ export function preparedSameSong(a: PreparedMatch, b: PreparedMatch): boolean {
   ) {
     return false;
   }
-  if (a.parsed.track === '' || a.parsed.track !== b.parsed.track) {
+  if (a.parsed.trackWords.length === 0) {
     return false;
   }
-  if (
-    !spellingsAgree(a.parsed.trackSpelling, b.parsed.trackSpelling) ||
-    !spellingsAgree(a.parsed.artistSpelling, b.parsed.artistSpelling)
-  ) {
-    return false;
-  }
-  // Artist token sets must be equal (stop words and order ignored), so
-  // "Calvin Harris & Dua Lipa" still links "Dua Lipa & Calvin Harris" while
-  // "Pink" never links "Pink Floyd". A partial overlap is not enough: different
-  // songs must never be merged, recall may drop.
-  const artist = artistTokens(a.parsed.artist);
-  const otherArtist = artistTokens(b.parsed.artist);
   return (
-    artist.size > 0 &&
-    artist.size === otherArtist.size &&
-    [...artist].every((token) => otherArtist.has(token))
+    trackAgree(a.parsed.trackWords, b.parsed.trackWords) &&
+    artistAgree(a.parsed.artistWords, b.parsed.artistWords)
+  );
+}
+
+/**
+ * A pair that may not share a group: same words, but a dotted initialism meets
+ * an ordinary word. Identical video ids are the same upload and the duration
+ * guard may chain, so only a spelling clash blocks a union (issue #133 review).
+ */
+function spellingClash(a: PreparedMatch, b: PreparedMatch): boolean {
+  if (a.media.videoId === b.media.videoId) {
+    return false;
+  }
+  return (
+    !trackAgree(a.parsed.trackWords, b.parsed.trackWords) ||
+    !artistAgree(a.parsed.artistWords, b.parsed.artistWords)
   );
 }
 
@@ -647,14 +680,28 @@ export function groupSameSongs(items: readonly MatchMedia[]): number[][] {
     }
     return root;
   };
+  const indices = items.map((_, index) => index);
   for (let i = 0; i < prepared.length; i += 1) {
     for (let j = i + 1; j < prepared.length; j += 1) {
-      if (preparedSameSong(prepared[i], prepared[j])) {
-        const rootI = find(i);
-        const rootJ = find(j);
-        if (rootI !== rootJ) {
-          parent[Math.max(rootI, rootJ)] = Math.min(rootI, rootJ);
-        }
+      const rootI = find(i);
+      const rootJ = find(j);
+      if (rootI === rootJ || !preparedSameSong(prepared[i], prepared[j])) {
+        continue;
+      }
+      // Spelling is complete linkage: the duration guard may chain uploads, a
+      // dotted initialism may not reach an ordinary word anywhere in the
+      // merged group (issue #133 review).
+      const clash = indices.some(
+        (left) =>
+          find(left) === rootI &&
+          indices.some(
+            (right) =>
+              find(right) === rootJ &&
+              spellingClash(prepared[left], prepared[right]),
+          ),
+      );
+      if (!clash) {
+        parent[Math.max(rootI, rootJ)] = Math.min(rootI, rootJ);
       }
     }
   }
