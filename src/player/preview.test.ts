@@ -15,6 +15,7 @@ interface FakeIframe {
   title: string;
   style: Record<string, string>;
   isConnected: boolean;
+  tabIndex: number;
   remove(): void;
 }
 
@@ -133,6 +134,8 @@ function installDom(): Harness {
         title: '',
         style: {},
         isConnected: false,
+        // What a real, freshly created iframe reports.
+        tabIndex: 0,
         remove() {
           this.isConnected = false;
         },
@@ -194,6 +197,14 @@ describe('createPreview', () => {
     preview.destroy();
     expect(player.destroyed).toBe(true);
     expect(harness.iframes[0].isConnected).toBe(false);
+  });
+
+  it('takes the created frame out of the tab order', async () => {
+    const harness = installDom();
+    await start(harness, []);
+
+    expect(harness.iframes).toHaveLength(1);
+    expect(harness.iframes[0].tabIndex).toBe(-1);
   });
 
   it('applies the initial volume and mute once ready, then follows changes', async () => {

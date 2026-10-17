@@ -279,17 +279,8 @@ test('stays silent when a running room is reloaded, then announces later transit
 
 test('one player completes the round from Lobby to Finale with the keyboard only', async ({
   browser,
-  browserName,
 }) => {
   test.setTimeout(180_000);
-  // #57: the submission preview iframe stays in the tab order, and Firefox,
-  // unlike Chromium, does not continue the walk past it, so Save and Finished
-  // are unreachable once the preview is playing. Re-enable this leg together
-  // with the fix that takes the frame out of the tab order.
-  test.fixme(
-    browserName === 'firefox',
-    'The submission preview iframe traps the Tab key (#57)',
-  );
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice' }),
     newStage(browser, { nickname: 'Bob' }),

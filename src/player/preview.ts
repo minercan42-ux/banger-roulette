@@ -117,6 +117,11 @@ class PreviewSession implements PreviewPlayer {
       this.options.title,
       this.options.startSeconds,
     );
+    // Same as the long-lived playback frame: the viewer operates the preview
+    // through the surrounding form controls, and Firefox traps Tab inside a
+    // reached frame, which would put `finish-submission` out of keyboard
+    // reach until the preview is gone (#57).
+    iframe.tabIndex = -1;
     this.iframe = iframe;
     this.container.append(iframe);
     const ready = this.createReadyGate();
