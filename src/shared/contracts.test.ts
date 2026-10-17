@@ -73,7 +73,14 @@ function playback(): GameState {
     submissions: { [a]: { media, acceptedOrder: 0 } },
     submissionDoneIds: [],
     nextSubmissionOrder: 1,
-    songs: [{ media, ownerIds: [a], clipSeconds: 20 }],
+    songs: [
+      {
+        media,
+        memberVideoIds: [media.videoId],
+        ownerIds: [a],
+        clipSeconds: 20,
+      },
+    ],
     playbackOrder: [media.videoId],
     ratings: {},
     genreFailFlags: {},
@@ -330,6 +337,31 @@ describe('wire contracts', () => {
       'clip past end',
       (s: GameState) => {
         s.round!.songs[0]!.clipSeconds = 21;
+      },
+    ],
+    [
+      'canonical id not first member',
+      (s: GameState) => {
+        s.round!.songs[0]!.memberVideoIds = ['otherVideo1'];
+      },
+    ],
+    [
+      'member video nobody submitted',
+      (s: GameState) => {
+        s.round!.songs[0]!.memberVideoIds = [
+          s.round!.songs[0]!.media.videoId,
+          'otherVideo1',
+        ];
+      },
+    ],
+    [
+      'member video shared by two songs',
+      (s: GameState) => {
+        s.round!.songs.push({
+          ...s.round!.songs[0]!,
+          media: { ...s.round!.songs[0]!.media, videoId: 'otherVideo1' },
+          memberVideoIds: ['otherVideo1', s.round!.songs[0]!.media.videoId],
+        });
       },
     ],
     [

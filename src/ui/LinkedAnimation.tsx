@@ -43,7 +43,8 @@ export function prerollElapsedMs(
 
 /**
  * FR-26 "Spiritually Linked" (docs/design/pixel-filz/components/SpiritLinked):
- * songs several players submitted under the same video id collapse into one
+ * songs several players submitted under one video id or as different uploads
+ * of the same song (#106) collapse into one
  * entry with multiple owners. Two flipped cards fly together, a golden chain
  * links them and the banner stamps on. The timeline is pure CSS that joins at
  * the server-derived `elapsedMs` (no client-side randomness, no mount-time
