@@ -226,24 +226,6 @@ export function classifyCommand(
         ? 'NOT_READY'
         : null;
     }
-    case 'SET_GENRE_FAIL': {
-      if (!round || phase !== 'PLAYBACK' || state.pause) {
-        return 'WRONG_PHASE';
-      }
-      if (!round.participantIds.includes(actorId)) {
-        return 'FORBIDDEN';
-      }
-      const song = round.songs.find(
-        (candidate) => candidate.media.videoId === command.videoId,
-      );
-      if (!song || song.ownerIds.includes(actorId)) {
-        return 'INVALID';
-      }
-      const flagged = (round.genreFailFlags[actorId] ?? []).includes(
-        command.videoId,
-      );
-      return command.flagged && !flagged ? null : 'INVALID';
-    }
     case 'ADVANCE':
     case 'PAUSE': {
       if (!isHost) {
@@ -451,23 +433,6 @@ function applyCommand(state: GameState, action: CommandAction): GameState {
               ...round.ratings[actorId],
               [command.songId]: command.value,
             },
-          },
-        },
-      });
-    }
-    case 'SET_GENRE_FAIL': {
-      if (!round || phaseType !== 'PLAYBACK') {
-        return state;
-      }
-      const current = round.genreFailFlags[actorId] ?? [];
-      return commit({
-        round: {
-          ...round,
-          genreFailFlags: {
-            ...round.genreFailFlags,
-            [actorId]: command.flagged
-              ? [...current, command.videoId]
-              : current.filter((videoId) => videoId !== command.videoId),
           },
         },
       });
@@ -886,7 +851,6 @@ function startRound(state: GameState, at: number): GameState {
     songs: [],
     playbackOrder: [],
     ratings: {},
-    genreFailFlags: {},
   };
   return {
     ...state,

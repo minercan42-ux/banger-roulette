@@ -81,7 +81,9 @@ export function RatingSection({
           >
             {view.rating === null
               ? t('rating.unrated')
-              : t('rating.current', { value: view.rating })}
+              : view.rating === 0
+                ? t('rating.currentGenreFail')
+                : t('rating.current', { value: view.rating })}
           </p>
         </div>
       )}
@@ -112,7 +114,9 @@ export function RatingSection({
                 ? t('rating.ownShort')
                 : entry.rating === null
                   ? t('rating.none')
-                  : String(entry.rating);
+                  : entry.rating === 0
+                    ? t('rating.genreFailShort')
+                    : String(entry.rating);
               return (
                 <Panel
                   as="li"

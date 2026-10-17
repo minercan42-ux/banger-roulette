@@ -1013,67 +1013,94 @@ describe('aggregation and playback', () => {
   });
 });
 
-describe('genre fail', () => {
-  it('rejects retracting a genre fail and keeps flags during playback', () => {
+describe('genre fail (rating 0)', () => {
+  function currentSong(state: GameState) {
+    const round = state.round!;
+    const index = state.phase.type === 'PLAYBACK' ? state.phase.index : 0;
+    const videoId = round.playbackOrder[index];
+    const song = round.songs.find((s) => s.media.videoId === videoId)!;
+    const rater = round.participantIds.find((p) => !song.ownerIds.includes(p))!;
+    return { videoId, owner: song.ownerIds[0], rater };
+  }
+
+  it('treats RATE 0 as the genre fail and lets a number replace it', () => {
     let state = playbackState();
+    const { videoId: song, rater } = currentSong(state);
     state = command(
       state,
-      id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
+      rater,
+      { type: 'RATE', songId: song, value: 0 },
       8000,
     );
-    expect(state.round?.genreFailFlags[id(1)]).toEqual([videoId(2)]);
+    expect(state.round?.ratings[rater]?.[song]).toBe(0);
+    expect(validationError(state)).toBeNull();
+    // The same value again is NOT_READY and leaves the state untouched.
     expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: false },
-        8001,
-      ),
+      command(state, rater, { type: 'RATE', songId: song, value: 0 }, 8001),
     ).toBe(state);
+    // A number replaces the genre fail atomically (one event).
+    const switched = command(
+      state,
+      rater,
+      { type: 'RATE', songId: song, value: 7 },
+      8002,
+    );
+    expect(switched.round?.ratings[rater]?.[song]).toBe(7);
+    // And back to genre fail while PLAYBACK runs.
+    const back = command(
+      switched,
+      rater,
+      { type: 'RATE', songId: song, value: 0 },
+      8003,
+    );
+    expect(back.round?.ratings[rater]?.[song]).toBe(0);
+    expect(validationError(back)).toBeNull();
+  });
+
+  it('rejects a genre fail from the owner and for a song that has not started', () => {
+    const state = playbackState();
+    const { videoId: song, owner } = currentSong(state);
     expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-        8002,
-      ),
+      command(state, owner, { type: 'RATE', songId: song, value: 0 }, 8000),
+    ).toBe(state);
+    const upcoming = state.round!.playbackOrder[1];
+    const upcomingOwner = state.round!.songs.find(
+      (s) => s.media.videoId === upcoming,
+    )!.ownerIds[0];
+    const rater = state.round!.participantIds.find((p) => p !== upcomingOwner)!;
+    expect(
+      command(state, rater, { type: 'RATE', songId: upcoming, value: 0 }, 8001),
     ).toBe(state);
   });
 
-  it('allows a genre fail only once per player and song during playback', () => {
-    const state = playbackState();
-    expect(
-      command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
-        8000,
-      ),
-    ).toBe(state);
-    const flagged = command(
+  it('accepts a genre fail on an earlier song until PLAYBACK ends', () => {
+    let state = lastSongState();
+    const first = state.round!.playbackOrder[0];
+    const owner = state.round!.songs.find((s) => s.media.videoId === first)!
+      .ownerIds[0];
+    const rater = state.round!.participantIds.find((p) => p !== owner)!;
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 5 : 0;
+    state = command(
       state,
-      id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-      8001,
+      rater,
+      { type: 'RATE', songId: first, value: 0 },
+      at,
     );
-    expect(flagged.round?.genreFailFlags[id(1)]).toEqual([videoId(2)]);
+    expect(state.round?.ratings[rater]?.[first]).toBe(0);
+    const revealed = fireDeadline(state);
+    expect(revealed.phase.type).toBe('REVEAL');
+    expect(
+      revealed.results[0].songs.find((e) => e.song.media.videoId === first)
+        ?.flaggerIds,
+    ).toEqual([rater]);
     expect(
       command(
-        flagged,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
-        8002,
+        revealed,
+        rater,
+        { type: 'RATE', songId: first, value: 5 },
+        at + 1,
       ),
-    ).toBe(flagged);
-    expect(
-      command(
-        flagged,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: false },
-        8003,
-      ),
-    ).toBe(flagged);
+    ).toBe(revealed);
   });
 });
 
@@ -1257,19 +1284,14 @@ describe('degenerate rounds', () => {
     expect(validationError(state)).toBeNull();
 
     const at = SUBMISSION_END + 1;
-    // Neither owner can rate or flag the group, by canonical or member id.
+    // Neither owner can rate or genre-fail the group, by canonical or member id.
     for (const owner of [id(1), id(2)]) {
       for (const target of [videoId(1), videoId(2)]) {
         expect(
           command(state, owner, { type: 'RATE', songId: target, value: 5 }, at),
         ).toBe(state);
         expect(
-          command(
-            state,
-            owner,
-            { type: 'SET_GENRE_FAIL', videoId: target, flagged: true },
-            at,
-          ),
+          command(state, owner, { type: 'RATE', songId: target, value: 0 }, at),
         ).toBe(state);
       }
     }
@@ -2426,7 +2448,7 @@ describe('submission order and completion', () => {
 });
 
 describe('linked ownership', () => {
-  it('forbids linked owners from rating and flagging their shared song', () => {
+  it('forbids linked owners from rating and genre-failing their shared song', () => {
     let state = submissionState();
     state = command(
       state,
@@ -2452,7 +2474,7 @@ describe('linked ownership', () => {
       command(
         state,
         id(1),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(5), flagged: true },
+        { type: 'RATE', songId: videoId(5), value: 0 },
         95000,
       ),
     ).toBe(state);
@@ -2460,7 +2482,7 @@ describe('linked ownership', () => {
       command(
         state,
         id(2),
-        { type: 'SET_GENRE_FAIL', videoId: videoId(5), flagged: true },
+        { type: 'RATE', songId: videoId(5), value: 0 },
         95001,
       ),
     ).toBe(state);
@@ -2490,7 +2512,7 @@ describe('linked ownership', () => {
 });
 
 describe('frozen eligibility and departures', () => {
-  it('freezes the genre-fail denominator and keeps departed ratings and flags', () => {
+  it('freezes the genre-fail denominator and keeps departed ratings and genre fails', () => {
     let state = lastSongState(5);
     const at =
       state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 10 : 0;
@@ -2512,34 +2534,36 @@ describe('frozen eligibility and departures', () => {
       { type: 'RATE', songId: videoId(1), value: 9 },
       at,
     );
+    // Genre fail is a 0 that replaces the earlier number.
     state = command(
       state,
       id(2),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
+      { type: 'RATE', songId: videoId(1), value: 0 },
       at + 1,
     );
     state = command(
       state,
       id(3),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
+      { type: 'RATE', songId: videoId(1), value: 0 },
       at + 2,
     );
     state = command(
       state,
       id(4),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
+      { type: 'RATE', songId: videoId(2), value: 0 },
       at + 3,
     );
     state = command(state, id(4), { type: 'LEAVE' }, at + 4);
     expect(state.round?.participantIds).toContain(id(4));
     expect(state.round?.ratings[id(4)]?.[videoId(1)]).toBe(9);
-    expect(state.round?.genreFailFlags[id(4)]).toEqual([videoId(2)]);
+    expect(state.round?.ratings[id(4)]?.[videoId(2)]).toBe(0);
     const revealed = fireDeadline(state);
     expect(revealed.phase.type).toBe('REVEAL');
     const song1 = revealed.results[0].songs.find(
       (entry) => entry.song.media.videoId === videoId(1),
     )!;
-    expect(song1).toMatchObject({ scoreTenths: 80, genreFailed: false });
+    // (0 + 0 + 9) / 3 = 3.0; two of four eligible raters are no majority.
+    expect(song1).toMatchObject({ scoreTenths: 30, genreFailed: false });
     expect(song1.flaggerIds).toEqual([id(2), id(3)]);
     expect(
       revealed.results[0].songs.find(
@@ -2549,7 +2573,7 @@ describe('frozen eligibility and departures', () => {
     expect(validationError(revealed)).toBeNull();
   });
 
-  it('keeps a kicked rating and flag and does not block the reveal', () => {
+  it('keeps a kicked genre fail and does not block the reveal', () => {
     let state = lastSongState();
     const at =
       state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 10 : 0;
@@ -2562,12 +2586,12 @@ describe('frozen eligibility and departures', () => {
     state = command(
       state,
       id(3),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(1), flagged: true },
+      { type: 'RATE', songId: videoId(1), value: 0 },
       at + 1,
     );
     state = command(state, id(1), { type: 'KICK', playerId: id(3) }, at + 2);
     expect(state.players[id(3)].status).toBe('kicked');
-    expect(state.round?.ratings[id(3)]?.[videoId(1)]).toBe(9);
+    expect(state.round?.ratings[id(3)]?.[videoId(1)]).toBe(0);
     const revealed = fireDeadline(state);
     expect(revealed.phase.type).toBe('REVEAL');
     expect(
@@ -2617,12 +2641,7 @@ describe('frozen eligibility and departures', () => {
       command(state, id(9), { type: 'RATE', songId: song, value: 5 }, 8001),
     ).toBe(state);
     expect(
-      command(
-        state,
-        id(9),
-        { type: 'SET_GENRE_FAIL', videoId: song, flagged: true },
-        8002,
-      ),
+      command(state, id(9), { type: 'RATE', songId: song, value: 0 }, 8002),
     ).toBe(state);
     expect(state.round?.ratings[id(9)]).toBeUndefined();
     expect(validationError(state)).toBeNull();

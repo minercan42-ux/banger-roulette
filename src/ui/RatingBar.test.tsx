@@ -16,8 +16,16 @@ function bar(value: number | null, disabled = false): string {
   );
 }
 
+/** The opening tag and content of one chip button. */
+function chip(html: string, rating: number): string {
+  const start = html.indexOf(
+    `<button type="button" data-testid="rating-chip-${rating}"`,
+  );
+  return html.slice(start, html.indexOf('</button>', start));
+}
+
 describe('RatingBar (FR-40)', () => {
-  it('renders one chip button per rating 0 to 10', () => {
+  it('renders the genre-fail chip 0 and one chip button per rating 1 to 10', () => {
     expect(RATINGS).toHaveLength(11);
     const html = bar(null);
     for (const rating of RATINGS) {
@@ -27,17 +35,39 @@ describe('RatingBar (FR-40)', () => {
     expect(html).not.toContain('aria-pressed="true"');
   });
 
-  it('marks only the chosen value as pressed and fills the chips below it', () => {
+  it('marks only the chosen number as pressed and fills the chips up to it', () => {
     const html = bar(7);
     expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
     expect(html).toMatch(/rating-chip-7"[^>]*aria-pressed="true"/);
-    expect(html.match(/is-filled/g)).toHaveLength(8);
+    // Chips 1..7 are filled; the genre-fail chip never is.
+    expect(html.match(/is-filled/g)).toHaveLength(7);
+    expect(chip(html, 0)).not.toContain('is-filled');
+    expect(chip(html, 8)).not.toContain('is-filled');
     expect(html).toContain('data-value="7"');
   });
 
-  it('keeps a rating of 0 pressed and distinct from unrated', () => {
-    expect(bar(0)).toMatch(/rating-chip-0"[^>]*aria-pressed="true"/);
+  it('makes chip 0 the genre-fail chip with its own label and kind', () => {
+    const zero = chip(bar(null), 0);
+    expect(zero).toContain('data-kind="genre-fail"');
+    expect(zero).toContain('aria-label="rating.genreFailAria"');
+    expect(zero).toContain('title="rating.genreFailAria"');
+    expect(zero).toContain('<svg aria-hidden="true"');
+    expect(zero).not.toContain('>0<');
+    expect(chip(bar(null), 1)).not.toContain('data-kind');
+    expect(chip(bar(null), 1)).toContain('aria-label="rating.chipAria"');
+    expect(chip(bar(null), 1)).not.toContain('<svg');
+  });
+
+  it('presses chip 0 only at value 0 and fills no number chip then', () => {
+    const html = bar(0);
+    expect(chip(html, 0)).toContain('aria-pressed="true"');
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(html).not.toContain('is-filled');
+    expect(chip(html, 0)).not.toContain('is-filled');
+    expect(html).toContain('data-value="0"');
     expect(bar(null)).toContain('data-value=""');
+    expect(chip(bar(null), 0)).toContain('aria-pressed="false"');
+    expect(chip(bar(3), 0)).toContain('aria-pressed="false"');
   });
 
   it('disables every chip while rating is closed', () => {

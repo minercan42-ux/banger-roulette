@@ -110,9 +110,7 @@ export interface PlaybackView {
   /** Length of the shared preroll that ends at `startAt` (first song only). */
   prerollMs: number;
   pausedAt: number | null;
-  flaggedByViewer: boolean;
-  canFlag: boolean;
-  /** The viewer's own rating of the current song; null while unrated. */
+  /** The viewer's own rating of the current song (0 = genre-fail); null while unrated. */
   rating: number | null;
   /** The viewer may rate the current song right now (never an owner). */
   canRate: boolean;
@@ -140,8 +138,6 @@ export interface ViewerChoices {
   media: MediaView | null;
   /** The viewer's own ratings by video id (never other players' ratings). */
   ratings: Record<string, number>;
-  /** The viewer's own genre-fail flags for the current round. */
-  flaggedVideoIds: string[];
 }
 
 export interface ViewerPermissions {
@@ -160,7 +156,6 @@ export interface ViewerPermissions {
   canSubmit: boolean;
   canFinishSubmission: boolean;
   canRate: boolean;
-  canSetGenreFail: boolean;
 }
 
 export interface LobbyReadinessView {
@@ -434,12 +429,6 @@ export function selectPlayback(
     prerollMs: PRE_ROLL_MS,
     deadlineAt: state.phase.deadlineAt,
     pausedAt: state.pause?.at ?? null,
-    flaggedByViewer: (state.round.genreFailFlags[viewerId] ?? []).includes(
-      song.videoId,
-    ),
-    canFlag: permittedFlagTargets(state, viewerId, viewerConnectionId).includes(
-      song.videoId,
-    ),
     rating: state.round.ratings[viewerId]?.[song.videoId] ?? null,
     canRate: canRateNow(state, viewerId, viewerConnectionId, song),
   };
@@ -476,27 +465,6 @@ export function selectRatingEntries(
     }));
 }
 
-/**
- * Songs the viewer may flag: own and linked songs are excluded (FR-34/41) and
- * the caller must hold the viewer's bound write connection.
- */
-export function selectFlaggableSongs(
-  state: GameState,
-  viewerId: string,
-  viewerConnectionId: string | null,
-): SongView[] {
-  const round = state.round;
-  const permitted = new Set(
-    permittedFlagTargets(state, viewerId, viewerConnectionId),
-  );
-  if (!round || permitted.size === 0) {
-    return [];
-  }
-  return roundSongs(state, round, viewerId).filter((song) =>
-    permitted.has(song.videoId),
-  );
-}
-
 export function selectViewerChoices(
   state: GameState,
   viewerId: string,
@@ -509,7 +477,6 @@ export function selectViewerChoices(
       submissionDone: false,
       media: null,
       ratings: {},
-      flaggedVideoIds: [],
     };
   }
   const submission = round.submissions[viewerId];
@@ -519,7 +486,6 @@ export function selectViewerChoices(
     submissionDone: round.submissionDoneIds.includes(viewerId),
     media: submission ? { ...submission.media } : null,
     ratings: { ...round.ratings[viewerId] },
-    flaggedVideoIds: [...(round.genreFailFlags[viewerId] ?? [])],
   };
 }
 
@@ -567,8 +533,6 @@ export function selectViewerPermissions(
       round !== null &&
       phase === 'PLAYBACK' &&
       !access.paused,
-    canSetGenreFail:
-      permittedFlagTargets(state, viewerId, viewerConnectionId).length > 0,
   };
 }
 
@@ -698,30 +662,6 @@ function viewerAccess(
     paused: state.pause !== null,
     phase: state.phase.type,
   };
-}
-
-/**
- * Video ids the viewer may flag as a genre fail: only during PLAYBACK, once
- * per song, never an own or linked song.
- */
-function permittedFlagTargets(
-  state: GameState,
-  viewerId: string,
-  viewerConnectionId: string | null,
-): string[] {
-  const access = viewerAccess(state, viewerId, viewerConnectionId);
-  const round = access.round;
-  if (!round || !access.participant || access.paused) {
-    return [];
-  }
-  if (access.phase !== 'PLAYBACK') {
-    return [];
-  }
-  const flagged = round.genreFailFlags[viewerId] ?? [];
-  return round.songs
-    .filter((song) => !song.ownerIds.includes(viewerId))
-    .filter((song) => !flagged.includes(song.media.videoId))
-    .map((song) => song.media.videoId);
 }
 
 /** Whether the viewer may rate this song right now (FR-40). */

@@ -10,10 +10,10 @@ import {
   areOwnersVisible,
   selectCurrentSong,
   selectFinal,
-  selectFlaggableSongs,
   selectGenrePool,
   selectLobbyReadiness,
   selectPhaseTimer,
+  selectPlayback,
   selectResults,
   selectReveal,
   selectRoster,
@@ -380,7 +380,6 @@ describe('anonymity', () => {
         selectSongs(playing, id(1)),
         selectCurrentSong(playing, id(1)),
         selectRatingEntries(playing, id(1), conn(playing, id(1))),
-        selectFlaggableSongs(playing, id(1), conn(playing, id(1))),
         selectViewerChoices(playing, id(1)),
         selectViewerPermissions(playing, id(1), conn(playing, id(1))),
         selectReveal(reveal),
@@ -401,7 +400,6 @@ describe('anonymity', () => {
       'forceBelowMinimum',
       'nextSubmissionOrder',
       'submissions',
-      'genreFailFlags',
     ]) {
       expect([...keys]).not.toContain(forbidden);
     }
@@ -425,21 +423,17 @@ describe('selectViewerChoices', () => {
     state = command(
       state,
       id(1),
-      { type: 'SET_GENRE_FAIL', videoId: videoId(2), flagged: true },
+      { type: 'RATE', songId: videoId(3), value: 0 },
       at + 1,
     );
     expect(selectViewerChoices(state, id(1))).toMatchObject({
       isParticipant: true,
       submitted: true,
       submissionDone: true,
-      ratings: { [videoId(2)]: 3 },
-      flaggedVideoIds: [videoId(2)],
+      ratings: { [videoId(2)]: 3, [videoId(3)]: 0 },
     });
     expect(selectViewerChoices(state, id(1)).media?.videoId).toBe(videoId(1));
-    expect(selectViewerChoices(state, id(2))).toMatchObject({
-      ratings: {},
-      flaggedVideoIds: [],
-    });
+    expect(selectViewerChoices(state, id(2))).toMatchObject({ ratings: {} });
     expect(selectViewerChoices(state, id(2)).media?.videoId).toBe(videoId(2));
     expect(selectViewerChoices(state, id(9))).toEqual({
       isParticipant: false,
@@ -447,13 +441,12 @@ describe('selectViewerChoices', () => {
       submissionDone: false,
       media: null,
       ratings: {},
-      flaggedVideoIds: [],
     });
   });
 });
 
-describe('selectRatingEntries and selectFlaggableSongs', () => {
-  it('lists the rating targets and excludes own songs for flags', () => {
+describe('selectRatingEntries', () => {
+  it('lists the rating targets and excludes own songs', () => {
     const playing = playbackState();
     const ratings = selectRatingEntries(playing, id(1), conn(playing, id(1)));
     expect(ratings).toHaveLength(1);
@@ -469,21 +462,25 @@ describe('selectRatingEntries and selectFlaggableSongs', () => {
     expect(
       selectRatingEntries(submissionState(), id(1), conn(playing, id(1))),
     ).toEqual([]);
-    const flaggable = selectFlaggableSongs(
+    // A genre-fail is the rating 0 and shows up as the viewer's own rating.
+    const first = playing.round!.playbackOrder[0];
+    const own = playing.round!.songs.find(
+      (song) => song.media.videoId === first,
+    )!.ownerIds[0];
+    const viewer = playing.round!.participantIds.find((p) => p !== own)!;
+    const zeroed = command(
       playing,
-      id(1),
-      conn(playing, id(1)),
-    );
-    expect(flaggable).toHaveLength(3);
-    expect(flaggable.some((song) => song.ownedByViewer)).toBe(false);
-    const withSpectator = send(
-      playing,
-      { type: 'JOIN', nickname: 'Late' },
-      { actorId: id(9), connectionId: id(109), at: 8000 },
+      viewer,
+      { type: 'RATE', songId: first, value: 0 },
+      8000,
     );
     expect(
-      selectFlaggableSongs(withSpectator, id(9), conn(withSpectator, id(9))),
-    ).toEqual([]);
+      selectRatingEntries(zeroed, viewer, conn(zeroed, viewer))[0].rating,
+    ).toBe(0);
+    expect(selectPlayback(zeroed, viewer, conn(zeroed, viewer))?.rating).toBe(
+      0,
+    );
+    expect(selectPlayback(zeroed, own, conn(zeroed, own))?.rating).toBeNull();
   });
 });
 
@@ -540,7 +537,6 @@ describe('selectViewerPermissions', () => {
     ).toMatchObject({
       isParticipant: false,
       canSubmit: false,
-      canSetGenreFail: false,
     });
     const playing = playbackState();
     expect(
@@ -548,7 +544,6 @@ describe('selectViewerPermissions', () => {
     ).toMatchObject({
       canSubmit: false,
       canRate: true,
-      canSetGenreFail: true,
       canAdvance: true,
     });
     const paused = command(playing, id(1), { type: 'PAUSE' }, 8000);
@@ -559,7 +554,6 @@ describe('selectViewerPermissions', () => {
       canPause: false,
       canResume: true,
       canRate: false,
-      canSetGenreFail: false,
     });
     const final = scoredFinalState();
     expect(
@@ -581,7 +575,6 @@ describe('selectViewerPermissions', () => {
       isParticipant: true,
       isHost: false,
       canRate: false,
-      canSetGenreFail: false,
     });
     const unknown = selectViewerPermissions(playing, id(77), null);
     expect(unknown.isHost).toBe(false);
@@ -765,7 +758,6 @@ describe('lobby selector edges', () => {
     expect(selectSongs(lobby, id(1))).toEqual([]);
     expect(selectCurrentSong(lobby, id(1))).toBeNull();
     expect(selectRatingEntries(lobby, id(1), conn(lobby, id(1)))).toEqual([]);
-    expect(selectFlaggableSongs(lobby, id(1), conn(lobby, id(1)))).toEqual([]);
     expect(selectReveal(lobby)).toBeNull();
     expect(selectResults(lobby)).toEqual([]);
     expect(selectStandings(lobby, id(1)).map((entry) => entry.rank)).toEqual([
@@ -777,7 +769,6 @@ describe('lobby selector edges', () => {
       submissionDone: false,
       media: null,
       ratings: {},
-      flaggedVideoIds: [],
     });
     expect(
       selectViewerPermissions(lobby, id(1), conn(lobby, id(1))),
@@ -832,29 +823,8 @@ describe('rating targets and bound tabs', () => {
         `${label} rating targets`,
       ).toBe(true);
       expect(permissions.canRate, `${label} canRate`).toBe(false);
-      expect(permissions.canSetGenreFail, `${label} canSetGenreFail`).toBe(
-        false,
-      );
       expect(permissions.canSubmit, `${label} canSubmit`).toBe(false);
     }
-  });
-
-  it('drops the flag permission when no permitted foreign song remains', () => {
-    let state = playbackState();
-    [videoId(2), videoId(3), videoId(4)].forEach((target, index) => {
-      state = command(
-        state,
-        id(1),
-        { type: 'SET_GENRE_FAIL', videoId: target, flagged: true },
-        8000 + index,
-      );
-    });
-    expect(selectViewerChoices(state, id(1)).flaggedVideoIds).toHaveLength(3);
-    expect(selectFlaggableSongs(state, id(1), conn(state, id(1)))).toEqual([]);
-    expect(
-      selectViewerPermissions(state, id(1), conn(state, id(1))).canSetGenreFail,
-    ).toBe(false);
-    expect(validationError(state)).toBeNull();
   });
 
   it('denies writes to an older tab after the viewer rebound its connection', () => {
@@ -871,7 +841,6 @@ describe('rating targets and bound tabs', () => {
       isHost: true,
       isParticipant: true,
       canRate: true,
-      canSetGenreFail: true,
       canAdvance: true,
       canPause: true,
       canKick: true,
@@ -892,14 +861,12 @@ describe('rating targets and bound tabs', () => {
       canSubmit: false,
       canFinishSubmission: false,
       canRate: false,
-      canSetGenreFail: false,
     });
     expect(
       selectRatingEntries(rebound, id(1), staleConnection).every(
         (entry) => !entry.canRate,
       ),
     ).toBe(true);
-    expect(selectFlaggableSongs(rebound, id(1), staleConnection)).toEqual([]);
     const staleCommand = action(
       rebound,
       { type: 'RATE', songId: song, value: 5 },
@@ -920,7 +887,6 @@ describe('rating targets and bound tabs', () => {
     expect(
       selectRatingEntries(state, id(1), null).every((entry) => !entry.canRate),
     ).toBe(true);
-    expect(selectFlaggableSongs(state, id(1), id(777))).toEqual([]);
     expect(selectViewerChoices(state, id(1)).media?.videoId).toBe(videoId(1));
   });
 });

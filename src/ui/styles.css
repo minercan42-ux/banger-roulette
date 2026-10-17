@@ -1774,9 +1774,9 @@ body {
     color: var(--color-cream);
   }
 
-  /* Live rating (FR-40): eleven round chips 0-10 under the playing song. The
-     chosen chip is `aria-pressed`; every chip up to it is gold, so the row
-     reads as a bar. The pressed chip also grows and gets a cream rim, so the
+  /* Live rating (FR-40): the genre-fail chip plus round chips 1-10 under the
+     playing song. The chosen chip is `aria-pressed`; every number chip up to
+     it is gold, so the row reads as a bar. The pressed chip also grows and gets a cream rim, so the
      value is never carried by colour alone. */
   .br-ratebar {
     display: flex;
@@ -1829,6 +1829,28 @@ body {
     box-shadow:
       0 5px 0 var(--chip-deep),
       0 0 0 3px var(--color-cream);
+  }
+  /* Chip 0 is the genre-fail chip: a plate with a red cross instead of a
+     number, set apart from 1-10 by a wider gap. Pressed it turns red and, like
+     every chip, grows; it is never a gold "filled" chip. */
+  .br-ratechip[data-kind='genre-fail'] {
+    margin-inline-end: var(--space-3);
+  }
+  .br-ratechip__glyph {
+    display: block;
+    width: 24px;
+    height: 24px;
+  }
+  .br-ratechip__plate {
+    fill: var(--color-cream);
+  }
+  .br-ratechip__cross {
+    fill: var(--color-card-red);
+  }
+  .br-ratechip[data-kind='genre-fail'].is-on {
+    --chip: var(--color-red);
+    --chip-deep: var(--color-red-deep);
+    --chip-face: var(--color-red-deep);
   }
   .br-ratechip:hover:not(:disabled):not(.is-on) {
     transform: translateY(-2px);

@@ -69,11 +69,6 @@ async function playerId(page: Page): Promise<string> {
   return (await snapshot(page)).clientId;
 }
 
-async function flagsOf(page: Page, id: string): Promise<string[]> {
-  const state = await stateOf(page);
-  return state?.round?.genreFailFlags?.[id] ?? [];
-}
-
 async function ratingOf(
   page: Page,
   id: string,
@@ -271,8 +266,9 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
     expect(owner.get(SONG_A)).toBe(aId);
     expect(owner.get(SONG_C)).toBe(cId);
 
-    // The chip bar under the playing song: 11 round chips, the owner sees
-    // "your song" instead; nothing is rated or summarised yet.
+    // The chip bar under the playing song: the genre-fail chip plus 1..10
+    // (11 round chips), the owner sees "your song" instead; nothing is rated
+    // or summarised yet.
     const firstSong = (await stateOf(host.page))?.round?.playbackOrder[0] ?? '';
     for (const [index, stage] of stages.entries()) {
       const ownsIt = owner.get(firstSong) === [aId, bId, cId, dId][index];
@@ -286,6 +282,10 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
         await expect(
           stage.page.locator('[data-testid^="rating-chip-"]'),
         ).toHaveCount(11);
+        await expect(stage.page.getByTestId('rating-chip-0')).toHaveAttribute(
+          'data-kind',
+          'genre-fail',
+        );
       }
       await expect(stage.page.getByTestId('rating-summary')).toHaveCount(0);
     }
@@ -486,16 +486,16 @@ test('AK-2: a duplicated song cannot be rated by its owners, who both score it',
         );
       }
       if (playing === DUP) {
-        // Both owners see "your song" and cannot flag it; the uninvolved
-        // third player gets the bar and may flag it.
+        // Both owners see "your song" and cannot rate or genre-fail it; the
+        // uninvolved third player gets the bar and may pick the genre-fail chip.
         for (const page of [host.page, bob.page]) {
           await expect(page.getByTestId('rating-own')).toBeVisible();
           await expect(page.getByTestId('rating-bar')).toHaveCount(0);
-          await expect(page.getByTestId('playback-flag')).toBeDisabled();
+          await expect(page.getByTestId('rating-chip-0')).toHaveCount(0);
         }
         await expect(cara.page.getByTestId('rating-bar')).toBeVisible();
         await expect(cara.page.getByTestId('rating-own')).toHaveCount(0);
-        await expect(cara.page.getByTestId('playback-flag')).toBeEnabled();
+        await expect(cara.page.getByTestId('rating-chip-0')).toBeEnabled();
 
         // A pause freezes rating: the chips stay visible but cannot be pressed.
         expect((await dispatch(host.page, { type: 'PAUSE' })).status).toBe(
@@ -622,7 +622,7 @@ test('AK-3: anonymity hides owners until the reveal names them', async ({
   }
 });
 
-test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async ({
+test('FR-41/FR-52: the genre-fail chip (rating 0) fails a song once a majority picks it', async ({
   browser,
 }) => {
   test.setTimeout(150_000);
@@ -633,7 +633,7 @@ test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async
     newStage(browser, { nickname: 'Dana' }),
   ]);
   try {
-    const [host, bob] = stages as [Stage, Stage, Stage, Stage];
+    const [host, bob, cara] = stages as [Stage, Stage, Stage, Stage];
     const pages = stages.map((stage) => stage.page);
     const songs = [SONG_A, SONG_B, SONG_C, SONG_D];
     const medias = songs.map((id) => mediaOf(id));
@@ -645,39 +645,42 @@ test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async
       playerId(bob.page),
     ]);
 
-    // FR-52: two of the three non-owners flagging is a strict majority. The
-    // flag is set once per song and cannot be taken back.
-    // Everyone gives the foreign songs 5, Cara's song 9 and the flagged one 3.
+    // FR-52: two of the three non-owners picking the genre-fail chip is a
+    // strict majority. The chip is the rating 0: it counts in the mean and a
+    // number replaces it. Everyone gives the foreign songs 5 and Cara's song 9;
+    // Alice and Bob give song D the chip, Cara gives it a 9, so it averages 3.0.
     const values: RatingMatrix = [
-      [null, 5, 9, 3],
-      [5, null, 9, 3],
-      [5, 5, null, 3],
+      [null, 5, 9, 0],
+      [5, null, 9, 0],
+      [5, 5, null, 9],
       [5, 5, 9, null],
     ];
     const rate: RatingFn = (rater, song) => values[rater]?.[song] ?? null;
+    // Song D is rated through the chip bar below; the other songs by session.
+    const skipD: RatingFn = (rater, song) =>
+      song === 3 ? null : (rate(rater, song) ?? null);
     await advanceToSong(pages, SONG_D, { medias, value: rate });
-    const flagHost = host.page.getByTestId('playback-flag');
-    await flagHost.click();
-    await expect(flagHost).toHaveAttribute('data-flagged', 'true');
-    await expect(flagHost).toBeDisabled();
-    await expect.poll(() => flagsOf(host.page, aId)).toContain(SONG_D);
-    await bob.page.getByTestId('playback-flag').click();
-    await expect(bob.page.getByTestId('playback-flag')).toHaveAttribute(
-      'data-flagged',
-      'true',
+    const chipHost = host.page.getByTestId('rating-chip-0');
+    await chipHost.click();
+    await expect(chipHost).toHaveAttribute('aria-pressed', 'true');
+    await expect(host.page.getByTestId('rating-current')).toHaveAttribute(
+      'data-rating',
+      '0',
     );
-    await expect.poll(() => flagsOf(bob.page, bId)).toContain(SONG_D);
-    expect(
-      (
-        await dispatch(host.page, {
-          type: 'SET_GENRE_FAIL',
-          videoId: SONG_D,
-          flagged: false,
-        })
-      ).status,
-    ).toBe('rejected');
+    await expect.poll(() => ratingOf(host.page, aId, SONG_D)).toBe(0);
 
-    await ratePlayback(pages, medias, rate);
+    // A number replaces the genre fail atomically and clears it again.
+    await rateByUi(bob.page, 7);
+    await expect(bob.page.getByTestId('rating-chip-0')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await expect.poll(() => ratingOf(bob.page, bId, SONG_D)).toBe(7);
+    await rateByUi(bob.page, 0);
+    await expect.poll(() => ratingOf(bob.page, bId, SONG_D)).toBe(0);
+    await rateByUi(cara.page, 9);
+
+    await ratePlayback(pages, medias, skipD);
     await waitForFullReveal(host.page, 4);
 
     const entries = await revealEntries(host.page);
@@ -694,7 +697,7 @@ test('FR-41/FR-52: a playback flag fails a song once a majority flags it', async
       '3.0',
     );
     await expect(failedCombo).toHaveAttribute('data-adjust', '-30');
-    // Two of the three non-owners flagged it; the count is rendered, not a placeholder.
+    // Two of the three non-owners rated it 0; the count is rendered, not a placeholder.
     const failNote = entryOf(host.page, SONG_D).getByTestId(
       'reveal-entry-genre-fail',
     );

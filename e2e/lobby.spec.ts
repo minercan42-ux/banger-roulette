@@ -682,7 +682,6 @@ test('host disconnect during playback migrates and keeps every round datum', asy
     }
     await waitForPhase(host, 'PLAYBACK');
     const playing = (await stateOf(host))?.round?.playbackOrder[0] ?? '';
-    const hostSongId = secondMedias[0].videoId;
     const memberId = (await snapshot(member)).clientId;
     const thirdId = (await snapshot(third)).clientId;
     const owner = (await stateOf(host))?.round?.songs.find(
@@ -699,14 +698,13 @@ test('host disconnect during playback migrates and keeps every round datum', asy
         })
       ).status,
     ).toBe('accepted');
-    // The host's own song is foreign to both other players.
-    const flagged = hostSongId;
+    // The genre-fail chip is the rating 0 and replaces the 8 in one event.
     expect(
       (
         await dispatch(rater, {
-          type: 'SET_GENRE_FAIL',
-          videoId: flagged,
-          flagged: true,
+          type: 'RATE',
+          songId: playing,
+          value: 0,
         })
       ).status,
     ).toBe('accepted');
@@ -753,8 +751,7 @@ test('host disconnect during playback migrates and keeps every round datum', asy
     expect(after?.round).toEqual(before?.round);
     expect(after?.results).toEqual(before?.results);
     expect(after?.phase).toEqual(before?.phase);
-    expect(after?.round?.ratings[raterId]?.[playing]).toBe(8);
-    expect(after?.round?.genreFailFlags[raterId]).toContain(flagged);
+    expect(after?.round?.ratings[raterId]?.[playing]).toBe(0);
   } finally {
     await Promise.all([
       hostContext.close(),
