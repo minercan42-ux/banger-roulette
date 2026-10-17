@@ -285,7 +285,11 @@
     "debugStartSkew": "Start skew",
     "debugDrift": "Drift",
     "debugStatus": "Status",
-    "timeLabel": "Song time"
+    "timeLabel": "Song time",
+    "skip": "Skip",
+    "skipWithdraw": "Keep listening",
+    "skipCount": "{{votes}}/{{total}} want to skip",
+    "skipNeedsRating": "Rate first, then skip."
   },
   "rating": {
     "groupLabel": "Rate song {{number}}: {{title}}",

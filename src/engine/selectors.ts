@@ -9,7 +9,13 @@ import type {
 } from '../shared/game';
 import type { Genre, Media } from '../shared/primitives';
 import type { Settings } from '../shared/settings';
-import { PRE_ROLL_MS, revealSlotMs } from './reducer';
+import {
+  PRE_ROLL_MS,
+  connectedParticipantCount,
+  revealSlotMs,
+  skipThreshold,
+  skipVoteCount,
+} from './reducer';
 import { MAX_PLAYERS, MIN_PLAYERS, isActivePlayer, sortPlayers } from './state';
 
 /**
@@ -114,6 +120,23 @@ export interface PlaybackView {
   rating: number | null;
   /** The viewer may rate the current song right now (never an owner). */
   canRate: boolean;
+  skip: SkipView;
+}
+
+/** Skip vote of the current song (FR-43). Counts only, never voter ids (AK-3). */
+export interface SkipView {
+  /** Votes of connected participants. */
+  votes: number;
+  /** Connected participants of the round. */
+  total: number;
+  /** Votes that end the song: ceil(0.9 x total). */
+  required: number;
+  /** The viewer has voted to skip. */
+  voted: boolean;
+  /** The viewer may vote or withdraw right now. */
+  canVote: boolean;
+  /** A non-owner participant who has not rated the song yet. */
+  needsRating: boolean;
 }
 
 /** One song the viewer may have rated: the current and every earlier one. */
@@ -431,6 +454,29 @@ export function selectPlayback(
     pausedAt: state.pause?.at ?? null,
     rating: state.round.ratings[viewerId]?.[song.videoId] ?? null,
     canRate: canRateNow(state, viewerId, viewerConnectionId, song),
+    skip: skipView(state, viewerId, viewerConnectionId, song),
+  };
+}
+
+function skipView(
+  state: GameState,
+  viewerId: string,
+  viewerConnectionId: string | null,
+  song: SongView,
+): SkipView {
+  const access = viewerAccess(state, viewerId, viewerConnectionId);
+  const total = connectedParticipantCount(state);
+  const rated = state.round?.ratings[viewerId]?.[song.videoId] !== undefined;
+  return {
+    votes: skipVoteCount(state),
+    total,
+    required: skipThreshold(total),
+    voted:
+      state.phase.type === 'PLAYBACK' &&
+      state.phase.skipVoterIds.includes(viewerId),
+    canVote:
+      access.participant && !access.paused && (song.ownedByViewer || rated),
+    needsRating: access.participant && !song.ownedByViewer && !rated,
   };
 }
 

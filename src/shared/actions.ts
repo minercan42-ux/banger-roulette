@@ -28,6 +28,11 @@ export const ClientActionSchema = z.discriminatedUnion('type', [
     songId: VideoId,
     value: Rating,
   }),
+  z.strictObject({
+    type: z.literal('SKIP_VOTE'),
+    songId: VideoId,
+    skip: z.boolean(),
+  }),
   z.strictObject({ type: z.literal('ADVANCE') }),
   z.strictObject({ type: z.literal('PAUSE') }),
   z.strictObject({ type: z.literal('RESUME'), forceBelowMinimum: z.boolean() }),

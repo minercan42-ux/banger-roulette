@@ -928,3 +928,111 @@ describe('selectStandings', () => {
     expect(standings[0].isSelf).toBe(true);
   });
 });
+
+describe('selectPlayback skip view (FR-43)', () => {
+  function roles(state: GameState) {
+    const round = state.round!;
+    const songId = round.playbackOrder[0];
+    const song = round.songs.find((s) => s.media.videoId === songId)!;
+    const owner = song.ownerIds[0];
+    const raters = round.participantIds.filter((p) => p !== owner);
+    return { songId, owner, raters, at: 20000 };
+  }
+
+  function skipOf(state: GameState, viewer: string) {
+    return selectPlayback(state, viewer, conn(state, viewer))!.skip;
+  }
+
+  it('asks a non-owner to rate first and lets an owner vote at once', () => {
+    const state = playbackState();
+    const { owner, raters } = roles(state);
+    expect(skipOf(state, raters[0])).toEqual({
+      votes: 0,
+      total: 4,
+      required: 4,
+      voted: false,
+      canVote: false,
+      needsRating: true,
+    });
+    expect(skipOf(state, owner)).toEqual({
+      votes: 0,
+      total: 4,
+      required: 4,
+      voted: false,
+      canVote: true,
+      needsRating: false,
+    });
+  });
+
+  it('unlocks the vote after a rating (genre-fail included) and reports the count', () => {
+    let state = playbackState();
+    const { songId, owner, raters, at } = roles(state);
+    state = command(state, raters[0], { type: 'RATE', songId, value: 0 }, at);
+    expect(skipOf(state, raters[0])).toMatchObject({
+      canVote: true,
+      needsRating: false,
+      voted: false,
+    });
+    state = command(
+      state,
+      raters[0],
+      { type: 'SKIP_VOTE', songId, skip: true },
+      at + 1,
+    );
+    state = command(
+      state,
+      owner,
+      { type: 'SKIP_VOTE', songId, skip: true },
+      at + 2,
+    );
+    expect(skipOf(state, raters[0])).toMatchObject({
+      votes: 2,
+      voted: true,
+      canVote: true,
+    });
+    expect(skipOf(state, raters[1])).toMatchObject({ votes: 2, voted: false });
+  });
+
+  it('counts only connected participants and never exposes voter ids', () => {
+    let state = playbackState(5);
+    const { songId, owner, raters, at } = roles(state);
+    state = command(
+      state,
+      owner,
+      { type: 'SKIP_VOTE', songId, skip: true },
+      at,
+    );
+    const dropped = presence(
+      state,
+      at + 10,
+      Object.values(state.players)
+        .map((player) => player.connectionId)
+        .filter((connection) => connection !== conn(state, raters[0])),
+    );
+    const view = selectPlayback(dropped, owner, conn(dropped, owner))!;
+    expect(view.skip).toMatchObject({ votes: 1, total: 4, required: 4 });
+    const keys = collectKeys(view, new Set());
+    expect(keys.has('skipVoterIds')).toBe(false);
+    expect(JSON.stringify(view)).not.toContain(owner);
+  });
+
+  it('disables the vote while paused, for stale tabs and for bystanders', () => {
+    const state = playbackState();
+    const { owner, raters, at } = roles(state);
+    const paused = command(state, state.hostId, { type: 'PAUSE' }, at);
+    expect(skipOf(paused, owner)).toMatchObject({ canVote: false });
+    expect(
+      selectPlayback(state, owner, 'stale-connection')!.skip,
+    ).toMatchObject({ canVote: false, needsRating: false });
+    expect(skipOf(state, raters[0]).canVote).toBe(false);
+    const spectator = send(
+      state,
+      { type: 'JOIN', nickname: 'Late' },
+      { actorId: id(9), connectionId: id(109), at },
+    );
+    expect(selectPlayback(spectator, id(9), id(109))!.skip).toMatchObject({
+      canVote: false,
+      needsRating: false,
+    });
+  });
+});
