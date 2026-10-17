@@ -204,14 +204,6 @@ function hasMarker(cleaned: string): boolean {
   return VERSION_MARKERS.some((marker) => marker.test(cleaned));
 }
 
-function isMarkerOnly(cleaned: string): boolean {
-  let rest = cleaned;
-  for (const marker of VERSION_MARKERS) {
-    rest = rest.replace(new RegExp(marker.source, 'g'), ' ');
-  }
-  return collapse(rest.replace(/\d+/g, ' ')) === '';
-}
-
 /** Pull every bracket group out of the title; returns the inner texts. */
 function extractBrackets(title: string): { rest: string; inner: string[] } {
   const inner: string[] = [];
@@ -328,25 +320,22 @@ function parseSong(media: MatchMedia): ParsedSong {
   const title = normalizeText(media.title);
   const { rest, inner } = extractBrackets(title);
   const [main, ...afterPipe] = rest.split('|');
-  const parts = main
-    .split(/\s-+\s/)
-    .map((part) => part.trim())
-    .filter((part) => part !== '');
+  // Preserve empty parts: an explicit but missing track must not fall back to
+  // treating the artist as the track on a Topic/VEVO channel.
+  const parts = main.split(/\s-+\s/).map((part) => part.trim());
   const versionTexts = new Set<string>();
   const extras: string[] = [];
   /** Featured-artist texts: they count as the artist for the channel guard. */
   const credits: string[] = [];
 
-  // Trailing " - " parts that are noise are dropped; marker-only ones (or any
-  // marker part beyond the artist/track pair) become version segments.
-  while (parts.length >= 2) {
+  // The first two dash parts are the artist/track pair, even when the track
+  // itself is "Song", "Music" or another noise word. Only later parts can be
+  // discarded as upload metadata.
+  while (parts.length > 2) {
     const cleaned = cleanSegment(parts[parts.length - 1]);
     if (cleaned === '') {
       parts.pop();
-    } else if (
-      hasMarker(cleaned) &&
-      (parts.length >= 3 || isMarkerOnly(cleaned))
-    ) {
+    } else if (hasMarker(cleaned)) {
       versionTexts.add(cleaned);
       parts.pop();
     } else {
@@ -389,6 +378,12 @@ function parseSong(media: MatchMedia): ParsedSong {
     channelOk = fromChannel && channel !== '';
   }
   const track = collapse(trimTrailingNoise(toWords(trackSource)));
+  const originalTrack = collapse(
+    toWords(credited.length === 2 ? parts[1] : parts.join(' ')),
+  );
+  // Stripping a credit or a bare noise suffix must not manufacture a track
+  // equal to the artist. Keep that ambiguous parse out of metadata matching.
+  channelOk &&= track !== '' && !(track === artist && track !== originalTrack);
   if (hasMarker(track)) {
     versionTexts.add(track);
   }

@@ -178,6 +178,21 @@ const linked: Row[] = [
     upload('夜に駆ける', 'YOASOBI - Topic', 262),
   ],
   [
+    'noise-only track preserved before true trailing metadata segments',
+    upload('Adele - Song - Official Audio - HD', 'Adele', 295),
+    upload('Song (Official Video) | Official Audio', 'Adele - Topic', 295),
+  ],
+  [
+    'noise-only track preserved before a version segment',
+    upload('Adele - Song - Live', 'Adele', 295),
+    upload('Song (Live)', 'Adele - Topic', 295),
+  ],
+  [
+    'a real track named after its artist is not uncertain',
+    upload('Adele - Adele', 'Adele', 295),
+    upload('Adele', 'Adele - Topic', 295),
+  ],
+  [
     'duration inside the 3 percent window on long songs',
     upload('Pink Floyd - Echoes (Remastered)', 'Pink Floyd', 1400),
     upload('Pink Floyd - Echoes', 'Pink Floyd - Topic', 1430),
@@ -299,6 +314,21 @@ const separate: Row[] = [
     'same artist different track',
     upload('Adele - Hello', 'Adele', 295),
     upload('Adele - Someone Like You', 'Adele', 295),
+  ],
+  [
+    'noise-only tracks Song and Music are different tracks',
+    upload('Adele - Song', 'Adele - Topic', 295),
+    upload('Adele - Music', 'Adele - Topic', 295),
+  ],
+  [
+    'noise-only track Song is not the artist-named track Adele',
+    upload('Adele - Song', 'Adele - Topic', 295),
+    upload('Adele - Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'noise-only track Song is not the bare artist name',
+    upload('Adele - Song', 'Adele - Topic', 295),
+    upload('Adele', 'Adele - Topic', 295),
   ],
   [
     'similar but not equal track names',
@@ -521,6 +551,34 @@ describe('isSameSong', () => {
     expect(isSameSong(b, a)).toBe(false);
   });
 
+  it.each(['Song', 'Music', 'Audio', 'Video', 'Official', 'Lyrics'])(
+    'preserves the noise-only track %s across artist and Topic uploads',
+    (track) => {
+      const a = upload(`Adele - ${track}`, 'Adele', 295);
+      const b = upload(track, 'Adele - Topic', 295);
+      expect(isSameSong(a, b)).toBe(true);
+      expect(isSameSong(b, a)).toBe(true);
+    },
+  );
+
+  it.each([
+    'Adele - ',
+    'Adele - (Official Audio)',
+    'Adele - !!!',
+    'Adele -  - Official Audio',
+    'Adele - Adele Lyrics',
+    'Adele - Adele ft. Someone',
+  ])(
+    'never invents an artist-named track from the uncertain title %s',
+    (title) => {
+      const a = upload(title, 'Adele - Topic', 295);
+      const b = upload('Adele', 'Adele - Topic', 295);
+      expect(isSameSong(a, b)).toBe(false);
+      expect(isSameSong(b, a)).toBe(false);
+      expect(isSameSong(a, { ...b, videoId: a.videoId })).toBe(true);
+    },
+  );
+
   it('keeps an identical videoId linked even on a denylisted channel', () => {
     const a = upload('Hello', 'Sing King', 295, 'sameVideo01');
     const b = upload('Hello (Lyrics)', 'Adele Fan', 0, 'sameVideo01');
@@ -545,11 +603,21 @@ describe('groupSameSongs', () => {
   });
 
   it('chains through a middle upload without requiring every pair to match', () => {
-    const a = upload('Artist - Tune', 'Artist', 200);
-    const b = upload('Artist - Tune', 'Artist', 205);
-    const c = upload('Artist - Tune', 'Artist', 210);
+    const a = upload('Artist - Song', 'Artist', 200);
+    const b = upload('Artist - Song', 'Artist', 205);
+    const c = upload('Artist - Song', 'Artist', 210);
     expect(isSameSong(a, c)).toBe(false);
     expect(groupSameSongs([a, b, c])).toEqual([[0, 1, 2]]);
+  });
+
+  it('does not group distinct noise-only and artist-named tracks', () => {
+    const songs = [
+      'Adele - Song',
+      'Adele - Music',
+      'Adele - Adele',
+      'Adele',
+    ].map((title) => upload(title, 'Adele - Topic', 295));
+    expect(groupSameSongs(songs)).toEqual([[0], [1], [2, 3]]);
   });
 
   it('is empty for no input and singleton for one', () => {
