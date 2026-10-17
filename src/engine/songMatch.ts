@@ -19,27 +19,28 @@ const DURATION_TOLERANCE_RATIO = 0.03;
 
 /**
  * Channels that are never the artist's own, whatever else the name says.
- * Single words match whole tokens; phrases match the whole word sequence.
+ * Keys without a space match a whole token, keys with a space the whole word
+ * sequence. "lyric" is the only kind a lyric video may relax: it nearly always
+ * carries the original recording (issue #133, narrows D-033), while fan, cover,
+ * karaoke, tribute and nightcore channels keep the guard.
  */
-const DENIED_CHANNEL_TOKENS: ReadonlySet<string> = new Set([
-  'fan',
-  'fans',
-  'lyric',
-  'lyrics',
-  'karaoke',
-  'cover',
-  'covers',
-  'tribute',
-  'nightcore',
-  'slowed',
-  'sped',
-  '8d',
-]);
-const DENIED_CHANNEL_PHRASES: readonly string[] = [
-  'sing king',
-  '7clouds',
-  'lyrical lemon',
-];
+const DENIED_CHANNEL_WORDS: Readonly<Record<string, 'lyric' | 'other'>> = {
+  fan: 'other',
+  fans: 'other',
+  lyric: 'lyric',
+  lyrics: 'lyric',
+  karaoke: 'other',
+  cover: 'other',
+  covers: 'other',
+  tribute: 'other',
+  nightcore: 'other',
+  slowed: 'other',
+  sped: 'other',
+  '8d': 'other',
+  'sing king': 'other',
+  '7clouds': 'lyric',
+  'lyrical lemon': 'lyric',
+};
 
 /**
  * Version markers: a segment that carries one of these describes a different
@@ -189,6 +190,20 @@ function collapse(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Runs of single letters separated by dots are one word: "U.S.A.", "U.S.A"
+ * and "u.s.a." all read as "usa", "R.E.M." as "rem", "N.E.R.D" as "nerd".
+ * Letters only, so "2.0" never joins. Must run before toWords, which drops
+ * the dots.
+ */
+const DOTTED_ABBREVIATION = /(?<![\p{L}\p{N}])(?:\p{L}\.)+\p{L}?/gu;
+
+function collapseDottedAbbreviations(value: string): string {
+  return value.replace(DOTTED_ABBREVIATION, (abbreviation) =>
+    abbreviation.replace(/\./g, ''),
+  );
+}
+
 /** Segment text without remaster, "original mix" and noise words. */
 function cleanSegment(value: string): string {
   return collapse(
@@ -230,7 +245,10 @@ function channelKey(rawChannel: string): string {
     ? rawChannel.replace(CAMEL_BOUNDARY, ' ')
     : rawChannel;
   const base = normalizeText(raw).replace(/\s+-\s*topic\s*$/, '');
-  const words = collapse(toWords(base)).replace(/\s*vevo$/, '');
+  const words = collapse(toWords(collapseDottedAbbreviations(base))).replace(
+    /\s*vevo$/,
+    '',
+  );
   const tokens = words.split(' ').filter((token) => token !== '');
   while (
     tokens.length > 0 &&
@@ -243,19 +261,42 @@ function channelKey(rawChannel: string): string {
 
 const CAMEL_BOUNDARY = /(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu;
 
-/** A fan, lyric, karaoke or cover channel never links a different upload. */
-function isDeniedChannel(rawChannel: string): boolean {
+interface ChannelJudge {
+  /** The name carries a denied word: never the artist's own channel. */
+  denied: boolean;
+  /** Only lyric words deny it, no fan, cover, karaoke or tribute word. */
+  lyricOnly: boolean;
+}
+
+/**
+ * A fan, lyric, karaoke or cover channel never links a different upload.
+ * Lyric words are reported separately: a lyric video carries the original
+ * recording, so the caller may relax exactly those (issue #133).
+ */
+function judgeChannel(rawChannel: string): ChannelJudge {
+  let denied = false;
+  let lyric = false;
+  let other = false;
   for (const text of [rawChannel, rawChannel.replace(CAMEL_BOUNDARY, ' ')]) {
     const words = collapse(toWords(normalizeText(text)));
-    if (words.split(' ').some((word) => DENIED_CHANNEL_TOKENS.has(word))) {
-      return true;
-    }
     const padded = ` ${words} `;
-    if (DENIED_CHANNEL_PHRASES.some((name) => padded.includes(` ${name} `))) {
-      return true;
+    const tokens = words.split(' ');
+    for (const [name, kind] of Object.entries(DENIED_CHANNEL_WORDS)) {
+      const hit = name.includes(' ')
+        ? padded.includes(` ${name} `)
+        : tokens.includes(name);
+      if (!hit) {
+        continue;
+      }
+      denied = true;
+      if (kind === 'lyric') {
+        lyric = true;
+      } else {
+        other = true;
+      }
     }
   }
-  return false;
+  return { denied, lyricOnly: denied && lyric && !other };
 }
 
 /** Only Topic and VEVO channels are trusted to name the artist themselves. */
@@ -356,27 +397,34 @@ function parseSong(media: MatchMedia): ParsedSong {
     return part.slice(0, found.index);
   });
   const channel = channelKey(media.channel);
-  const denied = isDeniedChannel(media.channel);
+  const channelJudge = judgeChannel(media.channel);
   let artist: string;
   let trackSource: string;
   let channelOk: boolean;
   if (credited.length === 2) {
-    artist = collapse(toWords(credited[0]));
+    artist = collapse(toWords(collapseDottedAbbreviations(credited[0])));
     trackSource = credited[1];
+    // A lyric channel uploads the original recording, so the parsed artist and
+    // track pair replaces the channel guard there (issue #133). Every other
+    // guard still applies, and only lyric words are relaxed.
     channelOk =
-      !denied &&
-      isSubset(
-        channel,
-        collapse(`${artist} ${credits.map(toWords).join(' ')}`),
-      );
+      channelJudge.lyricOnly ||
+      (!channelJudge.denied &&
+        isSubset(
+          channel,
+          collapse(`${artist} ${credits.map(toWords).join(' ')}`),
+        ));
   } else {
     // No artist in the title: only Topic and VEVO channels name the artist.
     trackSource = credited.join(' ');
-    const fromChannel = !denied && isArtistFeedChannel(media.channel);
+    const fromChannel =
+      !channelJudge.denied && isArtistFeedChannel(media.channel);
     artist = fromChannel ? channel : '';
     channelOk = fromChannel && channel !== '';
   }
-  const track = collapse(trimTrailingNoise(toWords(trackSource)));
+  const track = collapse(
+    trimTrailingNoise(toWords(collapseDottedAbbreviations(trackSource))),
+  );
   channelOk &&= track !== '';
   if (track === artist) {
     // A self-titled track is certain only when the whole, unstripped title

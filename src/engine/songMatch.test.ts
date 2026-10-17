@@ -222,6 +222,54 @@ const linked: Row[] = [
     upload('Anything', 'Whoever', 1, 'same-id-001'),
     upload('Completely other title (Live)', 'Someone else', 900, 'same-id-001'),
   ],
+  [
+    'dotted abbreviation in the track (U.S.A. vs USA)',
+    upload(
+      'Miley Cyrus - Party In The U.S.A. (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+    upload('Miley Cyrus - Party In The USA (Lyrics)', 'Miley Cyrus', 202),
+  ],
+  [
+    'playtest lyric upload on a lyric channel (7clouds)',
+    upload(
+      'Miley Cyrus - Party In The U.S.A. (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+    upload('Miley Cyrus - Party In The USA (Lyrics)', '7clouds', 202),
+  ],
+  [
+    'dotted abbreviation in the artist (R.E.M. vs REM)',
+    upload('R.E.M. - Losing My Religion (Official Video)', 'REMVEVO', 262),
+    upload('REM - Losing My Religion', 'REMVEVO', 262),
+  ],
+  [
+    'dotted abbreviation in an artist Topic channel',
+    upload('R.E.M. - Losing My Religion', 'R.E.M. - Topic', 262),
+    upload('R.E.M. - Losing My Religion (Official Video)', 'REMVEVO', 262),
+  ],
+  [
+    'dotted abbreviation beside a numeric version (U.S.A. 2.0 vs USA 2.0)',
+    upload('Artist - Anthem U.S.A. 2.0', 'Artist', 200),
+    upload('Artist - Anthem USA 2.0', 'Artist', 200),
+  ],
+  [
+    'lyric channel with a parsed artist and track (Lyrical Lemon)',
+    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 295),
+    upload('Adele - Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'lyrics channel named after the artist (Adele Lyrics)',
+    upload('Adele - Hello (Lyrics)', 'Adele Lyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'CamelCase lyrics channel (AdeleLyrics)',
+    upload('Adele - Hello', 'AdeleLyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
 ];
 
 const separate: Row[] = [
@@ -490,29 +538,14 @@ const separate: Row[] = [
     upload('Adele - Hello', 'Adele', 295),
   ],
   [
-    'lyric channel is not the artist',
-    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 295),
-    upload('Adele - Hello', 'Adele - Topic', 295),
-  ],
-  [
     'fan channel named after the artist (Adele Fan)',
     upload('Adele - Hello', 'Adele Fan', 295),
     upload('Hello', 'Adele - Topic', 295),
   ],
   [
-    'lyrics channel named after the artist (Adele Lyrics)',
-    upload('Adele - Hello (Lyrics)', 'Adele Lyrics', 295),
-    upload('Adele - Hello', 'Adele', 295),
-  ],
-  [
     'denylisted channel with the artist as its only other token',
     upload('Adele - Hello', 'Adele Covers', 295),
     upload('Adele - Hello', 'Adele - Topic', 295),
-  ],
-  [
-    'CamelCase lyrics channel',
-    upload('Adele - Hello', 'AdeleLyrics', 295),
-    upload('Adele - Hello', 'Adele', 295),
   ],
   [
     'third-party channel without an artist in the title (Hello vs Hello (Audio))',
@@ -535,7 +568,7 @@ const separate: Row[] = [
     upload('The Weeknd - Blinding Lights', 'The Weeknd', 200),
   ],
   [
-    'two third-party channels never link each other',
+    'karaoke channel never links a lyric channel',
     upload('Adele - Hello', 'Sing King', 295),
     upload('Adele - Hello', '7clouds', 295),
   ],
@@ -618,6 +651,35 @@ const separate: Row[] = [
     'accepted false negative: a channel named only by a suffix word (Music - Topic)',
     upload('Music', 'Music - Topic', 200),
     upload('Music', 'Music - Topic', 200),
+  ],
+  [
+    'lyric channel upload labelled as a cover (7clouds)',
+    upload('Miley Cyrus - Party In The USA (Cover)', '7clouds', 202),
+    upload(
+      'Miley Cyrus - Party In The USA (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+  ],
+  [
+    'lyric channel upload that is slowed (7clouds)',
+    upload('Miley Cyrus - Party In The USA (Slowed)', '7clouds', 202),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'lyric upload outside the duration tolerance',
+    upload('Miley Cyrus - Party In The USA (Lyrics)', '7clouds', 240),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'lyric channel upload without an artist in the title',
+    upload('Party In The USA (Lyrics)', '7clouds', 202),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'numeric dot does not glue a version (2.0 vs 20)',
+    upload('Artist - Anthem 2.0', 'Artist', 200),
+    upload('Artist - Anthem 20', 'Artist', 200),
   ],
 ];
 
