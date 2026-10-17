@@ -898,6 +898,34 @@ describe('groupSameSongs', () => {
     expect(groupSameSongs(songs)).toEqual([[0, 1], [2]]);
   });
 
+  describe('identical video ids stay together under a spelling clash', () => {
+    const spelled = [
+      { key: 'dotted', media: upload('P.O.D. - Hello', 'P.O.D.', 202, 'a') },
+      { key: 'caps', media: upload('POD - Hello', 'POD', 202, 'b') },
+      { key: 'mixed', media: upload('Pod - Hello', 'Pod', 202, 'b') },
+    ];
+    const orders = [
+      [0, 1, 2],
+      [0, 2, 1],
+      [1, 0, 2],
+      [1, 2, 0],
+      [2, 0, 1],
+      [2, 1, 0],
+    ];
+
+    it.each(orders)('input order %i, %i, %i', (...order) => {
+      const songs = order.map((index) => spelled[index].media);
+      const groups = groupSameSongs(songs);
+      const sameId = songs
+        .map((song, index) => (song.videoId === 'b' ? index : -1))
+        .filter((index) => index >= 0);
+      const dotted = songs.findIndex((song) => song.videoId === 'a');
+      expect(groups).toHaveLength(2);
+      expect(groups).toContainEqual(sameId);
+      expect(groups).toContainEqual([dotted]);
+    });
+  });
+
   it('does not group distinct noise-only and artist-named tracks', () => {
     const songs = [
       'Adele - Song',

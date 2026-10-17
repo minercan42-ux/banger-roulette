@@ -681,6 +681,17 @@ export function groupSameSongs(items: readonly MatchMedia[]): number[][] {
     return root;
   };
   const indices = items.map((_, index) => index);
+  // Identical video ids are the same upload (FR-26/AK-2): union them first so
+  // no spelling constraint can ever split them, whatever the input order.
+  const firstById = new Map<string, number>();
+  for (let index = 0; index < prepared.length; index += 1) {
+    const first = firstById.get(prepared[index].media.videoId);
+    if (first === undefined) {
+      firstById.set(prepared[index].media.videoId, index);
+    } else {
+      parent[index] = find(first);
+    }
+  }
   for (let i = 0; i < prepared.length; i += 1) {
     for (let j = i + 1; j < prepared.length; j += 1) {
       const rootI = find(i);
@@ -688,9 +699,9 @@ export function groupSameSongs(items: readonly MatchMedia[]): number[][] {
       if (rootI === rootJ || !preparedSameSong(prepared[i], prepared[j])) {
         continue;
       }
-      // Spelling is complete linkage: the duration guard may chain uploads, a
-      // dotted initialism may not reach an ordinary word anywhere in the
-      // merged group (issue #133 review).
+      // Spelling is complete linkage between identity groups: the duration
+      // guard may chain uploads, a dotted initialism may not reach an ordinary
+      // word anywhere in the merged group (issue #133 review).
       const clash = indices.some(
         (left) =>
           find(left) === rootI &&
