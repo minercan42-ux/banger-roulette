@@ -135,7 +135,7 @@ Die vordefinierte Genre-Liste umfasst mindestens 30 Genres und liegt als `src/co
   - Nicknames werden nur als Text gerendert.
   - CSP in `vercel.json`: frame-src nur YouTube, connect-src nur Supabase und eigene API.
   - Im Client nur der anon/publishable Key über Env-Variablen. Secrets werden nie committet.
-- NFR-04 Datenschutz: keine Analytics, keine nicht notwendigen Cookies. Hinweis in der UI, dass YouTube-Inhalte eingebettet werden. Gespeichert werden nur die zufällige Spieler-ID und die YouTube-Zustimmung (localStorage); ein Start-Popup holt Zustimmung und Sound-Freigabe mit einem Klick ein, "Ohne Videos" lädt nichts von YouTube, die Zustimmung ist jederzeit widerrufbar.
+- NFR-04 Datenschutz: keine Analytics, keine nicht notwendigen Cookies. Hinweis in der UI, dass YouTube-Inhalte eingebettet werden. Gespeichert werden nur die zufällige Spieler-ID, die YouTube-Zustimmung und die Einstellungen für Lautstärke, Stummschaltung und Soundeffekte (localStorage, nur Präferenzen, kein Tracking); ein Start-Popup holt Zustimmung und Sound-Freigabe mit einem Klick ein, "Ohne Videos" lädt nichts von YouTube, die Zustimmung ist jederzeit widerrufbar.
 - NFR-05 Browser: jeweils aktuelle Versionen von Chrome, Firefox, Edge und Safari inklusive iOS.
 - NFR-06 Codequalität: TypeScript strict, ESLint und Prettier, kein `any` ohne begründeten Kommentar, Zeilenabdeckung der Engine mindestens 90 %.
 
