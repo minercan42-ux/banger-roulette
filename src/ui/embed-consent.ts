@@ -9,7 +9,9 @@ import { useSyncExternalStore } from 'react';
  * visit asks again instead of remembering a refusal.
  *
  * The store lives in this module, so the start gate, the drawer and every
- * phase that shows YouTube content read the same value.
+ * phase that shows YouTube content read the same value. Other tabs follow: a
+ * `storage` event for the key moves a granted tab to `declined` when the grant
+ * is removed and a declined/undecided tab to `granted` when it is set.
  */
 export const YOUTUBE_CONSENT_STORAGE_KEY = 'banger-roulette.youtubeConsent';
 
@@ -58,6 +60,29 @@ function transition(next: ConsentState): void {
   for (const listener of listeners) {
     listener();
   }
+}
+
+/**
+ * Another tab changed the stored decision (or cleared storage, `key === null`).
+ * A withdrawn grant must stop this tab too, so it goes to `declined` and the
+ * usual teardown paths run without a reload; a grant elsewhere carries over.
+ */
+function onStorage(event: StorageEvent): void {
+  if (event.key !== null && event.key !== YOUTUBE_CONSENT_STORAGE_KEY) {
+    return;
+  }
+  if (readStored()) {
+    transition('granted');
+  } else if (state === 'granted') {
+    transition('declined');
+  }
+}
+
+if (
+  typeof window !== 'undefined' &&
+  typeof window.addEventListener === 'function'
+) {
+  window.addEventListener('storage', onStorage);
 }
 
 /** "Los geht's": videos may load now and on every later visit. */

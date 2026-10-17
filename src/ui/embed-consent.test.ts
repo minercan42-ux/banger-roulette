@@ -73,6 +73,48 @@ describe('embedding consent store (#96)', () => {
     expect(current()).toBe('<i>undecided</i>');
   });
 
+  it('follows consent changes made in another tab', async () => {
+    const storage = fakeStorage({ [KEY]: '1' });
+    let onStorage: ((event: { key: string | null }) => void) | undefined;
+    vi.stubGlobal('window', {
+      localStorage: storage,
+      addEventListener: (type: string, handler: typeof onStorage) => {
+        if (type === 'storage') {
+          onStorage = handler;
+        }
+      },
+    });
+    vi.resetModules();
+    const consent = await import('./embed-consent');
+    const current = () =>
+      renderToStaticMarkup(
+        createElement(() =>
+          createElement('i', null, consent.useEmbedConsent().state),
+        ),
+      );
+    expect(current()).toBe('<i>granted</i>');
+    expect(onStorage).toBeTypeOf('function');
+
+    // Unrelated keys are ignored.
+    storage.data.delete(KEY);
+    onStorage?.({ key: 'banger-roulette.clientId' });
+    expect(current()).toBe('<i>granted</i>');
+
+    // Revoked in another tab: this one stops too.
+    onStorage?.({ key: KEY });
+    expect(current()).toBe('<i>declined</i>');
+
+    // Granted in another tab.
+    storage.data.set(KEY, '1');
+    onStorage?.({ key: KEY });
+    expect(current()).toBe('<i>granted</i>');
+
+    // Storage cleared (key === null).
+    storage.data.clear();
+    onStorage?.({ key: null });
+    expect(current()).toBe('<i>declined</i>');
+  });
+
   it('still works for this page load when storage is blocked', async () => {
     const blocked = () => {
       throw new Error('blocked');
