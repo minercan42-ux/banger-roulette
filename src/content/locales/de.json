@@ -248,8 +248,8 @@
   "linked": {
     "heading": "Spiritually Linked",
     "banner": "Spiritually Linked!",
-    "body_one": "{{count}} Spieler hat dasselbe Video eingereicht.",
-    "body_other": "{{count}} Spieler haben dasselbe Video eingereicht.",
+    "body_one": "{{count}} Spieler hat denselben Song eingereicht.",
+    "body_other": "{{count}} Spieler haben denselben Song eingereicht.",
     "names": "Eingereicht von: {{names}}",
     "anonymousNote": "Namen folgen beim Reveal.",
     "none": "Kein Song wurde doppelt eingereicht."

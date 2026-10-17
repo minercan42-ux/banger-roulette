@@ -1204,6 +1204,158 @@ describe('degenerate rounds', () => {
     expect(validationError(state)).toBeNull();
   });
 
+  it('links different uploads of one song, scores both owners and locks rating (#106)', () => {
+    let state = submissionState();
+    state = command(
+      state,
+      id(1),
+      {
+        type: 'SUBMIT_SONG',
+        media: media(videoId(1), {
+          title: 'Adele - Hello (Official Music Video)',
+          channel: 'Adele',
+          durationSeconds: 367,
+        }),
+      },
+      5000,
+    );
+    state = command(
+      state,
+      id(2),
+      {
+        type: 'SUBMIT_SONG',
+        media: media(videoId(2), {
+          title: 'Hello',
+          channel: 'Adele - Topic',
+          durationSeconds: 366,
+        }),
+      },
+      5001,
+    );
+    state = command(
+      state,
+      id(3),
+      {
+        type: 'SUBMIT_SONG',
+        media: media(videoId(3), {
+          title: 'Lionel Richie - Hello',
+          channel: 'Lionel Richie',
+          durationSeconds: 367,
+        }),
+      },
+      5002,
+    );
+    state = fireDeadline(state, SUBMISSION_END);
+    expect(state.phase.type).toBe('PLAYBACK');
+    expect(state.round?.songs).toHaveLength(2);
+    const group = state.round!.songs[0];
+    expect(group.media.videoId).toBe(videoId(1));
+    expect(group.memberVideoIds).toEqual([videoId(1), videoId(2)]);
+    expect(group.ownerIds).toEqual([id(1), id(2)]);
+    expect(state.round?.songs[1].memberVideoIds).toEqual([videoId(3)]);
+    expect(state.round?.playbackOrder).toHaveLength(2);
+    expect(validationError(state)).toBeNull();
+
+    const at = SUBMISSION_END + 1;
+    // Neither owner can rate or flag the group, by canonical or member id.
+    for (const owner of [id(1), id(2)]) {
+      for (const target of [videoId(1), videoId(2)]) {
+        expect(
+          command(state, owner, { type: 'RATE', songId: target, value: 5 }, at),
+        ).toBe(state);
+        expect(
+          command(
+            state,
+            owner,
+            { type: 'SET_GENRE_FAIL', videoId: target, flagged: true },
+            at,
+          ),
+        ).toBe(state);
+      }
+    }
+    // Both songs have played once the clock reaches the last one.
+    state = fireDeadline(state);
+    expect(state.phase.type).toBe('PLAYBACK');
+    const rateAt =
+      state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 1 : 0;
+    // Ratings target the canonical id only.
+    expect(
+      command(
+        state,
+        id(4),
+        { type: 'RATE', songId: videoId(2), value: 7 },
+        rateAt,
+      ),
+    ).toBe(state);
+    state = command(
+      state,
+      id(3),
+      { type: 'RATE', songId: videoId(1), value: 8 },
+      rateAt,
+    );
+    state = command(
+      state,
+      id(4),
+      { type: 'RATE', songId: videoId(1), value: 9 },
+      rateAt,
+    );
+    state = command(
+      state,
+      id(4),
+      { type: 'RATE', songId: videoId(3), value: 2 },
+      rateAt,
+    );
+    state = fireDeadline(state);
+    expect(state.phase.type).toBe('REVEAL');
+    const scored = state.results[0].songs.find(
+      (entry) => entry.song.media.videoId === videoId(1),
+    );
+    expect(scored).toMatchObject({
+      scoreTenths: 85,
+      ratingCount: 2,
+      winner: true,
+      bonus: 20,
+    });
+    expect(scored?.song.ownerIds).toEqual([id(1), id(2)]);
+    expect(state.results[0].playerDeltas[id(1)]).toBe(105);
+    expect(state.results[0].playerDeltas[id(2)]).toBe(105);
+    expect(validationError(state)).toBeNull();
+  });
+
+  it('keeps different versions of one song as separate songs', () => {
+    let state = submissionState();
+    state = command(
+      state,
+      id(1),
+      {
+        type: 'SUBMIT_SONG',
+        media: media(videoId(1), {
+          title: 'Oasis - Wonderwall',
+          channel: 'Oasis',
+        }),
+      },
+      5000,
+    );
+    state = command(
+      state,
+      id(2),
+      {
+        type: 'SUBMIT_SONG',
+        media: media(videoId(2), {
+          title: 'Oasis - Wonderwall (Live)',
+          channel: 'Oasis',
+        }),
+      },
+      5001,
+    );
+    state = fireDeadline(state, SUBMISSION_END);
+    expect(state.round?.songs.map((song) => song.ownerIds)).toEqual([
+      [id(1)],
+      [id(2)],
+    ]);
+    expect(validationError(state)).toBeNull();
+  });
+
   it('draws each genre once before refilling the cycle', () => {
     const pool = [genre(1), genre(2)];
     let state = startGame(

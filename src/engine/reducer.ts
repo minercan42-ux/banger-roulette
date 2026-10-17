@@ -8,12 +8,12 @@ import type {
   RoundResult,
   Song,
 } from '../shared/game';
-import type { Media } from '../shared/primitives';
 import { nicknameKey } from '../shared/primitives';
 import type { RejectionSchema } from '../shared/protocol';
 import type { Settings } from '../shared/settings';
 import { drawGenre, shuffle } from './rng';
 import { MAX_RATING, scoreRound } from './scoring';
+import { groupSameSongs } from './songMatch';
 import {
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -906,41 +906,32 @@ function startRound(state: GameState, at: number): GameState {
 }
 
 function aggregateSongs(round: Round, clipLimit: number): Song[] {
-  const groups: Record<
-    string,
-    { playerId: string; order: number; media: Media }[]
-  > = {};
-  for (const [playerId, submission] of Object.entries(round.submissions)) {
-    const bucket = groups[submission.media.videoId] ?? [];
-    bucket.push({
+  const entries = Object.entries(round.submissions)
+    .map(([playerId, submission]) => ({
       playerId,
       order: submission.acceptedOrder,
       media: submission.media,
-    });
-    groups[submission.media.videoId] = bucket;
-  }
-  const aggregated: { earliest: number; song: Song }[] = [];
-  for (const entries of Object.values(groups)) {
-    const ordered = [...entries].sort(
+    }))
+    .sort(
       (a, b) =>
         a.order - b.order ||
         (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0),
     );
-    const first = ordered[0];
-    aggregated.push({
-      earliest: first.order,
-      song: {
-        media: { ...first.media },
-        ownerIds: ordered.map((entry) => entry.playerId),
-        clipSeconds: Math.min(
-          clipLimit,
-          first.media.durationSeconds - first.media.startSeconds,
-        ),
-      },
-    });
-  }
-  aggregated.sort((a, b) => a.earliest - b.earliest);
-  return aggregated.map((entry) => entry.song);
+  // Identical video ids and different uploads of one song share a group; the
+  // first accepted submission is canonical (ratings key on its video id).
+  return groupSameSongs(entries.map((entry) => entry.media)).map((indices) => {
+    const members = indices.map((index) => entries[index]);
+    const first = members[0];
+    return {
+      media: { ...first.media },
+      memberVideoIds: [...new Set(members.map((entry) => entry.media.videoId))],
+      ownerIds: members.map((entry) => entry.playerId),
+      clipSeconds: Math.min(
+        clipLimit,
+        first.media.durationSeconds - first.media.startSeconds,
+      ),
+    };
+  });
 }
 
 function promoteSpectators(

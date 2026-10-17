@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameStateSchema, type GameState } from './game';
+import { GameStateSchema, SongSchema, type GameState } from './game';
 import {
   SettingsSchema,
   RequiredSettingsSchema,
@@ -73,7 +73,14 @@ function playback(): GameState {
     submissions: { [a]: { media, acceptedOrder: 0 } },
     submissionDoneIds: [],
     nextSubmissionOrder: 1,
-    songs: [{ media, ownerIds: [a], clipSeconds: 20 }],
+    songs: [
+      {
+        media,
+        memberVideoIds: [media.videoId],
+        ownerIds: [a],
+        clipSeconds: 20,
+      },
+    ],
     playbackOrder: [media.videoId],
     ratings: {},
     genreFailFlags: {},
@@ -118,6 +125,65 @@ describe('wire contracts', () => {
     expect(GameStateSchema.safeParse(state).success).toBe(true);
     state.results[0]!.playerDeltas[a] = 42;
     expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
+  it('normalizes songs without memberVideoIds from older hosts', () => {
+    const state = playback();
+    state.phase = { type: 'REVEAL', startedAt: 0, deadlineAt: 5000 };
+    const song = state.round!.songs[0]!;
+    state.results = [
+      {
+        number: 1,
+        genre,
+        reason: 'normal',
+        songs: [
+          {
+            song,
+            scoreTenths: 100,
+            ratingCount: 3,
+            banger: true,
+            basis: 'ratings',
+            flaggerIds: [],
+            genreFailed: false,
+            winner: true,
+            bonus: 20,
+            ownerDeltas: { [a]: 120 },
+          },
+        ],
+        playerDeltas: { [a]: 120 },
+      },
+    ];
+    const legacy = structuredClone(state) as unknown as {
+      round: { songs: Record<string, unknown>[] };
+      results: { songs: { song: Record<string, unknown> }[] }[];
+    };
+    delete legacy.round.songs[0]!.memberVideoIds;
+    delete legacy.results[0]!.songs[0]!.song.memberVideoIds;
+    const parsed = GameStateSchema.parse(legacy);
+    expect(parsed.round!.songs[0]!.memberVideoIds).toEqual([
+      song.media.videoId,
+    ]);
+    expect(parsed.results[0]!.songs[0]!.song.memberVideoIds).toEqual([
+      song.media.videoId,
+    ]);
+    expect(parsed).toEqual(state);
+    // A present but invalid array is still rejected, never repaired.
+    for (const invalid of [[], null, 'x', [song.media.videoId, 7]]) {
+      legacy.round.songs[0]!.memberVideoIds = invalid;
+      expect(GameStateSchema.safeParse(legacy).success).toBe(false);
+    }
+    delete legacy.round.songs[0]!.memberVideoIds;
+    legacy.results[0]!.songs[0]!.song.memberVideoIds = [];
+    expect(GameStateSchema.safeParse(legacy).success).toBe(false);
+    // A decorated array is not a legacy song object, even in a valid state.
+    const fields: Record<string, unknown> = { ...song };
+    delete fields.memberVideoIds;
+    const decorated = Object.assign([], fields);
+    const withArray = structuredClone(state) as unknown as {
+      round: { songs: unknown[] };
+    };
+    withArray.round.songs[0] = decorated;
+    expect(GameStateSchema.safeParse(withArray).success).toBe(false);
+    expect(SongSchema.safeParse(decorated).success).toBe(false);
   });
   it('validates scored song basis, banger and bonus invariants', () => {
     const state = playback();
@@ -333,6 +399,31 @@ describe('wire contracts', () => {
       },
     ],
     [
+      'canonical id not first member',
+      (s: GameState) => {
+        s.round!.songs[0]!.memberVideoIds = ['otherVideo1'];
+      },
+    ],
+    [
+      'member video nobody submitted',
+      (s: GameState) => {
+        s.round!.songs[0]!.memberVideoIds = [
+          s.round!.songs[0]!.media.videoId,
+          'otherVideo1',
+        ];
+      },
+    ],
+    [
+      'member video shared by two songs',
+      (s: GameState) => {
+        s.round!.songs.push({
+          ...s.round!.songs[0]!,
+          media: { ...s.round!.songs[0]!.media, videoId: 'otherVideo1' },
+          memberVideoIds: ['otherVideo1', s.round!.songs[0]!.media.videoId],
+        });
+      },
+    ],
+    [
       'start at end',
       (s: GameState) => {
         s.round!.songs[0]!.media.startSeconds = 100;
@@ -412,6 +503,29 @@ describe('wire contracts', () => {
     const state = playback();
     mutate(state);
     expect(GameStateSchema.safeParse(state).success).toBe(false);
+  });
+  it('accepts a SNAPSHOT from an older host without memberVideoIds', () => {
+    const state = playback();
+    const legacy = structuredClone(state) as unknown as {
+      round: { songs: Record<string, unknown>[] };
+    };
+    delete legacy.round.songs[0]!.memberVideoIds;
+    const parsed = NetworkEventSchema.parse({
+      protocolVersion: 1,
+      roomCode: state.roomCode,
+      roomId,
+      senderId: a,
+      connectionId: b,
+      hostEpoch: 0,
+      sentAt: 0,
+      body: {
+        type: 'SNAPSHOT',
+        recipientId: null,
+        ackClientId: null,
+        state: legacy,
+      },
+    });
+    expect(parsed.body.type === 'SNAPSHOT' && parsed.body.state).toEqual(state);
   });
   it('limits missing roomId to discovery and verifies snapshot authority', () => {
     const state = fixture();

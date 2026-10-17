@@ -6,6 +6,7 @@ import { genre, id, makeSettings, media, videoId } from './fixtures';
 function songsFor(songOwners: string[]): Song[] {
   return songOwners.map((ownerId, index) => ({
     media: media(videoId(index + 1)),
+    memberVideoIds: [videoId(index + 1)],
     ownerIds: [ownerId],
     clipSeconds: 20,
   }));
@@ -173,6 +174,7 @@ describe('scoreRound', () => {
   it('gives every owner the fixed 5.0 when nobody may rate', () => {
     const song: Song = {
       media: media(videoId(1)),
+      memberVideoIds: [videoId(1)],
       ownerIds: [id(1), id(2), id(3)],
       clipSeconds: 20,
     };
@@ -304,8 +306,18 @@ describe('scoreRound', () => {
 
   it('halves linked points with ceiling, the bonus included', () => {
     const songs: Song[] = [
-      { media: media(videoId(1)), ownerIds: [id(1)], clipSeconds: 20 },
-      { media: media(videoId(2)), ownerIds: [id(2)], clipSeconds: 20 },
+      {
+        media: media(videoId(1)),
+        memberVideoIds: [videoId(1)],
+        ownerIds: [id(1)],
+        clipSeconds: 20,
+      },
+      {
+        media: media(videoId(2)),
+        memberVideoIds: [videoId(2)],
+        ownerIds: [id(2)],
+        clipSeconds: 20,
+      },
     ];
     const ratings = {
       [id(2)]: { [videoId(1)]: 7 },

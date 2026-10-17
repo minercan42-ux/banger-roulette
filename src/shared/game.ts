@@ -32,11 +32,39 @@ const SubmissionSchema = z.strictObject({
   media: MediaSchema,
   acceptedOrder: Int,
 });
-export const SongSchema = z.strictObject({
+const SongObjectSchema = z.strictObject({
+  /** Canonical media: the first accepted submission of the song group. */
   media: MediaSchema,
+  /**
+   * Every video id in the song group, canonical id first. Uploads of the same
+   * song (issue #106) share one group; ratings and flags target `media.videoId`.
+   */
+  memberVideoIds: VideoIds.min(1),
   ownerIds: Ids.min(1),
   clipSeconds: Seconds.positive(),
 });
+/**
+ * Snapshots from a host that predates #106 carry no `memberVideoIds`; such a
+ * song was always a single-video group. A missing field becomes
+ * `[media.videoId]`; a present but invalid array still fails validation.
+ */
+function withLegacyMembers(value: unknown): unknown {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    'memberVideoIds' in value ||
+    !('media' in value) ||
+    typeof value.media !== 'object' ||
+    value.media === null ||
+    !('videoId' in value.media) ||
+    typeof value.media.videoId !== 'string'
+  ) {
+    return value;
+  }
+  return { ...value, memberVideoIds: [value.media.videoId] };
+}
+export const SongSchema = z.preprocess(withLegacyMembers, SongObjectSchema);
 export type Song = z.infer<typeof SongSchema>;
 export const RoundSchema = z.strictObject({
   number: z.number().int().min(1).max(20),
@@ -247,8 +275,11 @@ export const GameStateSchema = z
         issue('Unknown participant');
       const participant = (id: string) => round.participantIds.includes(id);
       const videos = round.songs.map((s) => s.media.videoId);
+      const members = round.songs.flatMap((s) => s.memberVideoIds);
       if (
         !unique(videos) ||
+        !unique(members) ||
+        round.songs.some((s) => s.memberVideoIds[0] !== s.media.videoId) ||
         videos.length !== round.playbackOrder.length ||
         round.playbackOrder.some((id) => !videos.includes(id))
       )
@@ -285,11 +316,17 @@ export const GameStateSchema = z
         )
           issue('Clip exceeds bounds');
         const owners = Object.entries(round.submissions)
-          .filter(([, s]) => s.media.videoId === song.media.videoId)
+          .filter(([, s]) => song.memberVideoIds.includes(s.media.videoId))
           .map(([id]) => id);
         if (
           owners.length !== song.ownerIds.length ||
-          owners.some((id) => !song.ownerIds.includes(id))
+          owners.some((id) => !song.ownerIds.includes(id)) ||
+          song.memberVideoIds.some(
+            (video) =>
+              !owners.some(
+                (id) => round.submissions[id].media.videoId === video,
+              ),
+          )
         )
           issue('Song owner/submission mismatch');
       }
