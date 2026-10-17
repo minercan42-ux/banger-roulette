@@ -16,7 +16,6 @@ export type MatchMedia = Pick<
 
 const MIN_DURATION_TOLERANCE_SECONDS = 4;
 const DURATION_TOLERANCE_RATIO = 0.03;
-const ARTIST_JACCARD_MIN = 0.5;
 
 /**
  * Channels that are never the artist's own, whatever else the name says.
@@ -378,11 +377,16 @@ function parseSong(media: MatchMedia): ParsedSong {
     channelOk = fromChannel && channel !== '';
   }
   const track = collapse(trimTrailingNoise(toWords(trackSource)));
+  // The raw text the title carried before noise words, credits, pipe and
+  // bracket segments were dropped: the track part itself for an artist/track
+  // pair, the whole title otherwise.
   const originalTrack = collapse(
-    toWords(credited.length === 2 ? parts[1] : parts.join(' ')),
+    toWords(credited.length === 2 ? parts[1] : title),
   );
-  // Stripping a credit or a bare noise suffix must not manufacture a track
-  // equal to the artist. Keep that ambiguous parse out of metadata matching.
+  // Stripping a credit, a bare noise suffix or a pipe/bracket segment must not
+  // manufacture a track equal to the artist ("Adele | Song" on the Adele Topic
+  // channel is not the track "Adele"). Keep that ambiguous parse out of
+  // metadata matching.
   channelOk &&= track !== '' && !(track === artist && track !== originalTrack);
   if (hasMarker(track)) {
     versionTexts.add(track);
@@ -419,26 +423,6 @@ function isSubset(channel: string, artistWords: string): boolean {
   }
   const allowed = artistTokens(artistWords);
   return [...own].every((token) => allowed.has(token));
-}
-
-/** Equal normalized strings, or token Jaccard >= ARTIST_JACCARD_MIN. */
-function tokensAlike(a: string, b: string): boolean {
-  if (a === '' || b === '') {
-    return false;
-  }
-  if (a === b) {
-    return true;
-  }
-  const left = artistTokens(a);
-  const right = artistTokens(b);
-  let shared = 0;
-  for (const token of left) {
-    if (right.has(token)) {
-      shared += 1;
-    }
-  }
-  const union = left.size + right.size - shared;
-  return union > 0 && shared / union >= ARTIST_JACCARD_MIN;
 }
 
 function durationsClose(a: number, b: number): boolean {
@@ -481,7 +465,17 @@ export function preparedSameSong(a: PreparedMatch, b: PreparedMatch): boolean {
   if (a.parsed.track === '' || a.parsed.track !== b.parsed.track) {
     return false;
   }
-  return tokensAlike(a.parsed.artist, b.parsed.artist);
+  // Artist token sets must be equal (stop words and order ignored), so
+  // "Calvin Harris & Dua Lipa" still links "Dua Lipa & Calvin Harris" while
+  // "Pink" never links "Pink Floyd". A partial overlap is not enough: different
+  // songs must never be merged, recall may drop.
+  const artist = artistTokens(a.parsed.artist);
+  const otherArtist = artistTokens(b.parsed.artist);
+  return (
+    artist.size > 0 &&
+    artist.size === otherArtist.size &&
+    [...artist].every((token) => otherArtist.has(token))
+  );
 }
 
 export function isSameSong(a: MatchMedia, b: MatchMedia): boolean {

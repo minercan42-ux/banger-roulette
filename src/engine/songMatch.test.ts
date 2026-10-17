@@ -168,6 +168,11 @@ const linked: Row[] = [
     upload('Calvin Harris - One Kiss', 'Calvin Harris - Topic', 215),
   ],
   [
+    'multi-artist credit in reverse order on the other channel',
+    upload('Calvin Harris & Dua Lipa - One Kiss', 'Calvin Harris', 215),
+    upload('Dua Lipa & Calvin Harris - One Kiss', 'Dua Lipa - Topic', 215),
+  ],
+  [
     'Official and Music suffixes together',
     upload('Adele - Hello', 'Adele Official Music', 295),
     upload('Hello', 'Adele - Topic', 295),
@@ -534,6 +539,36 @@ const separate: Row[] = [
     upload('Queen - Bohemian Rhapsody Remastered 2011', 'Queen', 355),
     upload('Queen - Bohemian Rhapsody', 'Queen', 355),
   ],
+  [
+    'artist that is a prefix of the other artist (Pink vs Pink Floyd)',
+    upload('Pink - Time', 'Pink', 402),
+    upload('Pink Floyd - Time', 'Pink Floyd', 402),
+  ],
+  [
+    'pipe-only titles whose track hides behind a noise word',
+    upload('Adele | Song', 'Adele - Topic', 295),
+    upload('Adele | Music', 'Adele - Topic', 295),
+  ],
+  [
+    'bracket-only titles whose track hides behind a noise word',
+    upload('Adele (Song)', 'Adele - Topic', 295),
+    upload('Adele (Music)', 'Adele - Topic', 295),
+  ],
+  [
+    'accepted false negative: an uncertain pipe title never links an artist-named track',
+    upload('Adele | Song', 'Adele - Topic', 295),
+    upload('Adele - Adele', 'Adele - Topic', 295),
+  ],
+  [
+    'accepted false negative: one-sided featured credit (A & B vs A feat. B)',
+    upload('Pink & Nate - Just Give Me a Reason', 'Pink', 242),
+    upload('Pink - Just Give Me a Reason (feat. Nate)', 'Pink - Topic', 242),
+  ],
+  [
+    'accepted false negative: a channel named only by a suffix word (Music - Topic)',
+    upload('Music', 'Music - Topic', 200),
+    upload('Music', 'Music - Topic', 200),
+  ],
 ];
 
 describe('isSameSong', () => {
@@ -578,6 +613,26 @@ describe('isSameSong', () => {
       expect(isSameSong(a, { ...b, videoId: a.videoId })).toBe(true);
     },
   );
+
+  it('never links a track that only survived noise stripping of a pipe or bracket segment', () => {
+    const uncertain = [
+      ['Adele | Song', 'Adele - Topic'],
+      ['Adele | Music', 'Adele - Topic'],
+      ['Adele (Song)', 'Adele - Topic'],
+      ['Adele (Music)', 'Adele - Topic'],
+      ['Adele | Hello', 'Adele - Topic'],
+    ] as const;
+    for (const [title, channel] of uncertain) {
+      const a = upload(title, channel, 295);
+      const b = upload('Adele', 'Adele - Topic', 295);
+      expect(isSameSong(a, b)).toBe(false);
+      expect(isSameSong(b, a)).toBe(false);
+      expect(isSameSong(a, { ...b, videoId: a.videoId })).toBe(true);
+    }
+    const pipe = upload('Adele | Song', 'Adele - Topic', 295);
+    const bracket = upload('Adele (Song)', 'Adele - Topic', 295);
+    expect(isSameSong(pipe, bracket)).toBe(false);
+  });
 
   it('keeps an identical videoId linked even on a denylisted channel', () => {
     const a = upload('Hello', 'Sing King', 295, 'sameVideo01');
