@@ -52,6 +52,7 @@ function withLegacyMembers(value: unknown): unknown {
   if (
     typeof value !== 'object' ||
     value === null ||
+    Array.isArray(value) ||
     'memberVideoIds' in value ||
     !('media' in value) ||
     typeof value.media !== 'object' ||

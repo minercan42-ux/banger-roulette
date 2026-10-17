@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GameStateSchema, type GameState } from './game';
+import { GameStateSchema, SongSchema, type GameState } from './game';
 import {
   SettingsSchema,
   RequiredSettingsSchema,
@@ -174,6 +174,16 @@ describe('wire contracts', () => {
     delete legacy.round.songs[0]!.memberVideoIds;
     legacy.results[0]!.songs[0]!.song.memberVideoIds = [];
     expect(GameStateSchema.safeParse(legacy).success).toBe(false);
+    // A decorated array is not a legacy song object, even in a valid state.
+    const fields: Record<string, unknown> = { ...song };
+    delete fields.memberVideoIds;
+    const decorated = Object.assign([], fields);
+    const withArray = structuredClone(state) as unknown as {
+      round: { songs: unknown[] };
+    };
+    withArray.round.songs[0] = decorated;
+    expect(GameStateSchema.safeParse(withArray).success).toBe(false);
+    expect(SongSchema.safeParse(decorated).success).toBe(false);
   });
   it('validates scored song basis, banger and bonus invariants', () => {
     const state = playback();

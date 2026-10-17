@@ -110,7 +110,7 @@ const linked: Row[] = [
   ],
   [
     'artist, Topic and VEVO channels of one artist',
-    upload('Hello', 'Adele', 295),
+    upload('Adele - Hello', 'Adele', 295),
     upload('Hello', 'Adele - Topic', 295),
   ],
   [
@@ -158,9 +158,19 @@ const linked: Row[] = [
     upload('Live Forever', 'Oasis - Topic', 276),
   ],
   [
-    'artist subset above the Jaccard bound',
-    upload('The Weeknd - Blinding Lights', 'The Weeknd', 200),
-    upload('Weeknd - Blinding Lights (Lyrics)', 'The Weeknd - Topic', 200),
+    'multi-artist credit, channel of one of the artists',
+    upload('Calvin Harris & Dua Lipa - One Kiss', 'Calvin Harris', 215),
+    upload('Calvin Harris, Dua Lipa - One Kiss', 'Dua Lipa - Topic', 215),
+  ],
+  [
+    'channel named after the featured artist',
+    upload('Calvin Harris - One Kiss (feat. Dua Lipa)', 'Dua Lipa', 215),
+    upload('Calvin Harris - One Kiss', 'Calvin Harris - Topic', 215),
+  ],
+  [
+    'Official and Music suffixes together',
+    upload('Adele - Hello', 'Adele Official Music', 295),
+    upload('Hello', 'Adele - Topic', 295),
   ],
   [
     'non-latin title, identical track',
@@ -435,6 +445,46 @@ const separate: Row[] = [
     upload('Adele - Hello', 'Adele - Topic', 295),
   ],
   [
+    'fan channel named after the artist (Adele Fan)',
+    upload('Adele - Hello', 'Adele Fan', 295),
+    upload('Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'lyrics channel named after the artist (Adele Lyrics)',
+    upload('Adele - Hello (Lyrics)', 'Adele Lyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'denylisted channel with the artist as its only other token',
+    upload('Adele - Hello', 'Adele Covers', 295),
+    upload('Adele - Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'CamelCase lyrics channel',
+    upload('Adele - Hello', 'AdeleLyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'third-party channel without an artist in the title (Hello vs Hello (Audio))',
+    upload('Hello', 'Sing King', 295),
+    upload('Hello (Audio)', 'Sing King', 295),
+  ],
+  [
+    'artist-named channel that is not Topic or VEVO, no artist in the title',
+    upload('Hello', 'Adele', 295),
+    upload('Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'two uploads of one unknown-artist channel',
+    upload('Hello', 'Some Channel', 295),
+    upload('Hello (Official Audio)', 'Some Channel', 295),
+  ],
+  [
+    'accepted false negative: channel tokens beyond the artist credit',
+    upload('Weeknd - Blinding Lights', 'The Weeknd - Topic', 200),
+    upload('The Weeknd - Blinding Lights', 'The Weeknd', 200),
+  ],
+  [
     'two third-party channels never link each other',
     upload('Adele - Hello', 'Sing King', 295),
     upload('Adele - Hello', '7clouds', 295),
@@ -470,6 +520,13 @@ describe('isSameSong', () => {
     expect(isSameSong(a, b)).toBe(false);
     expect(isSameSong(b, a)).toBe(false);
   });
+
+  it('keeps an identical videoId linked even on a denylisted channel', () => {
+    const a = upload('Hello', 'Sing King', 295, 'sameVideo01');
+    const b = upload('Hello (Lyrics)', 'Adele Fan', 0, 'sameVideo01');
+    expect(isSameSong(a, b)).toBe(true);
+    expect(isSameSong(b, a)).toBe(true);
+  });
 });
 
 describe('groupSameSongs', () => {
@@ -488,9 +545,9 @@ describe('groupSameSongs', () => {
   });
 
   it('chains through a middle upload without requiring every pair to match', () => {
-    const a = upload('Artist - Song', 'Artist', 200);
-    const b = upload('Artist - Song', 'Artist', 205);
-    const c = upload('Artist - Song', 'Artist', 210);
+    const a = upload('Artist - Tune', 'Artist', 200);
+    const b = upload('Artist - Tune', 'Artist', 205);
+    const c = upload('Artist - Tune', 'Artist', 210);
     expect(isSameSong(a, c)).toBe(false);
     expect(groupSameSongs([a, b, c])).toEqual([[0, 1, 2]]);
   });

@@ -19,6 +19,30 @@ const DURATION_TOLERANCE_RATIO = 0.03;
 const ARTIST_JACCARD_MIN = 0.5;
 
 /**
+ * Channels that are never the artist's own, whatever else the name says.
+ * Single words match whole tokens; phrases match the whole word sequence.
+ */
+const DENIED_CHANNEL_TOKENS: ReadonlySet<string> = new Set([
+  'fan',
+  'fans',
+  'lyric',
+  'lyrics',
+  'karaoke',
+  'cover',
+  'covers',
+  'tribute',
+  'nightcore',
+  'slowed',
+  'sped',
+  '8d',
+]);
+const DENIED_CHANNEL_PHRASES: readonly string[] = [
+  'sing king',
+  '7clouds',
+  'lyrical lemon',
+];
+
+/**
  * Version markers: a segment that carries one of these describes a different
  * recording or edit of the song. The text of every marker-bearing segment must
  * match between two uploads, so "(Live)" never equals "(Live at Wembley)" and
@@ -132,7 +156,11 @@ interface ParsedSong {
   versionKey: string;
   /** Sorted text of every unknown bracket/pipe segment, joined. */
   extraKey: string;
-  /** The uploading channel is the artist's own (channel guard). */
+  /**
+   * The uploading channel is the artist's own (channel guard): not denied,
+   * and either a subset of the title's artist tokens, or a Topic/VEVO channel
+   * standing in for an artist the title does not name.
+   */
   channelOk: boolean;
 }
 
@@ -208,10 +236,7 @@ function extractBrackets(title: string): { rest: string; inner: string[] } {
  */
 function channelKey(rawChannel: string): string {
   const raw = /vevo\s*$/i.test(rawChannel)
-    ? rawChannel.replace(
-        /(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu,
-        ' ',
-      )
+    ? rawChannel.replace(CAMEL_BOUNDARY, ' ')
     : rawChannel;
   const base = normalizeText(raw).replace(/\s+-\s*topic\s*$/, '');
   const words = collapse(toWords(base)).replace(/\s*vevo$/, '');
@@ -223,6 +248,31 @@ function channelKey(rawChannel: string): string {
     tokens.pop();
   }
   return tokens.join(' ');
+}
+
+const CAMEL_BOUNDARY = /(?<=\p{Ll})(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/gu;
+
+/** A fan, lyric, karaoke or cover channel never links a different upload. */
+function isDeniedChannel(rawChannel: string): boolean {
+  for (const text of [rawChannel, rawChannel.replace(CAMEL_BOUNDARY, ' ')]) {
+    const words = collapse(toWords(normalizeText(text)));
+    if (words.split(' ').some((word) => DENIED_CHANNEL_TOKENS.has(word))) {
+      return true;
+    }
+    const padded = ` ${words} `;
+    if (DENIED_CHANNEL_PHRASES.some((name) => padded.includes(` ${name} `))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Only Topic and VEVO channels are trusted to name the artist themselves. */
+function isArtistFeedChannel(rawChannel: string): boolean {
+  return (
+    /\s-\s*topic\s*$/.test(normalizeText(rawChannel)) ||
+    /vevo\s*$/i.test(rawChannel)
+  );
 }
 
 function trimTrailingNoise(track: string): string {
@@ -246,10 +296,13 @@ function classifySegment(
   segment: string,
   versionTexts: Set<string>,
   extras: string[],
+  credits: string[],
 ): void {
   const credit = CREDIT_START.exec(segment.trim());
   if (credit) {
-    noteCreditTail(segment.trim().slice(credit[0].length), versionTexts);
+    const tail = segment.trim().slice(credit[0].length);
+    credits.push(tail);
+    noteCreditTail(tail, versionTexts);
     return;
   }
   const cleaned = cleanSegment(segment);
@@ -281,6 +334,8 @@ function parseSong(media: MatchMedia): ParsedSong {
     .filter((part) => part !== '');
   const versionTexts = new Set<string>();
   const extras: string[] = [];
+  /** Featured-artist texts: they count as the artist for the channel guard. */
+  const credits: string[] = [];
 
   // Trailing " - " parts that are noise are dropped; marker-only ones (or any
   // marker part beyond the artist/track pair) become version segments.
@@ -299,7 +354,7 @@ function parseSong(media: MatchMedia): ParsedSong {
     }
   }
   for (const segment of [...inner, ...afterPipe]) {
-    classifySegment(segment, versionTexts, extras);
+    classifySegment(segment, versionTexts, extras, credits);
   }
 
   // Version information is read from the credit tail before the credit is cut.
@@ -308,20 +363,31 @@ function parseSong(media: MatchMedia): ParsedSong {
     if (!found) {
       return part;
     }
+    credits.push(found[1]);
     noteCreditTail(found[1], versionTexts);
     return part.slice(0, found.index);
   });
   const channel = channelKey(media.channel);
+  const denied = isDeniedChannel(media.channel);
   let artist: string;
   let trackSource: string;
+  let channelOk: boolean;
   if (credited.length === 2) {
-    artist = toWords(credited[0]);
+    artist = collapse(toWords(credited[0]));
     trackSource = credited[1];
+    channelOk =
+      !denied &&
+      isSubset(
+        channel,
+        collapse(`${artist} ${credits.map(toWords).join(' ')}`),
+      );
   } else {
-    artist = channel;
+    // No artist in the title: only Topic and VEVO channels name the artist.
     trackSource = credited.join(' ');
+    const fromChannel = !denied && isArtistFeedChannel(media.channel);
+    artist = fromChannel ? channel : '';
+    channelOk = fromChannel && channel !== '';
   }
-  artist = collapse(artist);
   const track = collapse(trimTrailingNoise(toWords(trackSource)));
   if (hasMarker(track)) {
     versionTexts.add(track);
@@ -338,7 +404,7 @@ function parseSong(media: MatchMedia): ParsedSong {
     track,
     versionKey: [...versionTexts].sort().join('|'),
     extraKey: [...extras].sort().join('|'),
-    channelOk: tokensAlike(channel, artist),
+    channelOk,
   };
 }
 
@@ -348,6 +414,16 @@ function artistTokens(artist: string): Set<string> {
       .split(' ')
       .filter((token) => token !== '' && !ARTIST_STOPWORDS.has(token)),
   );
+}
+
+/** A non-empty channel whose every token is among the artist's tokens. */
+function isSubset(channel: string, artistWords: string): boolean {
+  const own = artistTokens(channel);
+  if (own.size === 0) {
+    return false;
+  }
+  const allowed = artistTokens(artistWords);
+  return [...own].every((token) => allowed.has(token));
 }
 
 /** Equal normalized strings, or token Jaccard >= ARTIST_JACCARD_MIN. */
