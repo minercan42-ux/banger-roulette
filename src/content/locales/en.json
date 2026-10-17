@@ -141,6 +141,12 @@
     "on": "SFX on",
     "off": "SFX off"
   },
+  "volume": {
+    "label": "Volume",
+    "mute": "Mute",
+    "open": "Adjust volume",
+    "valueText": "{{value}} percent"
+  },
   "settings": {
     "heading": "Rules",
     "modeLabel": "Genre mode",
@@ -257,8 +263,6 @@
     "consentRequired": "YouTube videos are off. Grant consent in the menu to load playback.",
     "progressLabel": "Playback progress",
     "timeLeft": "{{time}} left",
-    "volumeLabel": "Volume",
-    "muteLabel": "Mute",
     "flag": "Genre fail",
     "flagged": "Flagged",
     "recover": "Resume playback",

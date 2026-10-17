@@ -14,6 +14,7 @@ import { TableLayout } from './pf/TableLayout';
 import { RoomView } from './RoomView';
 import { roomPath, useRoute, useSessionSnapshot } from './session-hooks';
 import { useSfxStore } from './sfx-store';
+import { VolumeControl } from './VolumeControl';
 
 const ERROR_CODES = new Set<string>([...SESSION_FAILURES, ...REJECTIONS]);
 
@@ -240,6 +241,7 @@ export function Shell({ session }: { session: GameSession }) {
           </option>
         ))}
       </select>
+      <VolumeControl />
     </div>
   );
 

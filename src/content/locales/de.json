@@ -141,6 +141,12 @@
     "on": "SFX an",
     "off": "SFX aus"
   },
+  "volume": {
+    "label": "Lautstärke",
+    "mute": "Stumm",
+    "open": "Lautstärke einstellen",
+    "valueText": "{{value}} Prozent"
+  },
   "settings": {
     "heading": "Regeln",
     "modeLabel": "Genre-Modus",
@@ -257,8 +263,6 @@
     "consentRequired": "YouTube-Videos sind aus. Im Menü die Zustimmung erteilen, um die Wiedergabe zu laden.",
     "progressLabel": "Wiedergabefortschritt",
     "timeLeft": "Noch {{time}}",
-    "volumeLabel": "Lautstärke",
-    "muteLabel": "Stumm",
     "flag": "Genre-Fail",
     "flagged": "Markiert",
     "recover": "Wiedergabe starten",

@@ -71,6 +71,18 @@ class FakePlayer {
     return this.current;
   }
 
+  setVolume(value: number): void {
+    this.calls.push(`volume:${value}`);
+  }
+
+  mute(): void {
+    this.calls.push('mute');
+  }
+
+  unMute(): void {
+    this.calls.push('unmute');
+  }
+
   getDuration(): number {
     return this.duration;
   }
@@ -182,6 +194,40 @@ describe('createPreview', () => {
     preview.destroy();
     expect(player.destroyed).toBe(true);
     expect(harness.iframes[0].isConnected).toBe(false);
+  });
+
+  it('applies the initial volume and mute once ready, then follows changes', async () => {
+    const harness = installDom();
+    const pending = createPreview(harness.container as unknown as HTMLElement, {
+      videoId: VIDEO_ID,
+      startSeconds: 0,
+      title: 'Preview',
+      volume: 35,
+      muted: true,
+      onStatus: () => undefined,
+    });
+    harness.windowStub.YT = { Player: FakePlayer };
+    harness.windowStub.onYouTubeIframeAPIReady?.();
+    const preview = await pending;
+    const player = FakePlayer.instances[0];
+    expect(player.calls).toEqual(['volume:35', 'mute']);
+
+    preview.setVolume(120);
+    preview.setMuted(false);
+    expect(player.calls.slice(2)).toEqual(['volume:100', 'unmute']);
+
+    preview.destroy();
+    preview.setVolume(10);
+    expect(player.calls).toHaveLength(4);
+  });
+
+  it('never unmutes a player this preview did not mute', async () => {
+    const harness = installDom();
+    const preview = await start(harness, []);
+    const player = FakePlayer.instances[0];
+    expect(player.calls).toEqual(['volume:100']);
+    preview.setMuted(false);
+    expect(player.calls).not.toContain('unmute');
   });
 
   it('injects the shared API script only once', async () => {
