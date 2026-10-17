@@ -211,9 +211,8 @@
     "linkHint": "Unterstützt: youtube.com/watch?v=…, youtu.be/…, /shorts/…, music.youtube.com und m.youtube.com. Andere Domains werden abgelehnt.",
     "linkInvalid": "Kein gültiger YouTube-Link. Bitte eine unterstützte URL eingeben.",
     "consentRequired": "YouTube-Videos sind aus. Zum Hören und Prüfen im Menü die Zustimmung erteilen.",
-    "loadPreview": "Vorschau laden",
     "previewPlay": "Vorschau abspielen",
-    "statusIdle": "Keine Vorschau geladen",
+    "statusIdle": "Link einfügen, die Vorschau startet von selbst.",
     "statusLoading": "Vorschau wird geladen …",
     "statusReady": "Vorschau bereit",
     "statusPlaying": "Vorschau läuft",
@@ -223,7 +222,7 @@
     "previewUnavailable": "Die Vorschau ist nicht verfügbar (Code {{code}}). Das Video gilt damit nicht als bestätigt.",
     "previewFailed": "Die Vorschau konnte nicht gestartet werden. Bitte erneut versuchen.",
     "metadataFailed": "Die Metadaten konnten nicht geladen werden.",
-    "autoplayBlocked": "Der Browser hat das Abspielen blockiert. Bitte erneut auf „Vorschau abspielen“ klicken.",
+    "autoplayBlocked": "Dein Browser hat die Vorschau blockiert. Klick auf „Vorschau abspielen“ und dann auf „Fertig“.",
     "startLabel": "Startpunkt (Sekunden)",
     "setStart": "Startpunkt setzen",
     "minus1": "−1 s",
@@ -232,8 +231,6 @@
     "plus5": "+5 s",
     "durationLabel": "Videolänge: {{duration}} s",
     "clipLabel": "Ausschnitt: {{clip}} s ab Startpunkt",
-    "save": "Einreichung speichern",
-    "savedNotice": "Einreichung gespeichert.",
     "savedHeading": "Deine Einreichung",
     "savedStart": "Start bei {{start}}",
     "remove": "Einreichung entfernen",
@@ -243,7 +240,8 @@
     "progressDone": "fertig",
     "progressOpen": "offen",
     "spectatorOnly": "Du bist Zuschauer und reichst erst ab der nächsten Runde ein.",
-    "previewRequired": "Erst eine laufende Vorschau bestätigt, dass das Video abspielbar ist."
+    "finishing": "Wird eingereicht …",
+    "finishSkipHint": "Ohne Link setzt du diese Runde aus."
   },
   "linked": {
     "heading": "Spiritually Linked",

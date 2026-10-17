@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import type { Media } from '../src/shared/primitives';
 import {
   FIXTURE_CHANNEL,
   fixtureThumbnail,
   fixtureTitle,
+  youTubeCalls,
+  type YouTubeFixtureMap,
 } from './youtube-fixture';
 import {
   assembleRoom,
@@ -78,18 +80,26 @@ function trackPageErrors(pages: readonly Page[]): string[] {
   return errors;
 }
 
+/** Waits until the host holds this video for the player (at this start, if given). */
 async function waitForSubmissionMedia(
   page: Page,
   playerId: string,
   videoId: string,
+  startSeconds?: number,
 ): Promise<void> {
   await expect
     .poll(
-      async () =>
-        (await stateOf(page))?.round?.submissions?.[playerId]?.media.videoId,
+      async () => {
+        const media = (await stateOf(page))?.round?.submissions?.[playerId]
+          ?.media;
+        if (media === undefined || startSeconds === undefined) {
+          return media?.videoId;
+        }
+        return `${media.videoId}@${media.startSeconds}`;
+      },
       { timeout: 10000 },
     )
-    .toBe(videoId);
+    .toBe(startSeconds === undefined ? videoId : `${videoId}@${startSeconds}`);
 }
 
 async function submitDistinctSong(
@@ -473,8 +483,7 @@ test('duplicate links collapse to one song with the first start and stay anonymo
     await expect(bruno.page.getByTestId('start-seconds')).toHaveValue('9');
     await bruno.page.getByTestId('start-plus-1').click();
     await expect(bruno.page.getByTestId('start-seconds')).toHaveValue('10');
-    await bruno.page.getByTestId('save-submission').click();
-    await waitForSubmissionMedia(host.page, brunoId, DUPLICATE);
+    await waitForSubmissionMedia(host.page, brunoId, DUPLICATE, 10);
 
     // Cleo submits the same video later at a different start (20s).
     await ensureConsent(cleo.page);
@@ -483,8 +492,7 @@ test('duplicate links collapse to one song with the first start and stay anonymo
       await cleo.page.getByTestId('start-plus-5').click();
     }
     await expect(cleo.page.getByTestId('start-seconds')).toHaveValue('20');
-    await cleo.page.getByTestId('save-submission').click();
-    await waitForSubmissionMedia(host.page, cleoId, DUPLICATE);
+    await waitForSubmissionMedia(host.page, cleoId, DUPLICATE, 20);
 
     const drafted = await stateOf(host.page);
     expect(drafted?.round?.submissions?.[brunoId]?.media.startSeconds).toBe(10);
@@ -558,14 +566,12 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
       const playerId = (await snapshot(stage.page)).clientId;
       await ensureConsent(stage.page);
       await stage.page.getByTestId('song-link').fill(watchUrl(videoId));
-      await stage.page.getByTestId('load-preview').click();
       const status = stage.page.getByTestId('preview-status');
       await expect(status).toHaveAttribute('data-state', 'error', {
         timeout: 15000,
       });
       await expect(status).toHaveAttribute('data-error-code', code);
       await expect(stage.page.getByTestId('preview-error')).toBeVisible();
-      await expect(stage.page.getByTestId('save-submission')).toBeDisabled();
       const state = await stateOf(host.page);
       expect(state?.round?.submissions?.[playerId]).toBeUndefined();
     }
@@ -574,21 +580,25 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
     const dario = stages[3];
     const external = dario.youtubeRequests;
     await dario.page.getByTestId('song-link').fill(watchUrl(VALID_D));
-    await expect(dario.page.getByTestId('load-preview')).toBeDisabled();
     await expect(
       dario.page.getByTestId('submission-consent-required'),
     ).toBeVisible();
-    await dario.page.waitForTimeout(300);
+    // Past the auto-preview delay: still no player and no YouTube request.
+    await dario.page.waitForTimeout(1500);
     expect(external()).toEqual([]);
-    await expect(dario.page.getByTestId('save-submission')).toBeDisabled();
+    await expect(
+      dario.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    await expect(dario.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'idle',
+    );
 
     await ensureConsent(dario.page);
-    await dario.page.getByTestId('load-preview').click();
+    // Granting the consent starts nothing; the next edit starts the preview.
+    await dario.page.getByTestId('song-link').fill('');
+    await dario.page.getByTestId('song-link').fill(watchUrl(VALID_D));
     const status = dario.page.getByTestId('preview-status');
-    await expect(status).toHaveAttribute('data-state', 'ready', {
-      timeout: 15000,
-    });
-    await dario.page.getByTestId('preview-play').click();
     await expect(status).toHaveAttribute('data-state', 'playing', {
       timeout: 15000,
     });
@@ -601,9 +611,8 @@ test('forbidden embeds are blocked and consent gates external YouTube traffic', 
     await dario.page.getByTestId('set-start').click();
     // Selecting the advancing playhead at the end stays inside the video.
     await expect(dario.page.getByTestId('start-seconds')).toHaveValue('199');
-    await dario.page.getByTestId('save-submission').click();
     const darioId = (await snapshot(dario.page)).clientId;
-    await waitForSubmissionMedia(host.page, darioId, VALID_D);
+    await waitForSubmissionMedia(host.page, darioId, VALID_D, 199);
     const saved = await stateOf(host.page);
     expect(saved?.round?.submissions?.[darioId]?.media.startSeconds).toBe(199);
     expect(saved?.round?.submissions?.[darioId]?.media.title).toBe(
@@ -771,15 +780,13 @@ test('a stale preview cannot validate a replaced link', async ({ browser }) => {
 
     await ensureConsent(alice.page);
     await alice.page.getByTestId('song-link').fill(watchUrl(STALE_A));
-    await alice.page.getByTestId('load-preview').click();
-    // Replace the link before the slow stale error can arrive.
-    await alice.page.getByTestId('song-link').fill(watchUrl(STALE_B));
-    await alice.page.getByTestId('load-preview').click();
     const status = alice.page.getByTestId('preview-status');
-    await expect(status).toHaveAttribute('data-state', 'ready', {
+    // Replace the link once the slow stale preview is loading, before its
+    // error can arrive.
+    await expect(status).not.toHaveAttribute('data-state', 'idle', {
       timeout: 15000,
     });
-    await alice.page.getByTestId('preview-play').click();
+    await alice.page.getByTestId('song-link').fill(watchUrl(STALE_B));
     await expect(status).toHaveAttribute('data-state', 'playing', {
       timeout: 15000,
     });
@@ -788,7 +795,6 @@ test('a stale preview cannot validate a replaced link', async ({ browser }) => {
     await alice.page.waitForTimeout(1800);
     await expect(status).toHaveAttribute('data-state', 'playing');
     await expect(status).not.toHaveAttribute('data-error-code', /./);
-    await alice.page.getByTestId('save-submission').click();
     await waitForSubmissionMedia(host.page, aliceId, STALE_B);
     const saved = await stateOf(host.page);
     expect(saved?.round?.submissions?.[aliceId]?.media.title).toBe(
@@ -815,7 +821,7 @@ test('pause and tab takeover discard old preview validation', async ({
     await enterSubmission(stages.map((stage) => stage.page));
     await ensureConsent(bruno.page);
     await startPlayingPreview(bruno.page, watchUrl(VALID_B));
-    await expect(bruno.page.getByTestId('save-submission')).toBeEnabled();
+    await expect(bruno.page.getByTestId('submission-saved')).toBeVisible();
 
     await host.page.getByTestId('host-pause').click();
     await expect(bruno.page.getByTestId('preview-status')).toHaveAttribute(
@@ -826,9 +832,14 @@ test('pause and tab takeover discard old preview validation', async ({
       bruno.page.locator('[data-testid="preview-host"] iframe'),
     ).toHaveCount(0);
     await host.page.getByTestId('host-resume').click();
-    await expect(bruno.page.getByTestId('save-submission')).toBeDisabled();
+    await expect(bruno.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'idle',
+    );
+    // The same link text fires no edit, so clear the field first.
+    await bruno.page.getByTestId('song-link').fill('');
     await startPlayingPreview(bruno.page, watchUrl(VALID_B));
-    await expect(bruno.page.getByTestId('save-submission')).toBeEnabled();
+    await expect(bruno.page.getByTestId('submission-saved')).toBeVisible();
 
     const replacement = await bruno.context.newPage();
     await replacement.goto(`/r/${code}`);
@@ -841,19 +852,429 @@ test('pause and tab takeover discard old preview validation', async ({
     await expect(
       bruno.page.locator('[data-testid="preview-host"] iframe'),
     ).toHaveCount(0);
+    // A stale tab cannot change the host's copy: VALID_A is rejected and the
+    // autosaved VALID_B stays.
     const stale = await dispatch(bruno.page, {
       type: 'SUBMIT_SONG',
-      media: mediaFrom(VALID_B),
+      media: mediaFrom(VALID_A),
     });
     expect(stale.status).toBe('rejected');
     const brunoId = (await snapshot(replacement)).clientId;
     expect(
-      (await stateOf(host.page))?.round?.submissions?.[brunoId],
-    ).toBeUndefined();
+      (await stateOf(host.page))?.round?.submissions?.[brunoId]?.media.videoId,
+    ).toBe(VALID_B);
     // The stored consent carries over, only the one-tap sound gate remains.
     await unlockSound(replacement);
-    await submitSongViaUi(replacement, watchUrl(VALID_B));
-    await waitForSubmissionMedia(host.page, brunoId, VALID_B);
+    await submitSongViaUi(replacement, watchUrl(VALID_A));
+    await waitForSubmissionMedia(host.page, brunoId, VALID_A);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+/** Three players in SUBMISSION; the first one hosts. */
+async function openSubmissionRoom(
+  browser: Browser,
+  videos: YouTubeFixtureMap = {},
+): Promise<Stage[]> {
+  const stages = await Promise.all(
+    ['Alice', 'Bruno', 'Cleo'].map((nickname) =>
+      newStage(browser, { nickname, videos }),
+    ),
+  );
+  const [host, ...rest] = stages;
+  await assembleRoom(host, rest);
+  await enterSubmission(stages.map((stage) => stage.page));
+  return stages;
+}
+
+test('a pasted link previews and plays by itself within 2.5 seconds', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    await ensureConsent(alice.page);
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'idle',
+    );
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    // No click anywhere: the debounce, the load and the play all run alone.
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'playing',
+      { timeout: 2500 },
+    );
+    await expect(alice.page.getByTestId('submission-saved')).toBeVisible();
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('Fertig right after the paste submits the link before the preview loads', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const [alice, bruno, cleo] = stages;
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+
+    const pasted = Date.now();
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await alice.page.getByTestId('finish-submission').click();
+    // Premise: Fertig came well inside the one-second auto-preview delay.
+    expect(Date.now() - pasted).toBeLessThan(900);
+
+    await expect
+      .poll(async () => {
+        const round = (await stateOf(alice.page))?.round;
+        return {
+          done: round?.submissionDoneIds.includes(aliceId) ?? false,
+          videoId: round?.submissions?.[aliceId]?.media.videoId ?? null,
+        };
+      })
+      .toEqual({ done: true, videoId: VALID_A });
+    const hostRound = (await stateOf(stages[0].page))?.round;
+    expect(hostRound?.submissionDoneIds).toContain(aliceId);
+    expect(hostRound?.submissions?.[aliceId]?.media.videoId).toBe(VALID_A);
+    await expect(alice.page.getByTestId('submission-finished')).toBeVisible();
+
+    // The others sit this round out; the phase ends once everybody is done.
+    await bruno.page.getByTestId('finish-submission').click();
+    await cleo.page.getByTestId('finish-submission').click();
+    await waitForPhase(alice.page, 'PLAYBACK', 30000);
+    await waitForPhase(bruno.page, 'PLAYBACK', 30000);
+    const state = await stateOf(alice.page);
+    expect(state?.round?.playbackOrder).toEqual([VALID_A]);
+    expect(state?.round?.songs.map((song) => song.media.videoId)).toEqual([
+      VALID_A,
+    ]);
+    // Another client can rate the song; its owner sees "your song".
+    await expect(bruno.page.getByTestId('rating-bar')).toBeVisible();
+    await expect(alice.page.getByTestId('rating-own')).toBeVisible();
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('two quick links load only the second preview', async ({ browser }) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    await ensureConsent(alice.page);
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await alice.page.waitForTimeout(300);
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_B));
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'playing',
+      { timeout: 5000 },
+    );
+    // The id-less playback prewarm player also reports ready; only previews
+    // that carry a video count.
+    const loaded = new Set(
+      (await youTubeCalls(alice.page))
+        .filter((call) => call.type === 'ready' && call.videoId)
+        .map((call) => call.videoId),
+    );
+    expect(loaded).toEqual(new Set([VALID_B]));
+    expect(
+      alice.youtubeRequests().filter((url) => url.includes(VALID_A)),
+    ).toEqual([]);
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await waitForSubmissionMedia(stages[0].page, aliceId, VALID_B);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('Fertig with an embed-blocked link shows the error and does not finish', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser, {
+    [BLOCKED_150]: { error: 150 },
+  });
+  try {
+    const alice = stages[0];
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    await alice.page.getByTestId('song-link').fill(watchUrl(BLOCKED_150));
+    await alice.page.getByTestId('finish-submission').click();
+
+    await expect(alice.page.getByTestId('preview-error')).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-error-code',
+      '150',
+    );
+    // Busy ends with the failure: the player can fix the link and retry.
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+    await expect(alice.page.getByTestId('song-link')).toBeEnabled();
+    await alice.page.waitForTimeout(500);
+    const round = (await stateOf(stages[0].page))?.round;
+    expect(round?.submissionDoneIds).not.toContain(aliceId);
+    expect(round?.submissions?.[aliceId]).toBeUndefined();
+    await expect(alice.page.getByTestId('submission-finished')).toHaveCount(0);
+    await expect(
+      stages[0].page.getByTestId('submission-progress'),
+    ).toHaveAttribute('data-count', '0');
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('an autosaved link still counts when the phase ends without Fertig', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const [host, bruno] = stages;
+    const brunoId = (await snapshot(bruno.page)).clientId;
+    await ensureConsent(bruno.page);
+    await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await expect(bruno.page.getByTestId('submission-saved')).toBeVisible({
+      timeout: 15000,
+    });
+    // Bruno never presses Fertig; the phase ends early (host advance, as at
+    // the deadline) and his song is still in the round.
+    expect((await dispatch(host.page, { type: 'ADVANCE' })).status).toBe(
+      'accepted',
+    );
+    await waitForPhase(host.page, 'PLAYBACK', 30000);
+    const state = await stateOf(host.page);
+    expect(state?.round?.submissionDoneIds).not.toContain(brunoId);
+    expect(state?.round?.playbackOrder).toEqual([VALID_A]);
+    expect(state?.round?.songs[0]?.ownerIds).toEqual([brunoId]);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('the save and load buttons are gone and an empty field explains Fertig', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    await ensureConsent(alice.page);
+    await expect(alice.page.getByTestId('save-submission')).toHaveCount(0);
+    await expect(alice.page.getByTestId('load-preview')).toHaveCount(0);
+    await expect(alice.page.getByTestId('preview-play')).toHaveCount(0);
+    await expect(
+      alice.page.getByTestId('submission-finish-hint'),
+    ).toBeVisible();
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'playing',
+      { timeout: 5000 },
+    );
+    await expect(alice.page.getByTestId('save-submission')).toHaveCount(0);
+    await expect(alice.page.getByTestId('load-preview')).toHaveCount(0);
+    await expect(alice.page.getByTestId('preview-play')).toHaveCount(0);
+    await expect(alice.page.getByTestId('submission-finish-hint')).toHaveCount(
+      0,
+    );
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a blocked autoplay offers the play button and Fertig plays inside its click', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser, {
+    [VALID_A]: { autoplayBlocked: true },
+    [VALID_B]: { autoplayBlocked: true },
+  });
+  try {
+    const [alice, bruno] = stages;
+    const aliceId = (await snapshot(alice.page)).clientId;
+    const brunoId = (await snapshot(bruno.page)).clientId;
+
+    // The fallback button starts the preview, which then saves by itself.
+    await ensureConsent(alice.page);
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'autoplayBlocked',
+      { timeout: 15000 },
+    );
+    await alice.page.getByTestId('preview-play').click();
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'playing',
+      { timeout: 15000 },
+    );
+    await expect(alice.page.getByTestId('preview-play')).toHaveCount(0);
+    await waitForSubmissionMedia(stages[0].page, aliceId, VALID_A);
+
+    // Fertig before the preview exists: the blocked autoplay stops it with a
+    // hint, the second click plays inside the gesture and finishes.
+    await ensureConsent(bruno.page);
+    await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_B));
+    await bruno.page.getByTestId('finish-submission').click();
+    await expect(bruno.page.getByTestId('submission-notice')).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(bruno.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'autoplayBlocked',
+    );
+    expect(
+      (await stateOf(stages[0].page))?.round?.submissionDoneIds,
+    ).not.toContain(brunoId);
+    await bruno.page.getByTestId('finish-submission').click();
+    await expect
+      .poll(async () =>
+        (await stateOf(stages[0].page))?.round?.submissionDoneIds.includes(
+          brunoId,
+        ),
+      )
+      .toBe(true);
+    await waitForSubmissionMedia(stages[0].page, brunoId, VALID_B);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+interface DispatchProbe {
+  __actions?: string[];
+  __releaseSave?: () => void;
+}
+
+test('revoking the consent ends a Fertig that waits for the autosave', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    // Hold the first SUBMIT_SONG (the autosave at start 0) before it is sent.
+    await alice.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      const gate = new Promise<void>((resolve) => {
+        probe.__releaseSave = resolve;
+      });
+      let held = false;
+      session.dispatch = async (action) => {
+        if (action.type === 'SUBMIT_SONG' && !held) {
+          held = true;
+          await gate;
+        }
+        return original(action);
+      };
+    });
+    await startPlayingPreview(alice.page, watchUrl(VALID_A));
+    await alice.page.getByTestId('start-plus-5').click();
+    await expect(alice.page.getByTestId('start-seconds')).toHaveValue('5');
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('finish-submission')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    await alice.page.getByTestId('consent-revoke').click();
+    await expect(alice.page.getByTestId('consent-status')).toHaveAttribute(
+      'data-consented',
+      'false',
+    );
+    const requestsAtRevoke = alice.youtubeRequests().length;
+    await alice.page.evaluate(() =>
+      (window as unknown as DispatchProbe).__releaseSave?.(),
+    );
+
+    // The released save may land (it was sent before the revocation), but the
+    // finish is over: no new YouTube request, no new preview, not finished.
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+    await alice.page.waitForTimeout(1500);
+    expect(alice.youtubeRequests()).toHaveLength(requestsAtRevoke);
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    const round = (await stateOf(stages[0].page))?.round;
+    expect(round?.submissionDoneIds).not.toContain(aliceId);
+    expect(round?.submissions?.[aliceId]?.media.startSeconds).not.toBe(5);
+    await expect(alice.page.getByTestId('submission-finished')).toHaveCount(0);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a rejected submit during Fertig is not retried and does not finish', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    // The first SUBMIT_SONG fails; every dispatched action type is recorded.
+    await alice.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      probe.__actions = [];
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      let failed = false;
+      session.dispatch = (action) => {
+        probe.__actions?.push(action.type);
+        if (action.type === 'SUBMIT_SONG' && !failed) {
+          failed = true;
+          return Promise.resolve({
+            status: 'rejected',
+            reason: 'CONNECTION_FAILED',
+          });
+        }
+        return original(action);
+      };
+    });
+    const actions = () =>
+      alice.page.evaluate(
+        () => (window as unknown as DispatchProbe).__actions ?? [],
+      );
+
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('submission-notice')).toHaveText(
+      'Connection failed. Please try again.',
+      { timeout: 15000 },
+    );
+    await expect(alice.page.getByTestId('finish-submission')).toBeEnabled();
+    await alice.page.waitForTimeout(500);
+    // One submit for this click, no silent second one, no finish.
+    expect(await actions()).toEqual(['SUBMIT_SONG']);
+    const round = (await stateOf(stages[0].page))?.round;
+    expect(round?.submissionDoneIds).not.toContain(aliceId);
+    await expect(alice.page.getByTestId('submission-finished')).toHaveCount(0);
+
+    // A new click is a new attempt: it submits again and finishes.
+    await alice.page.getByTestId('finish-submission').click();
+    await expect(alice.page.getByTestId('submission-finished')).toBeVisible({
+      timeout: 15000,
+    });
+    expect(await actions()).toEqual([
+      'SUBMIT_SONG',
+      'SUBMIT_SONG',
+      'FINISH_SUBMISSION',
+    ]);
+    await waitForSubmissionMedia(stages[0].page, aliceId, VALID_A);
   } finally {
     await closeStages(stages);
   }

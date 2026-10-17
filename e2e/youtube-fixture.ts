@@ -302,7 +302,9 @@ const IFRAME_API_FIXTURE = `
   };
   Player.prototype.startPlayback = function () {
     var self = this;
-    if (this.destroyed || this.firedError) return;
+    // A video that is going to error never reaches PLAYING: YouTube reports
+    // the error instead, so a play issued right after ready cannot validate it.
+    if (this.destroyed || this.firedError || this.cfg.error) return;
     // Muted autoplay is permitted by policy; only an audible (unmuted) play is
     // blocked, so the muted prebuffer never consumes the single blocked signal.
     if (this.cfg.autoplayBlocked && !this.unblocked && !this.muted) {

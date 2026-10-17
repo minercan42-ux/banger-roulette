@@ -116,24 +116,12 @@ async function submitSongByKeyboard(page: Page, url: string): Promise<void> {
   await page.keyboard.type(url);
   await expect(page.getByTestId('song-link')).toHaveValue(url);
 
-  await tabTo(page, { testId: 'load-preview' });
-  await page.keyboard.press('Enter');
-  await expect(page.getByTestId('preview-status')).toHaveAttribute(
-    'data-state',
-    'ready',
-    { timeout: 15_000 },
-  );
-
-  await tabTo(page, { testId: 'preview-play' });
-  await page.keyboard.press('Enter');
+  // The preview starts and plays by itself about a second after the paste.
   await expect(page.getByTestId('preview-status')).toHaveAttribute(
     'data-state',
     'playing',
     { timeout: 15_000 },
   );
-
-  await tabTo(page, { testId: 'save-submission' });
-  await page.keyboard.press('Enter');
   await expect(page.getByTestId('submission-saved')).toBeVisible();
 
   await tabTo(page, { testId: 'finish-submission' });
