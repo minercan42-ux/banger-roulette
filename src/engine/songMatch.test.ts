@@ -270,6 +270,16 @@ const linked: Row[] = [
     upload('Adele - Hello', 'AdeleLyrics', 295),
     upload('Adele - Hello', 'Adele', 295),
   ],
+  [
+    'dotted artist channel against the solid uppercase artist spelling',
+    upload('R.E.M. - Losing My Religion', 'R.E.M. - Topic', 262),
+    upload('REM - Losing My Religion', 'REM - Topic', 262),
+  ],
+  [
+    'dotted initialism of four letters (N.E.R.D vs NERD)',
+    upload('N.E.R.D - Rock Star', 'N.E.R.D', 200),
+    upload('NERD - Rock Star', 'NERD', 200),
+  ],
 ];
 
 const separate: Row[] = [
@@ -680,6 +690,41 @@ const separate: Row[] = [
     'numeric dot does not glue a version (2.0 vs 20)',
     upload('Artist - Anthem 2.0', 'Artist', 200),
     upload('Artist - Anthem 20', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to an ordinary word (A.Muse vs Amuse)',
+    upload('Artist - A.Muse', 'Artist', 200),
+    upload('Artist - Amuse', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to an ordinary word (A.Beach vs ABeach)',
+    upload('Artist - A.Beach', 'Artist', 200),
+    upload('Artist - ABeach', 'Artist', 200),
+  ],
+  [
+    'initialism in the track never links its mixed-case spelling (P.O.D. vs Pod)',
+    upload('Artist - P.O.D.', 'Artist', 200),
+    upload('Artist - Pod', 'Artist', 200),
+  ],
+  [
+    'initialism in the artist never links its mixed-case spelling (P.O.D. vs Pod)',
+    upload('P.O.D. - Youth of the Nation', 'P.O.D.', 253),
+    upload('Pod - Youth of the Nation', 'Pod', 253),
+  ],
+  [
+    'initialism in the track never links its mixed-case spelling (U.S.A. vs Usa)',
+    upload('Miley Cyrus - Party In The U.S.A.', 'Miley Cyrus', 202),
+    upload('Miley Cyrus - Party In The Usa', 'Miley Cyrus', 202),
+  ],
+  [
+    'initialism never links a partially capitalised spelling (A.B.C. vs Abc)',
+    upload('Artist - A.B.C.', 'Artist', 200),
+    upload('Artist - Abc', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to the artist part (A.Muse vs Amuse)',
+    upload('A.Muse - Song', 'A.Muse', 200),
+    upload('Amuse - Song', 'Amuse', 200),
   ],
 ];
 

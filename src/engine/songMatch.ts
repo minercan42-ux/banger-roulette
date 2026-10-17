@@ -147,6 +147,20 @@ const BRACKETS =
   /\([^()[\]{}]*\)|\[[^()[\]{}]*\]|\{[^()[\]{}]*\}|【[^】]*】|「[^」]*」|『[^』]*』|〈[^〉]*〉|《[^》]*》/g;
 const ARTIST_STOPWORDS: ReadonlySet<string> = new Set(['and', 'x']);
 
+/**
+ * How one source spells the words an initialism can stand for: the letters of
+ * every dotted initialism in it, and every word of it written all uppercase.
+ * A dotted initialism ("U.S.A.") is the same word as another dotted initialism
+ * or its all-uppercase spelling ("USA"), never a mixed-case or lowercase word
+ * ("Usa"), so ordinary words stay case-insensitive.
+ */
+interface WordSpellings {
+  /** Lowercase letters of every dotted initialism, as the words read. */
+  dotted: ReadonlySet<string>;
+  /** Lowercase spelling of every all-uppercase word, as the words read. */
+  uppercase: ReadonlySet<string>;
+}
+
 interface ParsedSong {
   /** Normalized artist words ('' when unknown). */
   artist: string;
@@ -162,6 +176,10 @@ interface ParsedSong {
    * standing in for an artist the title does not name.
    */
   channelOk: boolean;
+  /** Initialisms of the track source; uppercase words of the raw title. */
+  trackSpelling: WordSpellings;
+  /** Initialisms of the artist source, and its all-uppercase words. */
+  artistSpelling: WordSpellings;
 }
 
 /** NFKC, lowercase, strip Latin diacritics, unify quotes and dashes. */
@@ -191,16 +209,37 @@ function collapse(value: string): string {
 }
 
 /**
- * Runs of single letters separated by dots are one word: "U.S.A.", "U.S.A"
- * and "u.s.a." all read as "usa", "R.E.M." as "rem", "N.E.R.D" as "nerd".
- * Letters only, so "2.0" never joins. Must run before toWords, which drops
- * the dots.
+ * A whole token of two or more single letters, each followed by a dot (the
+ * last dot optional), is one initialism: "U.S.A.", "U.S.A", "u.s.a." and
+ * "R.E.M." read as "usa" and "rem". Only whole tokens count, so "A.Muse"
+ * stays "a muse", and only letters, so "2.0" never joins. Must run before
+ * toWords, which drops the dots.
  */
-const DOTTED_ABBREVIATION = /(?<![\p{L}\p{N}])(?:\p{L}\.)+\p{L}?/gu;
+const DOTTED_INITIALISM =
+  /(?<![\p{L}\p{N}])(?:\p{L}\.){2,}\p{L}?\.?(?![\p{L}\p{N}])/gu;
+
+/** A whole word of two or more capital letters: the solid initialism "USA". */
+const UPPERCASE_WORD = /(?<![\p{L}\p{N}])\p{Lu}{2,}(?![\p{L}\p{N}])/gu;
 
 function collapseDottedAbbreviations(value: string): string {
-  return value.replace(DOTTED_ABBREVIATION, (abbreviation) =>
-    abbreviation.replace(/\./g, ''),
+  return value.replace(DOTTED_INITIALISM, (initialism) =>
+    initialism.replace(/\./g, '').toLowerCase(),
+  );
+}
+
+/** The letters of every dotted initialism a text carries, as the words read. */
+function dottedInitialisms(value: string): ReadonlySet<string> {
+  return new Set(
+    [...value.matchAll(DOTTED_INITIALISM)].map((match) =>
+      collapseDottedAbbreviations(match[0]),
+    ),
+  );
+}
+
+/** Every word a raw text writes all uppercase, as the words read. */
+function uppercaseWords(value: string): ReadonlySet<string> {
+  return new Set(
+    [...value.matchAll(UPPERCASE_WORD)].map((match) => normalizeText(match[0])),
   );
 }
 
@@ -236,15 +275,24 @@ function extractBrackets(title: string): { rest: string; inner: string[] } {
 }
 
 /**
- * The artist a channel stands for: " - Topic", a trailing "VEVO" and the
- * trailing words Official, Music and Records are dropped, nothing else.
- * CamelCase VEVO names ("LionelRichieVEVO") are split into words first.
+ * A CamelCase VEVO name ("LionelRichieVEVO") is split into words first; every
+ * other channel name stays as it is.
  */
-function channelKey(rawChannel: string): string {
-  const raw = /vevo\s*$/i.test(rawChannel)
+function channelText(rawChannel: string): string {
+  return /vevo\s*$/i.test(rawChannel)
     ? rawChannel.replace(CAMEL_BOUNDARY, ' ')
     : rawChannel;
-  const base = normalizeText(raw).replace(/\s+-\s*topic\s*$/, '');
+}
+
+/**
+ * The artist a channel stands for: " - Topic", a trailing "VEVO" and the
+ * trailing words Official, Music and Records are dropped, nothing else.
+ */
+function channelKey(rawChannel: string): string {
+  const base = normalizeText(channelText(rawChannel)).replace(
+    /\s+-\s*topic\s*$/,
+    '',
+  );
   const words = collapse(toWords(collapseDottedAbbreviations(base))).replace(
     /\s*vevo$/,
     '',
@@ -398,12 +446,27 @@ function parseSong(media: MatchMedia): ParsedSong {
   });
   const channel = channelKey(media.channel);
   const channelJudge = judgeChannel(media.channel);
+  // The channel's spelling is read the way channelKey reads the name: split at
+  // the CamelCase boundaries and without the trailing "VEVO".
+  const channelName = channelText(media.channel).replace(/\s*vevo$/i, '');
+  const channelSpelling: WordSpellings = {
+    dotted: dottedInitialisms(normalizeText(channelName)),
+    uppercase: uppercaseWords(channelName),
+  };
+  const titleUppercaseWords = uppercaseWords(media.title);
   let artist: string;
   let trackSource: string;
+  let artistSpelling: WordSpellings;
   let channelOk: boolean;
   if (credited.length === 2) {
     artist = collapse(toWords(collapseDottedAbbreviations(credited[0])));
     trackSource = credited[1];
+    // The title artist part has no raw text of its own once the title is
+    // normalized, so the whole title's uppercase words cover it.
+    artistSpelling = {
+      dotted: dottedInitialisms(credited[0]),
+      uppercase: titleUppercaseWords,
+    };
     // A lyric channel uploads the original recording, so the parsed artist and
     // track pair replaces the channel guard there (issue #133). Every other
     // guard still applies, and only lyric words are relaxed.
@@ -413,26 +476,32 @@ function parseSong(media: MatchMedia): ParsedSong {
         isSubset(
           channel,
           collapse(`${artist} ${credits.map(toWords).join(' ')}`),
-        ));
+        ) &&
+        spellingsAgree(artistSpelling, channelSpelling));
   } else {
     // No artist in the title: only Topic and VEVO channels name the artist.
     trackSource = credited.join(' ');
     const fromChannel =
       !channelJudge.denied && isArtistFeedChannel(media.channel);
     artist = fromChannel ? channel : '';
+    artistSpelling = fromChannel
+      ? channelSpelling
+      : { dotted: new Set(), uppercase: new Set() };
     channelOk = fromChannel && channel !== '';
   }
   const track = collapse(
     trimTrailingNoise(toWords(collapseDottedAbbreviations(trackSource))),
   );
+  const trackSpelling: WordSpellings = {
+    dotted: dottedInitialisms(trackSource),
+    uppercase: titleUppercaseWords,
+  };
   channelOk &&= track !== '';
   if (track === artist) {
     // A self-titled track is certain only when the whole, unstripped title
     // spells the artist once or as an exact artist/track pair. Preserve the
     // artist's punctuation; toWords would hide extra raw title text.
-    const rawChannel = /vevo\s*$/i.test(media.channel)
-      ? media.channel.replace(CAMEL_BOUNDARY, ' ')
-      : media.channel;
+    const rawChannel = channelText(media.channel);
     const rawArtist = collapse(
       credited.length === 2
         ? credited[0]
@@ -460,6 +529,8 @@ function parseSong(media: MatchMedia): ParsedSong {
     versionKey: [...versionTexts].sort().join('|'),
     extraKey: [...extras].sort().join('|'),
     channelOk,
+    trackSpelling,
+    artistSpelling,
   };
 }
 
@@ -479,6 +550,23 @@ function isSubset(channel: string, artistWords: string): boolean {
   }
   const allowed = artistTokens(artistWords);
   return [...own].every((token) => allowed.has(token));
+}
+
+/**
+ * Both sides read every dotted initialism the same way: on the other side it
+ * is either the same dotted initialism or the same letters written all
+ * uppercase. A mixed-case or lowercase spelling ("Usa", "Pod") never counts,
+ * so a dotted initialism never links an ordinary word (issue #133 review).
+ */
+function spellingsAgree(one: WordSpellings, other: WordSpellings): boolean {
+  return (
+    [...one.dotted].every(
+      (letters) => other.dotted.has(letters) || other.uppercase.has(letters),
+    ) &&
+    [...other.dotted].every(
+      (letters) => one.dotted.has(letters) || one.uppercase.has(letters),
+    )
+  );
 }
 
 function durationsClose(a: number, b: number): boolean {
@@ -519,6 +607,12 @@ export function preparedSameSong(a: PreparedMatch, b: PreparedMatch): boolean {
     return false;
   }
   if (a.parsed.track === '' || a.parsed.track !== b.parsed.track) {
+    return false;
+  }
+  if (
+    !spellingsAgree(a.parsed.trackSpelling, b.parsed.trackSpelling) ||
+    !spellingsAgree(a.parsed.artistSpelling, b.parsed.artistSpelling)
+  ) {
     return false;
   }
   // Artist token sets must be equal (stop words and order ignored), so
