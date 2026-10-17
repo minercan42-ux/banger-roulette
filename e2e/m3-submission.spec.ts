@@ -5,6 +5,7 @@ import {
   FIXTURE_CHANNEL,
   fixtureThumbnail,
   fixtureTitle,
+  releaseFixtureVideo,
   youTubeCalls,
   type YouTubeFixtureMap,
 } from './youtube-fixture';
@@ -14,6 +15,7 @@ import {
   dispatch,
   ensureConsent,
   enterSubmission,
+  expectPreviewNotLoaded,
   newStage,
   setSettings,
   snapshot,
@@ -917,26 +919,35 @@ test('Fertig right after the paste submits the link before the preview loads', a
   browser,
 }) => {
   test.setTimeout(90_000);
-  const stages = await openSubmissionRoom(browser);
+  const stages = await openSubmissionRoom(browser, {
+    [VALID_A]: { holdReady: true },
+  });
   try {
     const [alice, bruno, cleo] = stages;
     const aliceId = (await snapshot(alice.page)).clientId;
     await ensureConsent(alice.page);
 
-    const pasted = Date.now();
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
     await alice.page.getByTestId('finish-submission').click();
-    // Premise: Fertig came well inside the one-second auto-preview delay.
-    expect(Date.now() - pasted).toBeLessThan(900);
+    // Premise, held by the fixture instead of the wall clock: the fixture
+    // withholds `onReady` until the release below, so the click provably
+    // precedes the preview load however slow the runner is.
+    await expectPreviewNotLoaded(alice.page, VALID_A);
+    await releaseFixtureVideo(alice.page, VALID_A);
 
     await expect
-      .poll(async () => {
-        const round = (await stateOf(alice.page))?.round;
-        return {
-          done: round?.submissionDoneIds.includes(aliceId) ?? false,
-          videoId: round?.submissions?.[aliceId]?.media.videoId ?? null,
-        };
-      })
+      .poll(
+        async () => {
+          const round = (await stateOf(alice.page))?.round;
+          return {
+            done: round?.submissionDoneIds.includes(aliceId) ?? false,
+            videoId: round?.submissions?.[aliceId]?.media.videoId ?? null,
+          };
+        },
+        // The held premise adds the release, so give the click's validation,
+        // save and finish an explicit budget instead of the 5 s default.
+        { timeout: 15000 },
+      )
       .toEqual({ done: true, videoId: VALID_A });
     const hostRound = (await stateOf(stages[0].page))?.round;
     expect(hostRound?.submissionDoneIds).toContain(aliceId);
@@ -1097,7 +1108,7 @@ test('a blocked autoplay offers the play button and Fertig plays inside its clic
   test.setTimeout(90_000);
   const stages = await openSubmissionRoom(browser, {
     [VALID_A]: { autoplayBlocked: true },
-    [VALID_B]: { autoplayBlocked: true },
+    [VALID_B]: { autoplayBlocked: true, holdReady: true },
   });
   try {
     const [alice, bruno] = stages;
@@ -1121,11 +1132,14 @@ test('a blocked autoplay offers the play button and Fertig plays inside its clic
     await expect(alice.page.getByTestId('preview-play')).toHaveCount(0);
     await waitForSubmissionMedia(stages[0].page, aliceId, VALID_A);
 
-    // Fertig before the preview exists: the blocked autoplay stops it with a
-    // hint, the second click plays inside the gesture and finishes.
+    // Fertig before the preview loads: the blocked autoplay stops it with a
+    // hint, the second click plays inside the gesture and finishes. The held
+    // load makes that premise deterministic (see the paste test above).
     await ensureConsent(bruno.page);
     await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_B));
     await bruno.page.getByTestId('finish-submission').click();
+    await expectPreviewNotLoaded(bruno.page, VALID_B);
+    await releaseFixtureVideo(bruno.page, VALID_B);
     await expect(bruno.page.getByTestId('submission-notice')).toBeVisible({
       timeout: 20000,
     });
@@ -1221,7 +1235,9 @@ test('a rejected submit during Fertig is not retried and does not finish', async
   browser,
 }) => {
   test.setTimeout(90_000);
-  const stages = await openSubmissionRoom(browser);
+  const stages = await openSubmissionRoom(browser, {
+    [VALID_A]: { holdReady: true },
+  });
   try {
     const alice = stages[0];
     const aliceId = (await snapshot(alice.page)).clientId;
@@ -1252,6 +1268,12 @@ test('a rejected submit during Fertig is not retried and does not finish', async
 
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
     await alice.page.getByTestId('finish-submission').click();
+    // Held premise (see the paste test above): the click, and with it the
+    // only SUBMIT_SONG of this attempt, precedes the preview load. Without
+    // the hold a slow runner lets the auto-preview play and autosave first,
+    // which makes the click a second, legitimately retried attempt.
+    await expectPreviewNotLoaded(alice.page, VALID_A);
+    await releaseFixtureVideo(alice.page, VALID_A);
     await expect(alice.page.getByTestId('submission-notice')).toHaveText(
       'Connection failed. Please try again.',
       { timeout: 15000 },

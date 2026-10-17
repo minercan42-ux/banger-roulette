@@ -14,6 +14,7 @@ import { NO_AUDIO_DEVICE } from './silent-audio';
 import {
   installYouTubeFixture,
   watchYouTubeRequests,
+  youTubeCalls,
   type YouTubeFixtureMap,
 } from './youtube-fixture';
 
@@ -253,6 +254,30 @@ export async function startPlayingPreview(
     'playing',
     { timeout: 15000 },
   );
+}
+
+/**
+ * Proves a preview whose load the fixture holds (see `holdReady`) has not
+ * loaded yet: the panel is still "loading" and no player for that video
+ * reported ready. It is the deterministic form of "this action preceded the
+ * preview load", which the app's one-second auto-preview debounce otherwise
+ * decides by wall clock (too slow a click on a loaded runner and the preview
+ * has already played). Only meaningful while a hold is in place; release it
+ * with `releaseFixtureVideo` right after.
+ */
+export async function expectPreviewNotLoaded(
+  page: Page,
+  videoId: string,
+): Promise<void> {
+  await expect(page.getByTestId('preview-status')).toHaveAttribute(
+    'data-state',
+    'loading',
+  );
+  expect(
+    (await youTubeCalls(page)).filter(
+      (call) => call.type === 'ready' && call.videoId === videoId,
+    ),
+  ).toEqual([]);
 }
 
 export interface SubmitSongOptions {
