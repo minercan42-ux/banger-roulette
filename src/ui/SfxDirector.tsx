@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import {
+  selectGenrePool,
   selectPhaseTimer,
   selectReveal,
   selectRoom,
@@ -8,11 +9,9 @@ import {
 import type { GameSession } from '../net/session';
 import type { GameState, Phase } from '../shared/game';
 import { usePrefersReducedMotion } from './motion';
+import { genreTargetAngle, reelAngle, reelTicks, reelTimeline } from './reel';
 import { playEvents, type SfxEvent } from './sfx';
 import { useSessionNow } from './use-session-now';
-
-/** Cadence of the wheel tick while the genre roulette spins (FR-10). */
-export const SPIN_TICK_MS = 120;
 
 /** Cap on ticks for a single state change, so a sleeping tab cannot burst. */
 const MAX_TICKS_PER_STEP = 8;
@@ -20,9 +19,9 @@ const MAX_TICKS_PER_STEP = 8;
 /** The slice of the shared state the effect layer reacts to. */
 export interface SfxSnapshot {
   phase: Phase['type'];
-  /** The wheel really animates in this snapshot (GENRE_SPIN, no reduced motion). */
+  /** The reel really animates in this snapshot (GENRE_SPIN, no reduced motion, before the stop). */
   spinning: boolean;
-  /** Ticks the wheel has travelled; frozen while the room is paused. */
+  /** Rows that passed the reel window; frozen while the room is paused. */
   spinTicks: number;
   /** Linked entries already on screen; the reveal is where they become public. */
   linkedEntries: number;
@@ -93,10 +92,11 @@ export function sfxSnapshot(
   now: number,
   reducedMotion: boolean,
 ): SfxSnapshot {
-  const phase = selectRoom(state).phase;
-  // A fixed-mode round shows a short notice instead of a wheel (FR-10), and a
+  const room = selectRoom(state);
+  const phase = room.phase;
+  // A fixed-mode round shows a short notice instead of a reel (FR-10), and a
   // reduced-motion client jumps straight to the result.
-  const spinning =
+  let spinning =
     phase === 'GENRE_SPIN' &&
     !reducedMotion &&
     selectSettings(state).genreMode !== 'fixed';
@@ -104,10 +104,17 @@ export function sfxSnapshot(
   if (spinning) {
     const timer = selectPhaseTimer(state, now);
     if (timer.totalMs !== null && timer.remainingMs !== null) {
-      spinTicks = Math.max(
-        0,
-        Math.floor((timer.totalMs - timer.remainingMs) / SPIN_TICK_MS),
+      // One tick per row that passed the window; the reel stops (spinStop)
+      // when the drum does, not when the phase ends after the hold.
+      const elapsed = timer.totalMs - timer.remainingMs;
+      const { spinMs } = reelTimeline(timer.totalMs);
+      const pool = selectGenrePool(state);
+      const target = genreTargetAngle(
+        pool.findIndex((genre) => genre.id === room.genre?.id),
+        pool.length,
       );
+      spinTicks = reelTicks(reelAngle(elapsed, spinMs, target));
+      spinning = elapsed < spinMs;
     }
   }
   // The reveal is the first place a link is public (AK-3): while anonymity is

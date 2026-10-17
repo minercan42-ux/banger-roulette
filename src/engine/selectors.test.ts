@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '../shared/game';
-import { REVEAL_PER_SONG_MS, classifyCommand, reducer } from './reducer';
+import {
+  REVEAL_PER_SONG_MS,
+  SPIN_MS,
+  classifyCommand,
+  reducer,
+} from './reducer';
 import {
   areOwnersVisible,
   selectCurrentSong,
@@ -22,6 +27,9 @@ import {
   selectViewerPermissions,
 } from './selectors';
 import {
+  GAME_START,
+  SPIN_END,
+  SUBMISSION_END,
   action,
   command,
   finalState,
@@ -186,20 +194,20 @@ describe('lobby settings reads', () => {
 describe('selectPhaseTimer', () => {
   it('derives remaining time and freezes it while paused', () => {
     const state = startedGame();
-    expect(selectPhaseTimer(state, 1000)).toEqual({
+    expect(selectPhaseTimer(state, GAME_START)).toEqual({
       phase: 'GENRE_SPIN',
-      deadlineAt: 4000,
-      totalMs: 3000,
-      remainingMs: 3000,
+      deadlineAt: SPIN_END,
+      totalMs: SPIN_MS,
+      remainingMs: SPIN_MS,
       paused: false,
     });
     expect(selectPhaseTimer(state, 9000).remainingMs).toBe(0);
     const paused = command(state, id(1), { type: 'PAUSE' }, 2000);
     expect(selectPhaseTimer(paused, 9500)).toEqual({
       phase: 'GENRE_SPIN',
-      deadlineAt: 4000,
-      totalMs: 3000,
-      remainingMs: 2000,
+      deadlineAt: SPIN_END,
+      totalMs: SPIN_MS,
+      remainingMs: SPIN_END - 2000,
       paused: true,
     });
     expect(selectPhaseTimer(newGame(), 0)).toEqual({
@@ -345,7 +353,7 @@ describe('anonymity', () => {
       { type: 'SUBMIT_SONG', media: media(videoId(6)) },
       4102,
     );
-    state = fireDeadline(state, 94000);
+    state = fireDeadline(state, SUBMISSION_END);
     const shared = selectSongs(state, id(4)).find(
       (song) => song.videoId === videoId(5),
     );
@@ -642,9 +650,9 @@ describe('selectReveal and selectResults', () => {
       { type: 'SUBMIT_SONG', media: media(videoId(2)) },
       4101,
     );
-    state = fireDeadline(state, 94000);
-    state = fireDeadline(state, 137000);
-    const reveal = fireDeadline(state, 180000);
+    state = fireDeadline(state, SUBMISSION_END);
+    state = fireDeadline(state, SUBMISSION_END + 43000);
+    const reveal = fireDeadline(state, SUBMISSION_END + 86000);
     const entries = selectReveal(reveal)?.entries ?? [];
     expect(entries.map((entry) => entry.videoId)).toContain(videoId(1));
     for (const entry of entries) {

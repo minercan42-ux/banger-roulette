@@ -77,7 +77,7 @@
   --dur-reveal: 600ms;
   --dur-count: 900ms;
   --dur-wobble: 3s;
-  --dur-spin: 2580ms;
+  --dur-spin: 3200ms;
   --dur-jackpot: 2400ms;
   --dur-swirl: 40s;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
@@ -471,8 +471,36 @@
   .br-genre.is-in {
     animation: br-pop-in var(--dur-pop) var(--ease-spring) both;
   }
+  /*
+   * The repeating bump (br-genre-bump) scales the name by 1.1 and tilts it 2deg.
+   * The name is capped to 88% of the plate content box and centred, so its
+   * peak width (about 100% of the content box) stays inside the plate and the
+   * stage clip, and up to three wrapped lines stay inside the plate padding.
+   * Names that wrap further (data-long) skip the repeating bump: their scaled
+   * height would leave the plate; only the one-time pop-in runs.
+   */
   .br-genre.is-in .br-genre__name {
-    animation: br-bump 2.6s var(--ease-out) 600ms infinite;
+    max-width: 88%;
+    margin-inline: auto;
+    overflow-wrap: anywhere;
+    animation: br-genre-bump 2.6s var(--ease-out) 600ms infinite;
+  }
+  .br-genre.is-in .br-genre__name[data-long='true'] {
+    animation: none;
+  }
+  /* The result plate that stays on the table (SUBMISSION): smaller, no bump. */
+  .br-genre--calm {
+    padding-block: var(--space-2);
+  }
+  .br-genre--calm.is-in .br-genre__name {
+    animation: none;
+    font-size: 40px;
+    line-height: 40px;
+  }
+  .br-genre--calm.is-in .br-genre__name[data-long='true'] {
+    font-size: 30px;
+    line-height: 30px;
+    overflow-wrap: anywhere;
   }
 
   /* ---------- Song card ---------- */
@@ -827,59 +855,220 @@
     border-top: 7px solid currentColor;
   }
 
-  /* ---------- Roulette wheel ---------- */
-  .br-wheel {
+  /* ---------- Genre reel: a drum seen from the side (FR-10) ---------- */
+  .br-reel {
+    /* Row height and the font cap; `--reel-radius` is the drum radius for a row
+       spaced 26deg (`REEL_ROW_DEG` in reel.ts) from its neighbour. */
+    --reel-row: 52px;
+    --reel-fs: 38px;
+    --reel-radius: calc(var(--reel-row) / 0.4538);
     position: relative;
-    width: 300px;
-    max-width: 100%;
-    aspect-ratio: 1;
+    width: min(100%, 34rem);
     margin: 0 auto;
-  }
-  .br-wheel__disc {
-    width: 100%;
-    height: 100%;
-    display: block;
-    will-change: transform;
-  }
-  .br-wheel__pointer {
-    position: absolute;
-    left: 50%;
-    top: -6px;
-    z-index: 2;
-    width: 28px;
-    height: 30px;
-    translate: -50% 0;
-    background: var(--color-gold);
-    clip-path: polygon(0 0, 100% 0, 100% 40%, 50% 100%, 0 40%);
-    filter: drop-shadow(0 3px 0 var(--color-edge));
-    transform-origin: 50% 0;
-  }
-  .br-wheel__pointer.is-tick {
-    animation: br-pointer-tick 140ms var(--ease-out);
-  }
-  .br-wheel__hub {
-    position: absolute;
-    inset: 39%;
-    border-radius: var(--radius-round);
-    background: var(--color-panel);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-gold-deep);
     box-shadow:
       0 0 0 4px var(--color-edge),
-      inset 0 -4px 0 var(--color-edge);
-    display: grid;
-    place-items: center;
-    font: 400 16px/20px var(--font-label);
-    color: var(--color-gold);
-    text-align: center;
+      var(--drop-edge);
   }
-  @keyframes br-pointer-tick {
-    0% {
-      transform: rotate(0);
-    }
+  .br-reel__bulbs {
+    position: relative;
+    height: 8px;
+    margin-block: var(--space-1) var(--space-2);
+    background: repeating-linear-gradient(
+      90deg,
+      var(--color-gold) 0 8px,
+      transparent 8px 20px
+    );
+    animation: br-blink 0.8s var(--ease-pixel) infinite;
+  }
+  .br-reel__bulbs::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent 0 10px,
+      var(--color-cream) 10px 18px,
+      transparent 18px 20px
+    );
+    animation: br-blink 0.8s var(--ease-pixel) 0.4s infinite;
+  }
+  .br-reel__bulbs--bottom {
+    margin-block: var(--space-2) var(--space-1);
+  }
+  .br-reel__view {
+    position: relative;
+    height: calc(var(--reel-row) * 5.4);
+    overflow: hidden;
+    container-type: inline-size;
+    perspective: calc(var(--reel-radius) * 4.5);
+    border-radius: var(--radius-sm);
+    background: var(--color-red-deep);
+    box-shadow: inset 0 0 0 4px var(--color-edge);
+  }
+  .br-reel__drum {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transform: translateZ(calc(var(--reel-radius) * -1));
+  }
+  .br-reel__row {
+    /* Largest size at which `--len` characters (about half an em wide) fit on
+       one line between the pointers, capped at `--reel-fs`. Below 18px the
+       name moves to two lines (twice the characters per line) and shrinks
+       further, never below 12px; what still does not fit is cut with an
+       ellipsis by `.br-reel__name`. */
+    --w: calc(100cqw - 56px);
+    --fs: max(
+      12px,
+      max(
+        min(var(--reel-fs), calc(var(--w) * 2.2 / var(--len))),
+        min(18px, calc(var(--w) * 4.4 / var(--len)))
+      )
+    );
+    position: absolute;
+    inset-inline: 0;
+    top: calc(50% - var(--reel-row) / 2);
+    height: var(--reel-row);
+    padding-inline: 28px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-transform: uppercase;
+    font: 400 var(--fs) / 1.05 var(--font-pixel);
+    color: var(--color-cream);
+    text-shadow: 0 3px 0 var(--color-edge);
+    background: var(--color-red-deep);
+    box-shadow:
+      inset 0 -3px 0 var(--color-swirl-wine),
+      inset 0 3px 0 rgba(255, 246, 227, 0.08);
+    transform: rotateX(var(--phi)) translateZ(var(--reel-radius));
+    backface-visibility: hidden;
+  }
+  /* The row keeps its height; the name takes at most two whole lines and ends
+     in an ellipsis rather than a half-cut line. The full text stays in the DOM
+     (and in the wheel's label and `genre-result`). */
+  .br-reel__name {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    max-width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    text-overflow: ellipsis;
+  }
+  .br-reel__row[data-picked='true'] {
+    color: var(--color-gold);
+  }
+  /* Darkens the rows that turn away from the viewer: the drum look. */
+  .br-reel__shade {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      rgba(10, 10, 12, 0.88) 0,
+      rgba(10, 10, 12, 0.4) 22%,
+      transparent 38%,
+      transparent 62%,
+      rgba(10, 10, 12, 0.4) 78%,
+      rgba(10, 10, 12, 0.88) 100%
+    );
+  }
+  /* The selection window: gold frame around the centre row. */
+  .br-reel__window {
+    position: absolute;
+    z-index: 3;
+    inset-inline: 6px;
+    top: calc(50% - var(--reel-row) / 2 - 4px);
+    height: calc(var(--reel-row) + 8px);
+    overflow: hidden;
+    pointer-events: none;
+    border: 4px solid var(--color-gold);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 0 0 3px var(--color-edge);
+  }
+  .br-reel__window::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    left: -45%;
+    width: 35%;
+    background: linear-gradient(
+      100deg,
+      transparent,
+      rgba(255, 246, 227, 0.6),
+      transparent
+    );
+  }
+  .br-reel.is-stopped .br-reel__window {
+    box-shadow:
+      0 0 0 3px var(--color-edge),
+      0 0 22px 2px rgba(245, 182, 48, 0.7);
+    animation: br-reel-flash 700ms var(--ease-out) both;
+  }
+  .br-reel.is-stopped .br-reel__window::after {
+    animation: br-reel-sweep 900ms var(--ease-out) 150ms both;
+  }
+  .br-reel__pointer {
+    --nudge: 6px;
+    position: absolute;
+    z-index: 4;
+    top: calc(50% - 15px);
+    width: 20px;
+    height: 30px;
+    background: var(--color-gold);
+    filter: drop-shadow(0 2px 0 var(--color-edge));
+  }
+  .br-reel__pointer--left {
+    left: 0;
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+  }
+  .br-reel__pointer--right {
+    --nudge: -6px;
+    right: 0;
+    clip-path: polygon(100% 0, 0 50%, 100% 100%);
+  }
+  .br-reel__pointer.is-tick {
+    animation: br-reel-nudge 140ms var(--ease-out);
+  }
+  @keyframes br-reel-nudge {
     35% {
-      transform: rotate(-18deg);
+      transform: translateX(var(--nudge));
+    }
+  }
+  @keyframes br-reel-flash {
+    0% {
+      background: rgba(245, 182, 48, 0.5);
     }
     100% {
-      transform: rotate(0);
+      background: rgba(245, 182, 48, 0);
+    }
+  }
+  @keyframes br-reel-sweep {
+    to {
+      left: 110%;
+    }
+  }
+  @media (min-width: 640px) {
+    .br-reel {
+      --reel-row: 64px;
+      --reel-fs: 48px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .br-reel__bulbs,
+    .br-reel__bulbs::after,
+    .br-reel.is-stopped .br-reel__window,
+    .br-reel.is-stopped .br-reel__window::after {
+      animation: none;
     }
   }
 
@@ -1003,6 +1192,17 @@
     }
     40% {
       transform: scale(1.18) rotate(-3deg);
+    }
+  }
+  /* The genre name's own bump: gentler than br-bump (scale 1.1, tilt 2deg)
+     so up to three wrapped lines stay inside the plate padding. */
+  @keyframes br-genre-bump {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.1) rotate(-2deg);
     }
   }
   @keyframes br-shake {
@@ -1174,7 +1374,7 @@
     .br-bump,
     .br-genre.is-in .br-genre__name,
     .br-stat.is-urgent .br-stat__value,
-    .br-wheel__pointer.is-tick,
+    .br-reel__pointer.is-tick,
     .br-field.is-error .br-field__input {
       animation: none !important;
     }
@@ -1458,9 +1658,8 @@ body {
 }
 
 /*
- * Genre roulette (`GenreSpin.tsx`): layout of the wheel stage and the rim
- * bulbs. The wheel, pointer, hub, shake and genre plate come from the
- * `br-*` classes above.
+ * Genre roulette (`GenreSpin.tsx`): layout of the reel stage. The reel,
+ * window, pointers, shake and genre plate come from the `br-*` classes above.
  */
 @layer components {
   .br-spin {
@@ -1484,18 +1683,6 @@ body {
   .br-spin .br-genre__name[data-long='true'] {
     font-size: 34px;
     line-height: 34px;
-  }
-  .br-wheel__bulb {
-    fill: var(--color-gold);
-    animation: br-blink 0.8s var(--ease-pixel) infinite;
-  }
-  .br-wheel__bulb--odd {
-    animation-delay: 0.4s;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .br-wheel__bulb {
-      animation: none;
-    }
   }
 }
 
@@ -2491,6 +2678,12 @@ body {
     min-width: 0;
     padding: 2px var(--space-3);
   }
+  /* A custom genre may be 80 characters of one word: wrap it inside the bar. */
+  .br-table__summary [data-testid='phase-genre'] {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
   .br-table__summary .br-stat__value {
     font-size: 32px;
     line-height: 30px;
@@ -2653,8 +2846,10 @@ body {
     .br-table__body:not(.is-solo) .br-table__stage {
       align-self: stretch;
     }
-    .br-table__stage .br-wheel {
-      width: clamp(300px, 34vw, 460px);
+    .br-table__stage .br-reel {
+      --reel-row: 72px;
+      --reel-fs: 54px;
+      width: min(100%, 40rem);
     }
     .br-table__privacy {
       grid-template-columns: repeat(3, minmax(0, 1fr));

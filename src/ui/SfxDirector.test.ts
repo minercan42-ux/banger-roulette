@@ -60,6 +60,22 @@ describe('sfxEventsFor', () => {
     ]);
   });
 
+  test('spinStop when the reel stops, before the phase ends', () => {
+    const prev = snapshot({
+      phase: 'GENRE_SPIN',
+      spinning: true,
+      spinTicks: 33,
+    });
+    const next = snapshot({
+      phase: 'GENRE_SPIN',
+      spinning: false,
+      spinTicks: 34,
+    });
+    expect(sfxEventsFor(prev, next)).toEqual(['spinStop']);
+    // The hold after the stop stays silent.
+    expect(sfxEventsFor(next, next)).toEqual([]);
+  });
+
   test('linked when a linked entry reaches the screen', () => {
     const prev = snapshot({ phase: 'REVEAL', revealedEntries: 1 });
     const next = snapshot({

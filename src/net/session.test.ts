@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../shared/settings';
+import { SPIN_MS } from '../engine';
 import { NetworkEventSchema, type NetworkEvent } from '../shared/protocol';
 import type { ClientAction } from '../shared/actions';
 import { InMemoryHub } from './inMemory';
@@ -337,7 +338,7 @@ describe('game session', () => {
     await settle(clock);
     expect(host.getSnapshot().state?.phase.type).toBe('GENRE_SPIN');
 
-    clock.advance(3000);
+    clock.advance(SPIN_MS);
     await settle(clock);
     expect(host.getSnapshot().state?.phase.type).toBe('SUBMISSION');
     expect(a.getSnapshot().state?.phase.type).toBe('SUBMISSION');

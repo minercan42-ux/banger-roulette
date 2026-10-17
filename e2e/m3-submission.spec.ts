@@ -45,6 +45,7 @@ const STALE_B = 'RgKAFK5djSk';
 declare global {
   interface Window {
     __m3Token?: string;
+    __reelMarks?: { plateIn?: number; spinOut?: number };
   }
 }
 
@@ -126,13 +127,37 @@ test('four players see one deterministic wheel and the same localized genre', as
       await unlockSound(stage.page);
     }
     const initialPool = (await stateOf(host.page))?.remainingGenreIds ?? [];
+    await host.page.evaluate(() => {
+      const marks: { plateIn?: number; spinOut?: number } = {};
+      window.__reelMarks = marks;
+      const scan = () => {
+        const at = performance.now();
+        if (
+          marks.plateIn === undefined &&
+          document.querySelector('[data-testid="genre-plate"]')
+        ) {
+          marks.plateIn = at;
+        }
+        if (
+          marks.plateIn !== undefined &&
+          marks.spinOut === undefined &&
+          !document.querySelector('[data-testid="genre-spin"]')
+        ) {
+          marks.spinOut = at;
+        }
+      };
+      new MutationObserver(scan).observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    });
     await host.page.getByTestId('start-game').click();
     await waitForPhase(host.page, 'GENRE_SPIN');
     await Promise.all(
       stages.map((stage) => waitForPhase(stage.page, 'GENRE_SPIN')),
     );
 
-    // Read the wheel before the 3s spin deadline unmounts it.
+    // Read the reel before the 5.5s spin deadline unmounts it.
     const readGenreUi = async (stage: Stage) => {
       const wheel = stage.page.getByTestId('genre-wheel');
       const result = stage.page.getByTestId('genre-result');
@@ -180,6 +205,25 @@ test('four players see one deterministic wheel and the same localized genre', as
     await Promise.all(
       stages.map((stage) => waitForPhase(stage.page, 'SUBMISSION')),
     );
+
+    // The result stays visible for at least 2 s after the reel stops (the
+    // plate pops in at the stop) before the phase ends, and the chosen genre
+    // stays on the table as a plate at the top of SUBMISSION.
+    const marks = await host.page.evaluate(() => window.__reelMarks);
+    expect(marks?.plateIn).toBeDefined();
+    expect(marks?.spinOut).toBeDefined();
+    expect(
+      (marks?.spinOut ?? 0) - (marks?.plateIn ?? 0),
+    ).toBeGreaterThanOrEqual(2000);
+    for (const stage of stages) {
+      const plate = stage.page
+        .getByTestId('submission-panel')
+        .getByTestId('genre-plate');
+      await expect(plate).toBeVisible();
+      await expect(plate).toContainText(
+        stage === stages[3] ? genre.de : genre.en,
+      );
+    }
     const roomView = stages[0].page.getByTestId('room-view');
     const beforeText = await roomView.innerText();
     await stages[0].page.evaluate(() => {
@@ -191,6 +235,211 @@ test('four players see one deterministic wheel and the same localized genre', as
     expect(await roomView.innerText()).not.toBe(beforeText);
 
     expect(errors).toEqual([]);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+/**
+ * Measures a genre plate inside `[data-testid=scope]`. A running `br-bump` is
+ * paused at its 40% keyframe (the peak: scale 1.18, tilt -3deg) first, so the
+ * numbers describe the widest the name ever gets. `insideClip` is true when
+ * the name's box stays inside its nearest clipping ancestor (the viewport when
+ * none clips).
+ */
+async function plateFits(page: Page, scope: string) {
+  return page.evaluate(async (testId) => {
+    const plate = document
+      .querySelector(`[data-testid="${testId}"]`)!
+      .querySelector<HTMLElement>('[data-testid="genre-plate"]')!;
+    const name = plate.querySelector<HTMLElement>('.br-genre__name')!;
+    await Promise.all(plate.getAnimations().map((a) => a.finished));
+    // Wrapping at rest: no clipped line in the name or on the plate.
+    const nameFits = name.scrollHeight <= name.clientHeight + 1;
+    const plateFits = plate.scrollHeight <= plate.clientHeight + 1;
+    const bumps = name
+      .getAnimations()
+      .filter((a) => (a as CSSAnimation).animationName === 'br-genre-bump');
+    for (const bump of bumps) {
+      const timing = bump.effect!.getComputedTiming();
+      bump.pause();
+      bump.currentTime = Number(timing.delay) + 0.4 * Number(timing.duration);
+    }
+    let clip: DOMRect = new DOMRect(
+      0,
+      0,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    for (
+      let node = name.parentElement;
+      node && node !== document.documentElement;
+      node = node.parentElement
+    ) {
+      if (getComputedStyle(node).overflowX !== 'visible') {
+        clip = node.getBoundingClientRect();
+        break;
+      }
+    }
+    const box = name.getBoundingClientRect();
+    const frame = plate.getBoundingClientRect();
+    return {
+      bumps: bumps.length,
+      nameFits,
+      plateFits,
+      plateFitsWidth: plate.scrollWidth <= plate.clientWidth + 1,
+      insideClip: box.left >= clip.left - 0.5 && box.right <= clip.right + 0.5,
+      insidePlate:
+        box.left >= frame.left - 0.5 &&
+        box.right <= frame.right + 0.5 &&
+        box.top >= frame.top - 0.5 &&
+        box.bottom <= frame.bottom + 0.5,
+      text: name.textContent,
+    };
+  }, scope);
+}
+
+test('an 80-character custom genre is shown whole on the plate and in two whole lines on the reel', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const stages = await Promise.all([
+    newStage(browser, {
+      nickname: 'Alice',
+      locale: 'en-US',
+      viewport: { width: 360, height: 740 },
+    }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [host, ...rest] = stages;
+    await assembleRoom(host, rest);
+    const wide = 'W'.repeat(80);
+    const wideM = 'M'.repeat(80);
+    await setSettings(host.page, {
+      genre: {
+        mode: 'custom',
+        items: [
+          { id: 'long-wide', de: wide, en: wide },
+          { id: 'long-m', de: wideM, en: wideM },
+        ],
+      },
+    });
+    for (const stage of stages) {
+      await unlockSound(stage.page);
+    }
+    await host.page.getByTestId('start-game').click();
+    await waitForPhase(host.page, 'GENRE_SPIN');
+
+    // The stopped reel: every row holds at most two whole lines (the name box
+    // is an exact multiple of the line height and sits inside the fixed row).
+    const hold = host.page.getByTestId('genre-spin').getByTestId('genre-plate');
+    await expect(hold).toBeVisible({ timeout: 6000 });
+    const reel = await host.page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('.br-reel__row')].map(
+        (row) => {
+          const name = row.querySelector<HTMLElement>('.br-reel__name')!;
+          const lineHeight = parseFloat(getComputedStyle(name).lineHeight);
+          return {
+            lines: name.clientHeight / lineHeight,
+            fontSize: parseFloat(getComputedStyle(name).fontSize),
+            nameHeight: name.offsetHeight,
+            rowHeight: row.clientHeight,
+            text: name.textContent,
+          };
+        },
+      ),
+    );
+    expect(reel.length).toBeGreaterThan(0);
+    for (const row of reel) {
+      expect(row.lines).toBeLessThanOrEqual(2.05);
+      expect(Math.abs(row.lines - Math.round(row.lines))).toBeLessThan(0.05);
+      expect(row.nameHeight).toBeLessThanOrEqual(row.rowHeight);
+      expect(row.fontSize).toBeGreaterThanOrEqual(12);
+      // The whole name stays in the DOM, the ellipsis is only visual.
+      expect([wide, wideM]).toContain(row.text);
+    }
+
+    // The plate in the hold and the one in SUBMISSION show the full name.
+    const held = await plateFits(host.page, 'genre-spin');
+    expect(held.nameFits).toBe(true);
+    expect(held.plateFits).toBe(true);
+    expect(held.plateFitsWidth).toBe(true);
+    expect(held.insideClip).toBe(true);
+    expect(held.insidePlate).toBe(true);
+    // Wrapping names skip the repeating bump: only the pop-in runs.
+    expect(held.bumps).toBe(0);
+    expect([wide, wideM]).toContain(held.text);
+    const heldWidths = await host.page.evaluate(() => ({
+      inner: window.innerWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(heldWidths.scroll).toBeLessThanOrEqual(heldWidths.inner);
+    await waitForPhase(host.page, 'SUBMISSION');
+    const kept = await plateFits(host.page, 'submission-panel');
+    expect(kept.nameFits).toBe(true);
+    expect(kept.plateFits).toBe(true);
+    expect(kept.plateFitsWidth).toBe(true);
+    expect(kept.insideClip).toBe(true);
+    expect(kept.insidePlate).toBe(true);
+    expect(kept.text).toBe(held.text);
+    const widths = await host.page.evaluate(() => ({
+      inner: window.innerWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(widths.scroll).toBeLessThanOrEqual(widths.inner);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a bumping genre name stays inside its plate and the stage clip at the bump peak', async ({
+  browser,
+}) => {
+  test.setTimeout(60_000);
+  const stages = await Promise.all([
+    newStage(browser, {
+      nickname: 'Alice',
+      locale: 'en-US',
+      viewport: { width: 360, height: 740 },
+    }),
+    newStage(browser, { nickname: 'Bruno' }),
+    newStage(browser, { nickname: 'Cleo' }),
+  ]);
+  try {
+    const [host, ...rest] = stages;
+    await assembleRoom(host, rest);
+    // 16 characters: the widest name that still bumps (data-long switches
+    // the repeating bump off above 16).
+    const widest = 'W'.repeat(16);
+    const widestM = 'M'.repeat(16);
+    await setSettings(host.page, {
+      genre: {
+        mode: 'custom',
+        items: [
+          { id: 'short-w', de: widest, en: widest },
+          { id: 'short-m', de: widestM, en: widestM },
+        ],
+      },
+    });
+    for (const stage of stages) {
+      await unlockSound(stage.page);
+    }
+    await host.page.getByTestId('start-game').click();
+    await waitForPhase(host.page, 'GENRE_SPIN');
+    await expect(
+      host.page.getByTestId('genre-spin').getByTestId('genre-plate'),
+    ).toBeVisible({ timeout: 6000 });
+    const held = await plateFits(host.page, 'genre-spin');
+    expect([widest, widestM]).toContain(held.text);
+    expect(held.bumps).toBe(1);
+    // The pixel font's line box overhangs 4px at 52px type, so the name's own
+    // scrollHeight is not asserted here: no line may leave the plate (peak).
+    expect(held.insidePlate).toBe(true);
+    expect(held.plateFits).toBe(true);
+    expect(held.plateFitsWidth).toBe(true);
+    expect(held.insideClip).toBe(true);
   } finally {
     await closeStages(stages);
   }

@@ -192,10 +192,10 @@
   },
   "genre": {
     "heading": "Genre-Roulette",
-    "spinning": "Das Rad dreht …",
+    "spinning": "Die Walze dreht …",
     "fixedNotice": "Festes Genre: Es wird nicht gedreht, alle Runden laufen mit diesem Genre.",
     "resultLabel": "Genre",
-    "kicker": "Das Rad hat gesprochen",
+    "kicker": "Die Walze hat gesprochen",
     "announcement": "Genre gezogen: {{genre}}"
   },
   "submission": {
