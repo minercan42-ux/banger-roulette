@@ -2,11 +2,12 @@
 
 Working rules for every agent (orchestrator and subagents) in this repository.
 The product and architecture spec is `SPEC.md`. Read it before doing anything. If this file and `SPEC.md` disagree, `SPEC.md` wins and you report the conflict.
+How work is organized (owner as stakeholder, PM orchestrator, implementer and reviewer subagents, merge gate, concurrency) is defined in `docs/WORKFLOW.md`.
 
 ## Golden rules
-1. Never push to `main`. One branch per task, open a pull request, wait for green CI and the user's approval to merge.
+1. Never push to `main`. One branch per task, open a pull request. The PM merges after green CI, a `REVIEW: PASS` on the current head by an agent that did not write the code (or a PASS carried over across a conflict-free rebase, as defined in `docs/WORKFLOW.md`), and the PM visual gate for visual changes (owner decision).
 2. Never commit secrets. `.env.local` is gitignored. Only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` exist; a service_role or secret key must never appear anywhere in this repo.
-3. Stay inside the directories your task allows (see SPEC.md section 9). Contracts in `src/shared/` are changed only by the orchestrator.
+3. Stay inside the files your issue allows. Contracts in `src/shared/` are changed only by the orchestrator, or by an implementer whose issue explicitly authorizes the contract change.
 4. Check external APIs (YouTube IFrame API, oEmbed, Supabase Realtime, Vercel) against current official docs. Do not implement from memory.
 5. Unclear requirement: pick a sensible default, record it in `docs/OPEN_QUESTIONS.md` with the reasoning, continue. High-impact product decision: stop and ask the user.
 6. Something only the user can do (account, key, setting): stop and describe it with a concrete click path.

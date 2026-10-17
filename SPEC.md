@@ -155,13 +155,14 @@ In `docs/ROADMAP.md` für Phase 2 vormerken: serverautoritative Engine, In-App-S
 | QA/Reviewer | E2E mit 3-4 Browser-Kontexten, Review gegen die Akzeptanzkriterien, Security-Review | `e2e/` plus Review-Berichte |
 
 Regeln:
-1. Contract first: Bevor parallel gearbeitet wird, legst du in `src/shared/` die Typen für GameState, Actions und alle Netzwerkevents (zod) fest. Änderungen daran nimmst nur du vor.
+1. Contract first: Bevor parallel gearbeitet wird, legst du in `src/shared/` die Typen für GameState, Actions und alle Netzwerkevents (zod) fest. Änderungen daran nimmst nur du vor, oder ein Subagent, dessen Issue die Contract-Änderung ausdrücklich freigibt.
 2. Jeder Subagent bekommt: Ziel, relevante FR/NFR-IDs, die Contracts, eine Definition of Done und die Verzeichnisse, die er ändern darf.
 3. Ein Branch pro Aufgabe, kleine Merges, Conventional Commits. Nach main wird nur gemergt, wenn Lint, Typecheck, Tests und Build grün sind.
 4. Unklarheiten: sinnvollen Default wählen, in `docs/OPEN_QUESTIONS.md` mit Begründung festhalten und dem Nutzer gesammelt am Ende des Meilensteins vorlegen. Bei Produktentscheidungen mit großer Tragweite stoppen und fragen.
 5. Externe APIs (YouTube IFrame API, oEmbed, Supabase Realtime, Vercel) immer gegen die aktuelle offizielle Doku prüfen, nicht aus dem Gedächtnis implementieren.
 6. Der Reviewer ist nie derselbe Agent, der den Code geschrieben hat.
 7. Keine Secrets in Repo, Logs oder Prompts an Subagents.
+8. Rollen: Der Nutzer ist Owner und Stakeholder (entscheidet Richtung, Design, Prioritäten, spielt Playtests). Die Hauptsession ist PM und Orchestrator: macht aus Wünschen Issues, startet Implementer- und Reviewer-Subagents, prüft das Merge-Gate und mergt. Ablauf, Merge-Gate, maximal drei parallele Subagents, stündlicher Stuck-Check pro Agent und Modell-Leiter stehen in `docs/WORKFLOW.md`.
 
 ## 10. Meilensteine
 Jeder Meilenstein endet mit Demo und kurzem Statusbericht (erledigt, offen, Risiken, offene Fragen).
