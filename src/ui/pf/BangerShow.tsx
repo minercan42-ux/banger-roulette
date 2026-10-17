@@ -149,7 +149,7 @@ export interface BangerEntry {
 }
 
 interface BangerShowProps {
-  /** Every banger entry of the round; none renders nothing. */
+  /** The banger entries that carry the show (the round's first banger only); none renders nothing. */
   entries: BangerEntry[];
   /** Server-synced now (`reveal.pausedAt` while paused). */
   now: number;
@@ -161,9 +161,11 @@ interface BangerShowProps {
 
 /**
  * "THIS IS A BANGER" (FR-60): the owner's favourite moment, for a song whose
- * ratings are all 10. It owns the viewport for the entry's whole reveal slot,
- * starts at the entry's `revealAt` on every client (server time, so every
- * screen shows the same frame) and replaces the jackpot show for that entry.
+ * ratings are all 10. It plays once per round, at the round's first banger,
+ * and owns the viewport for the entry's whole reveal slot. It starts at the
+ * entry's `revealAt` on every client (server time, so every screen shows the
+ * same frame) and replaces the jackpot show for that entry. Later bangers of
+ * the round keep only their badge on the entry.
  * A reload inside the slot joins the show at the matching offset; a pause
  * freezes it.
  *
@@ -189,7 +191,7 @@ export function BangerShow({
   }
   return (
     <BangerStage
-      // A second banger in the same round is a new show, not a continuation.
+      // The video id is the stage's identity: a different show restarts it.
       key={active.videoId}
       entry={active}
       elapsed={now - active.revealAt}

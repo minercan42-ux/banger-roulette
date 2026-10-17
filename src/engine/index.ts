@@ -17,9 +17,9 @@ export {
   classifyCommand,
   electHost,
   reducer,
-  revealSlotMs,
+  revealSlots,
   skipThreshold,
 } from './reducer';
-export type { CommandRejection } from './reducer';
+export type { CommandRejection, RevealSlot } from './reducer';
 export { scoreRound } from './scoring';
 export { drawGenre, nextRandom, nextUint32, shuffle } from './rng';

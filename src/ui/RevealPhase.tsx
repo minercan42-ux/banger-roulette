@@ -112,8 +112,9 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
   // scored higher, so ties share it (FR-53).
   const order = selectSongs(state, viewerId);
 
-  // A banger owns the viewport with its own show and replaces the jackpot
-  // for that entry; the winner mark on the entry stays.
+  // Any banger replaces the jackpot for its entry (the winner mark on the
+  // entry stays), but only the round's first banger owns the viewport with
+  // the show; later bangers keep their badge and run a normal slot.
   const winners: JackpotWinner[] = reveal.entries
     .filter((entry) => entry.winner && !entry.banger)
     .map((entry) => ({
@@ -124,7 +125,7 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
     }));
 
   const bangers: BangerEntry[] = reveal.entries
-    .filter((entry) => entry.banger)
+    .filter((entry) => entry.bangerShow)
     .map((entry) => ({
       videoId: entry.videoId,
       revealAt: entry.revealAt,

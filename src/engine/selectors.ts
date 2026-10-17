@@ -12,7 +12,7 @@ import type { Settings } from '../shared/settings';
 import {
   PRE_ROLL_MS,
   connectedParticipantCount,
-  revealSlotMs,
+  revealSlots,
   skipThreshold,
   skipVoteCount,
 } from './reducer';
@@ -220,8 +220,13 @@ export interface StagedRevealEntryView extends RevealEntryView {
    * A late joiner only sees entries whose `revealAt` is already in the past.
    */
   revealAt: number;
-  /** How long this entry owns the stage: longer for a banger. */
+  /** How long this entry owns the stage: longer for the round's first banger. */
   slotMs: number;
+  /**
+   * Whether this entry carries the full-screen banger show and its sound: only
+   * the first banger of a round does. Later bangers keep their `banger` badge.
+   */
+  bangerShow: boolean;
 }
 
 export interface RevealView {
@@ -593,9 +598,12 @@ export function selectReveal(state: GameState): RevealView | null {
     return null;
   }
   let revealAt = phase.startedAt;
-  const staged = revealEntries(state, result.songs).map((entry) => {
-    const stagedEntry = { ...entry, revealAt, slotMs: revealSlotMs(entry) };
-    revealAt += stagedEntry.slotMs;
+  const entries = revealEntries(state, result.songs);
+  const slots = revealSlots(entries);
+  const staged = entries.map((entry, index) => {
+    const { slotMs, bangerShow } = slots[index]!;
+    const stagedEntry = { ...entry, revealAt, slotMs, bangerShow };
+    revealAt += slotMs;
     return stagedEntry;
   });
   return {

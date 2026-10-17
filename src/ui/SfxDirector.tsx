@@ -27,11 +27,12 @@ export interface SfxSnapshot {
   linkedEntries: number;
   /** Reveal entries already revealed, worst first (FR-60). */
   revealedEntries: number;
-  /** Banger entries (every rating 10) already revealed; each gets its own show. */
-  bangerEntries: number;
+  /** Banger shows already started (at most one per round: the first banger). */
+  bangerShows: number;
   /**
    * Whether the round winner's entry is on screen already. A winning banger
-   * does not count: its show replaces the jackpot.
+   * does not count: its show replaces the jackpot, and a later winning banger
+   * stays silent besides the plain blip.
    */
   winnerRevealed: boolean;
 }
@@ -63,10 +64,11 @@ export function sfxEventsFor(prev: SfxSnapshot, next: SfxSnapshot): SfxEvent[] {
     events.push('linked');
   }
   const revealed = Math.max(0, next.revealedEntries - prev.revealedEntries);
-  // A banger brings its own sound: it is not announced by the plain blip too.
+  // The banger show brings its own sound: it is not announced by the plain
+  // blip too. Later bangers of the round are plain entries without a show.
   const bangers = Math.min(
     revealed,
-    Math.max(0, next.bangerEntries - prev.bangerEntries),
+    Math.max(0, next.bangerShows - prev.bangerShows),
   );
   for (let entry = 0; entry < revealed - bangers; entry += 1) {
     events.push('revealEntry');
@@ -138,7 +140,7 @@ export function sfxSnapshot(
     spinTicks,
     linkedEntries,
     revealedEntries: visible.length,
-    bangerEntries: visible.filter((entry) => entry.banger).length,
+    bangerShows: visible.filter((entry) => entry.bangerShow).length,
     winnerRevealed: visible.some((entry) => entry.winner && !entry.banger),
   };
 }
