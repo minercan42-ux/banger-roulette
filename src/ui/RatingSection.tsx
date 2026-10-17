@@ -7,6 +7,7 @@ import {
 } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState } from '../shared/game';
+import { Button } from './pf/Button';
 import { Panel } from './pf/Panel';
 import { RatingBar } from './RatingBar';
 
@@ -36,6 +37,7 @@ export function RatingSection({
   const choices = selectViewerChoices(state, viewerId);
   const [editing, setEditing] = useState<string | null>(null);
   const [noticeKey, setNoticeKey] = useState<string | null>(null);
+  const [skipNoticeKey, setSkipNoticeKey] = useState<string | null>(null);
 
   if (view === null || !choices.isParticipant) {
     return null;
@@ -46,6 +48,14 @@ export function RatingSection({
     const result = await session.dispatch({ type: 'RATE', songId, value });
     if (result.status === 'rejected') {
       setNoticeKey(`errors.${result.reason}`);
+    }
+  }
+
+  async function vote(songId: string, skip: boolean) {
+    setSkipNoticeKey(null);
+    const result = await session.dispatch({ type: 'SKIP_VOTE', songId, skip });
+    if (result.status === 'rejected') {
+      setSkipNoticeKey(`errors.${result.reason}`);
     }
   }
 
@@ -93,6 +103,58 @@ export function RatingSection({
           {t(noticeKey)}
         </p>
       )}
+
+      <div className="br-skip">
+        <div className="br-skip__row">
+          <Button
+            tone="slate"
+            size="sm"
+            data-testid="playback-skip"
+            data-voted={view.skip.voted}
+            pressed={view.skip.voted}
+            disabled={!view.skip.canVote}
+            aria-describedby={
+              view.skip.needsRating ? 'playback-skip-hint' : undefined
+            }
+            onClick={() => {
+              void vote(view.song.videoId, !view.skip.voted);
+            }}
+            className="br-skip__button"
+          >
+            {view.skip.voted ? t('playback.skipWithdraw') : t('playback.skip')}
+          </Button>
+          <p
+            data-testid="playback-skip-count"
+            data-votes={view.skip.votes}
+            data-total={view.skip.total}
+            aria-live="polite"
+            className="br-skip__count"
+          >
+            {t('playback.skipCount', {
+              votes: view.skip.votes,
+              total: view.skip.total,
+            })}
+          </p>
+        </div>
+        {view.skip.needsRating && (
+          <p
+            id="playback-skip-hint"
+            data-testid="playback-skip-hint"
+            className="br-read"
+          >
+            {t('playback.skipNeedsRating')}
+          </p>
+        )}
+        {skipNoticeKey && (
+          <p
+            data-testid="playback-skip-notice"
+            role="status"
+            className="br-notice"
+          >
+            {t(skipNoticeKey)}
+          </p>
+        )}
+      </div>
 
       {played.length > 0 && (
         <section

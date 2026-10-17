@@ -119,6 +119,7 @@ export const PhaseSchema = z.discriminatedUnion('type', [
     index: Int,
     startAt: Time,
     deadlineAt: Time,
+    skipVoterIds: Ids,
   }),
   z.strictObject({
     type: z.literal('REVEAL'),
@@ -288,6 +289,11 @@ export const GameStateSchema = z
         state.phase.index >= round.playbackOrder.length
       )
         issue('Invalid playback index');
+      if (
+        state.phase.type === 'PLAYBACK' &&
+        state.phase.skipVoterIds.some((id) => !participant(id))
+      )
+        issue('Invalid skip vote');
       if (
         [
           ...Object.keys(round.submissions),

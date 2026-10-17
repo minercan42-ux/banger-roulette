@@ -1868,6 +1868,27 @@ body {
       transform: none;
     }
   }
+  /* Skip vote (FR-43): the button and the live count share a row, the hint
+     for "rate first" sits under them. The count is text, never colour alone. */
+  .br-skip {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .br-skip__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+  }
+  .br-skip__button {
+    min-height: 44px;
+  }
+  .br-skip__count {
+    margin: 0;
+    font: 400 15px/22px var(--font-text);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-cream);
+  }
   /* "Deine Bewertungen": one row per song that already played. */
   .br-ratelist {
     list-style: none;

@@ -65,6 +65,7 @@ function playback(): GameState {
     index: 0,
     startAt: 1000,
     deadlineAt: 21000,
+    skipVoterIds: [],
   };
   state.round = {
     number: 1,
@@ -255,6 +256,24 @@ describe('wire contracts', () => {
     { type: 'RATE', value: 5 },
     { type: 'RATE', songId: 'dQw4w9WgXcQ', value: 5, extra: true },
   ])('rejects a malformed RATE payload %#', (clientAction) => {
+    expect(ClientActionSchema.safeParse(clientAction).success).toBe(false);
+  });
+  it.each([true, false])('accepts a valid SKIP_VOTE payload %s', (skip) => {
+    expect(
+      ClientActionSchema.safeParse({
+        type: 'SKIP_VOTE',
+        songId: 'dQw4w9WgXcQ',
+        skip,
+      }).success,
+    ).toBe(true);
+  });
+  it.each([
+    { type: 'SKIP_VOTE', songId: 'dQw4w9WgXcQ' },
+    { type: 'SKIP_VOTE', skip: true },
+    { type: 'SKIP_VOTE', songId: 'dQw4w9WgXcQ', skip: 'yes' },
+    { type: 'SKIP_VOTE', songId: 'short', skip: true },
+    { type: 'SKIP_VOTE', songId: 'dQw4w9WgXcQ', skip: true, extra: 1 },
+  ])('rejects a malformed SKIP_VOTE payload %#', (clientAction) => {
     expect(ClientActionSchema.safeParse(clientAction).success).toBe(false);
   });
   it.each([0, 21, 1.5])('rejects invalid round count %s', (rounds) =>
@@ -448,6 +467,7 @@ describe('wire contracts', () => {
           index: 1,
           startAt: 1000,
           deadlineAt: 2000,
+          skipVoterIds: [],
         };
       },
     ],
@@ -459,6 +479,7 @@ describe('wire contracts', () => {
           index: 0,
           startAt: 2000,
           deadlineAt: 1000,
+          skipVoterIds: [],
         };
       },
     ],
@@ -490,6 +511,30 @@ describe('wire contracts', () => {
       'out of range rating',
       (s: GameState) => {
         s.round!.ratings[a] = { dQw4w9WgXcQ: 11 };
+      },
+    ],
+    [
+      'skip vote of a nonparticipant',
+      (s: GameState) => {
+        s.phase = {
+          type: 'PLAYBACK',
+          index: 0,
+          startAt: 1000,
+          deadlineAt: 21000,
+          skipVoterIds: [b],
+        };
+      },
+    ],
+    [
+      'duplicate skip votes',
+      (s: GameState) => {
+        s.phase = {
+          type: 'PLAYBACK',
+          index: 0,
+          startAt: 1000,
+          deadlineAt: 21000,
+          skipVoterIds: [a, a],
+        };
       },
     ],
     [

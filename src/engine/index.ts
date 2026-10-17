@@ -18,6 +18,7 @@ export {
   electHost,
   reducer,
   revealSlotMs,
+  skipThreshold,
 } from './reducer';
 export type { CommandRejection } from './reducer';
 export { scoreRound } from './scoring';

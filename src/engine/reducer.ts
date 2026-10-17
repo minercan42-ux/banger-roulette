@@ -45,14 +45,21 @@ type DeadlineAction = Extract<EngineAction, { type: 'DEADLINE' }>;
 type PresenceAction = Extract<EngineAction, { type: 'PRESENCE_SYNC' }>;
 type HostChangedAction = Extract<EngineAction, { type: 'HOST_CHANGED' }>;
 
+/**
+ * Skip quorum (FR-43): ceil(0.9 n) in integer math, 1..10 -> 1,2,3,4,5,6,7,8,9,9.
+ */
+export function skipThreshold(activeCount: number): number {
+  return Math.ceil((activeCount * 9) / 10);
+}
+
 export function reducer(state: GameState, action: EngineAction): GameState {
   switch (action.type) {
     case 'COMMAND':
-      return reduceCommand(state, action);
+      return skipAfter(state, reduceCommand(state, action), action.at);
     case 'DEADLINE':
       return reduceDeadline(state, action);
     case 'PRESENCE_SYNC':
-      return reducePresenceSync(state, action);
+      return skipAfter(state, reducePresenceSync(state, action), action.at);
     case 'HOST_CHANGED':
       return reduceHostChanged(state, action);
     default:
@@ -223,6 +230,30 @@ export function classifyCommand(
         return 'INVALID';
       }
       return round.ratings[actorId]?.[command.songId] === command.value
+        ? 'NOT_READY'
+        : null;
+    }
+    case 'SKIP_VOTE': {
+      if (!round || state.phase.type !== 'PLAYBACK' || state.pause) {
+        return 'WRONG_PHASE';
+      }
+      if (!round.participantIds.includes(actorId)) {
+        return 'FORBIDDEN';
+      }
+      // A vote for any song but the current one is a stale vote that crossed
+      // an advance on the wire.
+      if (command.songId !== round.playbackOrder[state.phase.index]) {
+        return 'NOT_READY';
+      }
+      const ownsSong = round.songs.some(
+        (song) =>
+          song.media.videoId === command.songId &&
+          song.ownerIds.includes(actorId),
+      );
+      if (!ownsSong && round.ratings[actorId]?.[command.songId] === undefined) {
+        return 'FORBIDDEN';
+      }
+      return state.phase.skipVoterIds.includes(actorId) === command.skip
         ? 'NOT_READY'
         : null;
     }
@@ -437,6 +468,20 @@ function applyCommand(state: GameState, action: CommandAction): GameState {
         },
       });
     }
+    case 'SKIP_VOTE': {
+      if (state.phase.type !== 'PLAYBACK') {
+        return state;
+      }
+      const voters = state.phase.skipVoterIds;
+      return commit({
+        phase: {
+          ...state.phase,
+          skipVoterIds: command.skip
+            ? [...voters, actorId]
+            : voters.filter((id) => id !== actorId),
+        },
+      });
+    }
     case 'ADVANCE': {
       const drafted: GameState = {
         ...state,
@@ -478,6 +523,36 @@ function applyCommand(state: GameState, action: CommandAction): GameState {
     default:
       return state;
   }
+}
+
+/**
+ * FR-43: a command, leave, kick or presence change that leaves the skip quorum
+ * reached ends the current song at once. The next song starts after the normal
+ * preroll (`advancePlayback`); a quorum pause blocks it.
+ */
+function skipAfter(before: GameState, after: GameState, at: number): GameState {
+  return after !== before && skipReached(after)
+    ? advancePlayback(after, at)
+    : after;
+}
+
+function skipReached(state: GameState): boolean {
+  if (state.phase.type !== 'PLAYBACK' || state.pause) {
+    return false;
+  }
+  const total = connectedParticipantCount(state);
+  if (total === 0) {
+    return false;
+  }
+  return skipVoteCount(state) >= skipThreshold(total);
+}
+
+/** Votes of connected participants; an offline voter counts again on reconnect. */
+export function skipVoteCount(state: GameState): number {
+  return state.phase.type === 'PLAYBACK'
+    ? state.phase.skipVoterIds.filter((id) => isActivePlayer(state.players[id]))
+        .length
+    : 0;
 }
 
 function reduceDeadline(state: GameState, action: DeadlineAction): GameState {
@@ -754,6 +829,7 @@ function enterPlaybackOrReveal(state: GameState, at: number): GameState {
       index: 0,
       startAt,
       deadlineAt: startAt + clipMilliseconds(firstSong.clipSeconds),
+      skipVoterIds: [],
     },
     stateVersion: state.stateVersion + 1,
   };
@@ -782,6 +858,7 @@ function advancePlayback(state: GameState, at: number): GameState {
       index: nextIndex,
       startAt,
       deadlineAt: startAt + clipMilliseconds(song.clipSeconds),
+      skipVoterIds: [],
     },
     stateVersion: state.stateVersion + 1,
   };
@@ -945,7 +1022,7 @@ function allSubmissionDone(state: GameState): boolean {
 }
 
 /** Quorum only counts connected players that are part of the current round. */
-function connectedParticipantCount(state: GameState): number {
+export function connectedParticipantCount(state: GameState): number {
   const round = state.round;
   if (!round) {
     return 0;

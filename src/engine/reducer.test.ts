@@ -4,7 +4,9 @@ import {
   classifyCommand,
   createInitialState,
   electHost,
+  PRE_ROLL_MS,
   reducer,
+  skipThreshold,
   SPIN_MS,
 } from './index';
 import {
@@ -958,6 +960,7 @@ describe('aggregation and playback', () => {
       index: 0,
       startAt: 7203,
       deadlineAt: 47203,
+      skipVoterIds: [],
     });
     state = fireDeadline(state);
     expect(state.phase).toMatchObject({
@@ -1475,6 +1478,7 @@ describe('pause and quorum', () => {
       index: 0,
       startAt: 17203,
       deadlineAt: 57203,
+      skipVoterIds: [],
     });
     expect(before.type).toBe('PLAYBACK');
     expect(validationError(state)).toBeNull();
@@ -2915,5 +2919,335 @@ describe('capacity policy', () => {
       connected: false,
     });
     expect(presence(kicked, 1100, allConnections(kicked))).toBe(kicked);
+  });
+});
+
+describe('skip vote (FR-43)', () => {
+  /** Current song, its owner and the participants that may rate it. */
+  function current(state: GameState) {
+    const round = state.round!;
+    const phase = state.phase;
+    if (phase.type !== 'PLAYBACK') {
+      throw new Error('Not in PLAYBACK');
+    }
+    const songId = round.playbackOrder[phase.index];
+    const song = round.songs.find((s) => s.media.videoId === songId)!;
+    const owner = song.ownerIds[0];
+    const raters = round.participantIds.filter(
+      (p) => !song.ownerIds.includes(p),
+    );
+    return { songId, owner, raters, at: phase.startAt + 10 };
+  }
+
+  function vote(state: GameState, actor: string, songId: string, skip = true) {
+    return command(
+      state,
+      actor,
+      { type: 'SKIP_VOTE', songId, skip },
+      current(state).at,
+    );
+  }
+
+  function rate(state: GameState, actor: string, songId: string, value = 6) {
+    return command(
+      state,
+      actor,
+      { type: 'RATE', songId, value },
+      current(state).at,
+    );
+  }
+
+  function reason(
+    state: GameState,
+    actor: string,
+    songId: string,
+    skip = true,
+  ) {
+    return classifyCommand(
+      state,
+      action(
+        state,
+        { type: 'SKIP_VOTE', songId, skip },
+        {
+          actorId: actor,
+          connectionId: state.players[actor].connectionId,
+          at: current(state).at,
+        },
+      ),
+    );
+  }
+
+  /** Every non-owner has rated the current song. */
+  function ratedState(count = 4) {
+    let state = playbackState(count);
+    const { songId, raters } = current(state);
+    for (const rater of raters) {
+      state = rate(state, rater, songId);
+    }
+    return state;
+  }
+
+  it('rounds the threshold up in integer math', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(skipThreshold)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 9,
+    ]);
+  });
+
+  it('starts every PLAYBACK song without votes', () => {
+    const state = playbackState();
+    expect(state.phase).toMatchObject({ type: 'PLAYBACK', skipVoterIds: [] });
+    expect(validationError(state)).toBeNull();
+  });
+
+  it('keeps three of four votes pending and advances on the fourth', () => {
+    let state = ratedState();
+    const { songId, owner, raters, at } = current(state);
+    const order = state.round!.playbackOrder;
+    state = vote(state, owner, songId);
+    state = vote(state, raters[0], songId);
+    state = vote(state, raters[1], songId);
+    expect(state.phase).toMatchObject({
+      type: 'PLAYBACK',
+      index: 0,
+      skipVoterIds: [owner, raters[0], raters[1]],
+    });
+    expect(validationError(state)).toBeNull();
+    const versionBefore = state.stateVersion;
+    state = command(
+      state,
+      raters[2],
+      { type: 'SKIP_VOTE', songId, skip: true },
+      at + 500,
+    );
+    expect(state.phase).toMatchObject({
+      type: 'PLAYBACK',
+      index: 1,
+      startAt: at + 500 + PRE_ROLL_MS,
+      skipVoterIds: [],
+    });
+    expect(state.round!.playbackOrder[1]).toBe(order[1]);
+    expect(state.stateVersion).toBeGreaterThan(versionBefore);
+    expect(validationError(state)).toBeNull();
+  });
+
+  it('lets a vote be withdrawn and cast again', () => {
+    let state = ratedState();
+    const { songId, raters } = current(state);
+    state = vote(state, raters[0], songId);
+    expect(reason(state, raters[0], songId)).toBe('NOT_READY');
+    const withdrawn = vote(state, raters[0], songId, false);
+    expect(withdrawn.phase).toMatchObject({ skipVoterIds: [] });
+    expect(reason(withdrawn, raters[0], songId, false)).toBe('NOT_READY');
+    const again = vote(withdrawn, raters[0], songId);
+    expect(again.phase).toMatchObject({ skipVoterIds: [raters[0]] });
+    expect(validationError(again)).toBeNull();
+  });
+
+  it('rejects a non-owner without a rating and accepts an owner without one', () => {
+    const state = playbackState();
+    const { songId, owner, raters } = current(state);
+    expect(reason(state, raters[0], songId)).toBe('FORBIDDEN');
+    expect(vote(state, raters[0], songId)).toBe(state);
+    expect(reason(state, owner, songId)).toBeNull();
+    expect(vote(state, owner, songId).phase).toMatchObject({
+      skipVoterIds: [owner],
+    });
+  });
+
+  it('accepts a genre-fail rating as the rating that unlocks the vote', () => {
+    let state = playbackState();
+    const { songId, raters } = current(state);
+    state = rate(state, raters[0], songId, 0);
+    expect(reason(state, raters[0], songId)).toBeNull();
+  });
+
+  it('rejects stale songs, strangers, wrong phases and pauses', () => {
+    const state = ratedState();
+    const { songId, owner, raters } = current(state);
+    const next = state.round!.playbackOrder[1];
+    expect(reason(state, owner, next)).toBe('NOT_READY');
+    expect(vote(state, owner, next)).toBe(state);
+
+    const lobby = newGame();
+    expect(
+      classifyCommand(
+        lobby,
+        action(
+          lobby,
+          { type: 'SKIP_VOTE', songId, skip: true },
+          { actorId: id(1), connectionId: id(101), at: 10 },
+        ),
+      ),
+    ).toBe('WRONG_PHASE');
+
+    const submission = submissionState();
+    expect(
+      classifyCommand(
+        submission,
+        action(
+          submission,
+          { type: 'SKIP_VOTE', songId, skip: true },
+          { actorId: id(1), connectionId: id(101), at: SPIN_END + 10 },
+        ),
+      ),
+    ).toBe('WRONG_PHASE');
+
+    const paused = command(
+      state,
+      state.hostId,
+      { type: 'PAUSE' },
+      current(state).at,
+    );
+    expect(paused.pause).not.toBeNull();
+    expect(
+      classifyCommand(
+        paused,
+        action(
+          paused,
+          { type: 'SKIP_VOTE', songId, skip: true },
+          {
+            actorId: raters[0],
+            connectionId: paused.players[raters[0]].connectionId,
+            at: current(state).at,
+          },
+        ),
+      ),
+    ).toBe('WRONG_PHASE');
+
+    // A spectator who joined mid-game is not a round participant.
+    const joined = send(
+      state,
+      { type: 'JOIN', nickname: 'Late' },
+      { actorId: id(9), connectionId: id(109), at: current(state).at },
+    );
+    expect(joined.players[id(9)].status).toBe('spectator');
+    expect(reason(joined, id(9), songId)).toBe('FORBIDDEN');
+  });
+
+  it('counts only connected voters against the connected base', () => {
+    // Five participants, four votes: the non-voter dropping shrinks the base
+    // to four and completes the quorum.
+    let state = ratedState(5);
+    const { songId, owner, raters, at } = current(state);
+    const nonVoter = raters[3];
+    for (const voter of [owner, raters[0], raters[1], raters[2]]) {
+      state = vote(state, voter, songId);
+    }
+    expect(state.phase).toMatchObject({ index: 0 });
+    const connections = allConnections(state).filter(
+      (connection) => connection !== state.players[nonVoter].connectionId,
+    );
+    const advanced = presence(state, at + 700, connections);
+    expect(advanced.phase).toMatchObject({
+      type: 'PLAYBACK',
+      index: 1,
+      startAt: at + 700 + PRE_ROLL_MS,
+      skipVoterIds: [],
+    });
+    expect(advanced.players[nonVoter].connected).toBe(false);
+    expect(validationError(advanced)).toBeNull();
+  });
+
+  it('does not count a disconnected voter and counts them again on reconnect', () => {
+    let state = ratedState(5);
+    const { songId, owner, raters, at } = current(state);
+    for (const voter of [owner, raters[0], raters[1]]) {
+      state = vote(state, voter, songId);
+    }
+    // n = 5 -> 5 votes needed. raters[0] drops: n = 4 needs 4, votes = 2.
+    const dropped = presence(
+      state,
+      at + 100,
+      allConnections(state).filter(
+        (connection) => connection !== state.players[raters[0]].connectionId,
+      ),
+    );
+    expect(dropped.phase).toMatchObject({
+      index: 0,
+      skipVoterIds: [owner, raters[0], raters[1]],
+    });
+    // The fourth voter casts a vote: 3 active votes of 4 connected.
+    const third = vote(dropped, raters[2], songId);
+    expect(third.phase).toMatchObject({ index: 0 });
+    // raters[0] returns: 4 active votes of 5 connected, still pending, then
+    // the fifth voter ends it.
+    const back = presence(third, at + 200, allConnections(third));
+    expect(back.phase).toMatchObject({ index: 0 });
+    const done = vote(back, raters[3], songId);
+    expect(done.phase).toMatchObject({ index: 1, skipVoterIds: [] });
+  });
+
+  it('advances when a leaving or kicked participant completes the quorum', () => {
+    let state = ratedState(5);
+    const { songId, owner, raters, at } = current(state);
+    for (const voter of [owner, raters[0], raters[1], raters[2]]) {
+      state = vote(state, voter, songId);
+    }
+    const left = command(state, raters[3], { type: 'LEAVE' }, at + 50);
+    expect(left.phase).toMatchObject({ index: 1, skipVoterIds: [] });
+    const kicked = command(
+      state,
+      state.hostId,
+      { type: 'KICK', playerId: raters[3] },
+      at + 50,
+    );
+    expect(kicked.phase).toMatchObject({ index: 1, skipVoterIds: [] });
+  });
+
+  it('does not skip while a quorum pause holds the game', () => {
+    let state = ratedState(3);
+    const { songId, owner, raters, at } = current(state);
+    state = vote(state, owner, songId);
+    state = vote(state, raters[0], songId);
+    // 2 of 3 votes; the non-voter drops: n = 2 would be reached but the game
+    // falls below the minimum and pauses instead.
+    const paused = presence(
+      state,
+      at + 10,
+      allConnections(state).filter(
+        (connection) => connection !== state.players[raters[1]].connectionId,
+      ),
+    );
+    expect(paused.pause).toMatchObject({ reason: 'quorum' });
+    expect(paused.phase).toMatchObject({ index: 0 });
+  });
+
+  it('ends PLAYBACK when the last song is skipped and keeps the ratings', () => {
+    let state = lastSongState();
+    const { songId, owner, raters, at } = current(state);
+    for (const rater of raters) {
+      state = rate(state, rater, songId, 7);
+    }
+    const ratings = state.round!.ratings;
+    state = vote(state, owner, songId);
+    for (const rater of raters) {
+      state = vote(state, rater, songId);
+    }
+    expect(state.phase.type).toBe('REVEAL');
+    expect(state.round!.ratings).toEqual(ratings);
+    expect(state.results).toHaveLength(1);
+    expect(state.results[0].songs.length).toBe(4);
+    expect(state.phase).toMatchObject({ startedAt: expect.any(Number) });
+    expect(at).toBeGreaterThan(0);
+    expect(validationError(state)).toBeNull();
+  });
+
+  it('keeps earlier ratings changeable after a skip', () => {
+    let state = ratedState();
+    const { songId, owner, raters } = current(state);
+    state = vote(state, owner, songId);
+    for (const rater of raters) {
+      state = vote(state, rater, songId);
+    }
+    expect(state.phase).toMatchObject({ index: 1 });
+    const changed = command(
+      state,
+      raters[0],
+      { type: 'RATE', songId, value: 2 },
+      current(state).at,
+    );
+    expect(changed.round!.ratings[raters[0]][songId]).toBe(2);
+    // The new song starts without votes and the stale vote id is rejected.
+    expect(reason(changed, owner, songId)).toBe('NOT_READY');
   });
 });
