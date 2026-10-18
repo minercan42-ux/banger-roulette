@@ -5,6 +5,7 @@ import {
   selectReveal,
   selectRoom,
   selectSettings,
+  type RevealEntryView,
 } from '../engine/selectors';
 import type { GameSession } from '../net/session';
 import type { GameState, Phase } from '../shared/game';
@@ -23,7 +24,11 @@ export interface SfxSnapshot {
   spinning: boolean;
   /** Rows that passed the reel window; frozen while the room is paused. */
   spinTicks: number;
-  /** Linked entries already on screen; the reveal is where they become public. */
+  /**
+   * Linked entries on screen that carry their own moment (and its cue): the
+   * reveal is where they become public. An entry under the banger show or the
+   * jackpot show is not counted, those shows bring their own sound.
+   */
   linkedEntries: number;
   /** Reveal entries already revealed, worst first (FR-60). */
   revealedEntries: number;
@@ -88,6 +93,19 @@ export function sfxEventsFor(prev: SfxSnapshot, next: SfxSnapshot): SfxEvent[] {
   return events;
 }
 
+/**
+ * Whether a revealed entry plays the linked cue. One show owns the sound at a
+ * time: the banger show, then the jackpot, then the linked cue; the linked
+ * moment itself still plays on those entries, only without its own sound.
+ */
+export function hasLinkedCue(
+  entry: Pick<RevealEntryView, 'linked' | 'banger' | 'winner'> & {
+    bangerShow: boolean;
+  },
+): boolean {
+  return entry.linked && !entry.bangerShow && !(entry.winner && !entry.banger);
+}
+
 /** Read the snapshot out of shared state at one instant of server time. */
 export function sfxSnapshot(
   state: GameState,
@@ -130,7 +148,7 @@ export function sfxSnapshot(
       : reveal.entries.filter((entry) => entry.revealAt <= reference);
   let linkedEntries = 0;
   for (const entry of visible) {
-    if (entry.linked) {
+    if (hasLinkedCue(entry)) {
       linkedEntries += 1;
     }
   }

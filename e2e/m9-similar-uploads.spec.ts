@@ -93,8 +93,11 @@ test('different uploads of one song become one linked song that its owners canno
     // One linked reveal entry with both owners, and both owners are scored.
     const linked = alice.getByTestId('linked-animation');
     await expect(linked).toBeVisible({ timeout: 10_000 });
-    await expect(linked.getByTestId('linked-names')).toContainText('Alice');
-    await expect(linked.getByTestId('linked-names')).toContainText('Bob');
+    await expect(linked.getByTestId('linked-owner-name')).toHaveText([
+      'Alice',
+      'Bob',
+    ]);
+    await expect(linked.getByTestId('linked-owner-points')).toHaveCount(2);
     await expect(alice.getByTestId('reveal-entry')).toHaveCount(2);
 
     const reveal = await stateOf(cara);

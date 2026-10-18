@@ -524,6 +524,8 @@ test('duplicate links collapse to one song with the first start and stay anonymo
     // FR-26/AK-3: the linked animation names no owner while anonymous.
     const animation = host.page.getByTestId('linked-animation');
     await expect(animation).toBeVisible({ timeout: 5000 });
+    await expect(animation).toHaveAttribute('data-variant', 'preroll');
+    await expect(animation.getByTestId('linked-owner')).toHaveCount(0);
     const animationText = (await animation.innerText()).toLowerCase();
     expect(animationText).not.toContain(bruno.nickname.toLowerCase());
     expect(animationText).not.toContain(cleo.nickname.toLowerCase());
