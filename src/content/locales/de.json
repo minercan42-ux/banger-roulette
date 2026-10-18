@@ -241,7 +241,8 @@
     "progressOpen": "offen",
     "spectatorOnly": "Du bist Zuschauer und reichst erst ab der nächsten Runde ein.",
     "finishing": "Wird eingereicht …",
-    "finishSkipHint": "Ohne Link setzt du diese Runde aus."
+    "finishSkipHint": "Ohne Link setzt du diese Runde aus.",
+    "finishInterrupted": "Die Verbindung war kurz weg. Bitte noch einmal auf „Fertig“ drücken."
   },
   "linked": {
     "heading": "Spiritually Linked",

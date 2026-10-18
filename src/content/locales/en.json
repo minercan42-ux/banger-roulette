@@ -241,7 +241,8 @@
     "progressOpen": "open",
     "spectatorOnly": "You are a spectator and may submit from the next round.",
     "finishing": "Submitting …",
-    "finishSkipHint": "Without a link you sit this round out."
+    "finishSkipHint": "Without a link you sit this round out.",
+    "finishInterrupted": "The connection dropped briefly. Please press “Done” again."
   },
   "linked": {
     "heading": "Spiritually Linked",
