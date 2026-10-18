@@ -886,7 +886,10 @@ function revealWithResult(
       startedAt: at,
       deadlineAt:
         at +
-        result.songs.reduce((total, song) => total + revealSlotMs(song), 0) +
+        revealSlots(result.songs).reduce(
+          (total, slot) => total + slot.slotMs,
+          0,
+        ) +
         REVEAL_HOLD_MS,
     },
     stateVersion: state.stateVersion + 1,
@@ -1091,9 +1094,29 @@ function shiftPhase(phase: Phase, shift: number): Phase {
   }
 }
 
-/** Reveal slot of one scored song: bangers linger longer. */
-export function revealSlotMs(song: { banger: boolean }): number {
-  return song.banger ? BANGER_REVEAL_MS : REVEAL_PER_SONG_MS;
+/** Stage time of one reveal entry and whether it carries the banger show. */
+export interface RevealSlot {
+  slotMs: number;
+  bangerShow: boolean;
+}
+
+/**
+ * Reveal slots for scored songs in reveal order. The full-screen banger show
+ * runs once per round, at the first banger: it alone gets `BANGER_REVEAL_MS`.
+ * Every later banger keeps its badge and gets the normal slot.
+ */
+export function revealSlots(
+  songs: readonly { banger: boolean }[],
+): RevealSlot[] {
+  let showPlayed = false;
+  return songs.map((song) => {
+    const bangerShow = song.banger && !showPlayed;
+    showPlayed ||= bangerShow;
+    return {
+      slotMs: bangerShow ? BANGER_REVEAL_MS : REVEAL_PER_SONG_MS,
+      bangerShow,
+    };
+  });
 }
 
 function deadlineDue(state: GameState, at: number): boolean {

@@ -9,7 +9,7 @@ function snapshot(overrides: Partial<SfxSnapshot> = {}): SfxSnapshot {
     spinTicks: 0,
     linkedEntries: 0,
     revealedEntries: 0,
-    bangerEntries: 0,
+    bangerShows: 0,
     winnerRevealed: false,
     ...overrides,
   };
@@ -108,12 +108,12 @@ describe('sfxEventsFor', () => {
   });
 
   test('banger instead of the plain blip and the jackpot for a 10.0 song', () => {
-    // The winning banger is on screen: bangerEntries counts it, the snapshot
+    // The winning banger is on screen: bangerShows counts it, the snapshot
     // does not count it as a jackpot winner.
     const next = snapshot({
       phase: 'REVEAL',
       revealedEntries: 3,
-      bangerEntries: 1,
+      bangerShows: 1,
     });
     const prev = snapshot({ phase: 'REVEAL', revealedEntries: 2 });
     expect(sfxEventsFor(prev, next)).toEqual(['banger']);
@@ -124,7 +124,7 @@ describe('sfxEventsFor', () => {
     const next = snapshot({
       phase: 'REVEAL',
       revealedEntries: 3,
-      bangerEntries: 1,
+      bangerShows: 1,
     });
     expect(sfxEventsFor(prev, next)).toEqual(['revealEntry', 'banger']);
   });
@@ -133,12 +133,24 @@ describe('sfxEventsFor', () => {
     const settled = snapshot({
       phase: 'REVEAL',
       revealedEntries: 3,
-      bangerEntries: 1,
+      bangerShows: 1,
     });
     expect(sfxEventsFor(settled, settled)).toEqual([]);
     expect(sfxEventsFor(settled, { ...settled, revealedEntries: 4 })).toEqual([
       'revealEntry',
     ]);
+  });
+
+  test('a later banger of the round has no show: only the plain blip', () => {
+    // The round's first banger played its sound; the second banger entry is
+    // revealed (revealedEntries +1) but bangerShows stays at 1.
+    const prev = snapshot({
+      phase: 'REVEAL',
+      revealedEntries: 3,
+      bangerShows: 1,
+    });
+    const next = { ...prev, revealedEntries: 4 };
+    expect(sfxEventsFor(prev, next)).toEqual(['revealEntry']);
   });
 
   test('phaseChange on a boundary without another event', () => {

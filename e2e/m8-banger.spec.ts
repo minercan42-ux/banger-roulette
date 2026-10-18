@@ -230,6 +230,143 @@ for (const reducedMotion of [false, true] as const) {
   });
 }
 
+const TWO_A = 'm8twoa00006';
+const TWO_B = 'm8twob00007';
+const TWO_C = 'm8twoc00008';
+
+declare global {
+  interface Window {
+    /** Test probe: when tones of the banger finale were scheduled (ms). */
+    __bangerStarts?: number[];
+  }
+}
+
+for (const reducedMotion of [false, true] as const) {
+  test(`two bangers in one round: the show runs once, both entries keep the badge (${reducedMotion ? 'reduced motion' : 'full motion'})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(150_000);
+    const stages = await openStages(
+      browser,
+      reducedMotion ? 'reduce' : 'no-preference',
+    );
+    try {
+      const pages = stages.map((stage) => stage.page);
+      // Alice's and Bob's songs get a 10 from everybody else (two bangers, both
+      // winners at 10.0); Cara's song gets a 4 and is revealed first.
+      const medias = [mediaOf(TWO_A), mediaOf(TWO_B), mediaOf(TWO_C)];
+      await assembleRoom(stages[0]!, stages.slice(1));
+      await playToPlayback(pages, medias);
+      // The show is rendered on `body`: count its mounts on every client for
+      // the whole reveal, not just whether it is visible at a given moment.
+      await Promise.all(
+        pages.map((page) =>
+          page.evaluate(() => {
+            const root = document.documentElement;
+            root.dataset.bangerMounts = '0';
+            new MutationObserver((records) => {
+              for (const record of records) {
+                for (const node of record.addedNodes) {
+                  if (
+                    node instanceof Element &&
+                    (node.matches('[data-testid="banger-show"]') ||
+                      node.querySelector('[data-testid="banger-show"]') !==
+                        null)
+                  ) {
+                    root.dataset.bangerMounts = String(
+                      Number(root.dataset.bangerMounts) + 1,
+                    );
+                  }
+                }
+              }
+            }).observe(document.body, { childList: true, subtree: true });
+            // Count the banger sound too: a tone scheduled more than 3.5 s
+            // ahead is part of the banger finale and of nothing else.
+            const starts: number[] = [];
+            window.__bangerStarts = starts;
+            const nativeStart = AudioScheduledSourceNode.prototype.start;
+            AudioScheduledSourceNode.prototype.start = function (
+              this: AudioScheduledSourceNode,
+              when?: number,
+            ) {
+              if ((when ?? 0) - this.context.currentTime > 3.5) {
+                starts.push(performance.now());
+              }
+              return nativeStart.call(this, when);
+            };
+          }),
+        ),
+      );
+      await ratePlayback(pages, medias, (_rater, song) =>
+        song === 2 ? 4 : 10,
+      );
+
+      // A pause inside the first show and a resume must neither remount the
+      // show nor replay its sound (the resumed render must use a fresh clock).
+      const host = pages[0]!;
+      await expect(host.getByTestId('banger-show')).toBeVisible({
+        timeout: 10_000,
+      });
+      await host.waitForTimeout(800);
+      expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
+      await host.waitForTimeout(2000);
+      expect(
+        (await dispatch(host, { type: 'RESUME', forceBelowMinimum: false }))
+          .status,
+      ).toBe('accepted');
+
+      const entries = host.getByTestId('reveal-entry');
+      await expect(host.getByTestId('leaderboard')).toBeVisible({
+        timeout: 25_000,
+      });
+      // The second banger entry is the last one: no show for it, on any client.
+      await expect(entries).toHaveCount(3);
+      await host.waitForTimeout(1500);
+      for (const page of pages) {
+        expect(
+          await page.evaluate(
+            () => document.documentElement.dataset.bangerMounts,
+          ),
+        ).toBe('1');
+        // One banger sound over the whole reveal: tones scheduled seconds
+        // ahead (the banger finale) only come from the banger recipe, and one
+        // play schedules them in one burst.
+        expect(
+          await page.evaluate(() => {
+            const starts = window.__bangerStarts ?? [];
+            return starts.filter(
+              (at, index) => index === 0 || at - starts[index - 1]! > 1000,
+            ).length;
+          }),
+        ).toBe(1);
+        await expect(page.getByTestId('banger-show')).toHaveCount(0);
+        await expect(page.getByTestId('jackpot-show')).toHaveCount(0);
+      }
+      expect(
+        await entries.evaluateAll((nodes) =>
+          nodes.map((node) => node.getAttribute('data-banger')),
+        ),
+      ).toEqual(['false', 'true', 'true']);
+      await expect(host.getByTestId('reveal-entry-banger')).toHaveCount(2);
+      for (const videoId of [TWO_A, TWO_B]) {
+        await expect(
+          host
+            .locator(`[data-testid="reveal-entry"][data-video-id="${videoId}"]`)
+            .getByTestId('reveal-entry-banger'),
+        ).toHaveCount(1);
+      }
+      // The first banger had the 5 s slot, the second one a normal 2.5 s slot
+      // (a plain 2.5 s entry first): 2500 + 5000 + 2500 + the 5000 ms hold.
+      const phase = (await stateOf(host))?.phase;
+      expect(
+        phase?.type === 'REVEAL' ? phase.deadlineAt - phase.startedAt : null,
+      ).toBe(2500 + 5000 + 2500 + 5000);
+    } finally {
+      await closeStages(stages);
+    }
+  });
+}
+
 test('a 9.5 song is no banger: the jackpot runs and no banger show appears', async ({
   browser,
 }) => {

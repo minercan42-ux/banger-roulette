@@ -13,6 +13,18 @@ export function useSessionNow(
   frameMs = 33,
 ): number {
   const [now, setNow] = useState(() => session.now());
+  // A paused view reads the clock fresh on every render (below), so the stored
+  // value is as old as the pause. When the view becomes active again (RESUME
+  // shifts the phase's absolute times forward), React must not render one
+  // frame that compares those shifted times with the pre-pause clock: refresh
+  // the state during that render so the stale pass is discarded.
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    if (active) {
+      setNow(session.now());
+    }
+  }
   useEffect(() => {
     if (!active) {
       return;

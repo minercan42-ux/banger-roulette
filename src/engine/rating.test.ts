@@ -5,7 +5,7 @@ import {
   REVEAL_HOLD_MS,
   REVEAL_PER_SONG_MS,
   classifyCommand,
-  revealSlotMs,
+  revealSlots,
 } from './reducer';
 import {
   selectPlayback,
@@ -369,8 +369,81 @@ describe('rating scoring integration', () => {
     ).toBe(
       startedAt + REVEAL_PER_SONG_MS * 3 + BANGER_REVEAL_MS + REVEAL_HOLD_MS,
     );
-    expect(revealSlotMs({ banger: true })).toBe(BANGER_REVEAL_MS);
-    expect(revealSlotMs({ banger: false })).toBe(REVEAL_PER_SONG_MS);
+    expect(view?.entries.map((entry) => entry.bangerShow)).toEqual([
+      false,
+      false,
+      false,
+      true,
+    ]);
+    expect(revealSlots([{ banger: true }])).toEqual([
+      { slotMs: BANGER_REVEAL_MS, bangerShow: true },
+    ]);
+    expect(revealSlots([{ banger: false }])).toEqual([
+      { slotMs: REVEAL_PER_SONG_MS, bangerShow: false },
+    ]);
+    expect(validationError(revealed)).toBeNull();
+  });
+
+  it('gives only the first banger of a round the banger slot', () => {
+    let state = toLastSong(lastSongState());
+    const at = state.phase.type === 'PLAYBACK' ? state.phase.deadlineAt - 1 : 0;
+    // Songs 1 (owner id1) and 2 (owner id2) are bangers: every rating a 10.
+    for (const playerId of [id(2), id(3), id(4)]) {
+      state = rate(state, playerId, videoId(1), 10, at);
+    }
+    for (const playerId of [id(1), id(3), id(4)]) {
+      state = rate(state, playerId, videoId(2), 10, at);
+    }
+    for (const playerId of [id(1), id(2), id(4)]) {
+      state = rate(state, playerId, videoId(3), 6, at);
+    }
+    for (const playerId of [id(1), id(2), id(3)]) {
+      state = rate(state, playerId, videoId(4), 7, at);
+    }
+    const revealed = fireDeadline(state);
+    expect(revealed.phase.type).toBe('REVEAL');
+    const view = selectReveal(revealed);
+    expect(view?.entries.map((entry) => entry.banger)).toEqual([
+      false,
+      false,
+      true,
+      true,
+    ]);
+    // Worst first; the first banger owns the stage for 5 s, the second banger
+    // keeps its flag but runs a normal slot.
+    expect(view?.entries.map((entry) => entry.slotMs)).toEqual([
+      REVEAL_PER_SONG_MS,
+      REVEAL_PER_SONG_MS,
+      BANGER_REVEAL_MS,
+      REVEAL_PER_SONG_MS,
+    ]);
+    expect(view?.entries.map((entry) => entry.bangerShow)).toEqual([
+      false,
+      false,
+      true,
+      false,
+    ]);
+    const startedAt =
+      revealed.phase.type === 'REVEAL' ? revealed.phase.startedAt : 0;
+    expect(view?.entries.map((entry) => entry.revealAt)).toEqual([
+      startedAt,
+      startedAt + REVEAL_PER_SONG_MS,
+      startedAt + 2 * REVEAL_PER_SONG_MS,
+      startedAt + 2 * REVEAL_PER_SONG_MS + BANGER_REVEAL_MS,
+    ]);
+    expect(
+      revealed.phase.type === 'REVEAL' ? revealed.phase.deadlineAt : 0,
+    ).toBe(
+      startedAt + REVEAL_PER_SONG_MS * 3 + BANGER_REVEAL_MS + REVEAL_HOLD_MS,
+    );
+    expect(
+      revealSlots([
+        { banger: false },
+        { banger: true },
+        { banger: true },
+        { banger: true },
+      ]).map((slot) => slot.bangerShow),
+    ).toEqual([false, true, false, false]);
     expect(validationError(revealed)).toBeNull();
   });
 

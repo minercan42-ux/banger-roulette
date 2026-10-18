@@ -359,6 +359,17 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
   - Cookies würden bei jedem Aufruf an den Server gehen, ohne dass das etwas bringt, und der Datenschutzhinweis verspricht "keine Cookies".
 - **Belege:** #111, [PR #119](https://github.com/minercan42-ux/banger-roulette/pull/119)
 
+### D-044 Die Banger-Show läuft einmal pro Runde
+
+- **Datum:** 2026-10-17
+- **Wer:** PM (Owner kann widersprechen)
+- **Entscheidung:**
+  - Die große Banger-Show mit Sound läuft nur beim ersten Banger einer Runde (in Aufdeckreihenfolge).
+  - Jeder weitere Banger der Runde behält seinen "THIS IS A BANGER"-Stempel am Eintrag, bekommt aber keine Show, keinen Banger-Sound und den normalen Aufdeck-Slot statt der 5 Sekunden.
+  - Die erste Show nennt nur ihren eigenen Song, nichts von späteren Einträgen.
+- **Warum:** Im Playtest lief die Show bei mehreren Bangern (genau 10.0, D-025) zwei- oder mehrmals hintereinander. Das nutzte die seltene Show ab und hielt die Runde auf.
+- **Belege:** #134
+
 ## Beschlossen, Umsetzung offen
 
 Derzeit nichts offen.
