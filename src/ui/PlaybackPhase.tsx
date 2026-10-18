@@ -187,7 +187,7 @@ export function PlaybackPhase({
           </p>
           <LinkedAnimation
             songs={songs}
-            showEmptyMarker
+            variant="preroll"
             elapsedMs={prerollElapsedMs(view, now)}
             paused={view.pausedAt !== null}
           />

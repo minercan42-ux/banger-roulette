@@ -58,10 +58,36 @@ const SPIN_STOP: Tone[] = [
   { frequency: 130, type: 'sine', at: 0.3, duration: 0.28, gain: 0.9 },
 ];
 
-/** FR-26 "Spiritually Linked": a rising two-note sparkle. */
+/**
+ * FR-26 "Spiritually Linked", timed to the moment in `LinkedAnimation`: a rising
+ * whoosh while the owner cards fly in, a low thud and a bright chime at the
+ * collision (+0.7 s), three chain clinks as the cards clamp together. Well
+ * inside the 2.5 s reveal slot; it only plays where no show brings its own
+ * sound (see `SfxDirector`).
+ */
 const LINKED: Tone[] = [
-  { frequency: 659.25, type: 'sine', at: 0, duration: 0.14, gain: 0.7 },
-  { frequency: 987.77, type: 'sine', at: 0.11, duration: 0.2, gain: 0.7 },
+  {
+    frequency: 220,
+    type: 'sawtooth',
+    at: 0,
+    duration: 0.68,
+    gain: 0.16,
+    sweepTo: 880,
+  },
+  {
+    frequency: 150,
+    type: 'sine',
+    at: 0.7,
+    duration: 0.24,
+    gain: 0.55,
+    sweepTo: 60,
+  },
+  { frequency: 659.25, type: 'sine', at: 0.72, duration: 0.3, gain: 0.4 },
+  { frequency: 987.77, type: 'sine', at: 0.8, duration: 0.3, gain: 0.4 },
+  { frequency: 1318.5, type: 'triangle', at: 0.88, duration: 0.5, gain: 0.35 },
+  { frequency: 2637, type: 'square', at: 0.78, duration: 0.04, gain: 0.1 },
+  { frequency: 2637, type: 'square', at: 0.86, duration: 0.04, gain: 0.1 },
+  { frequency: 2637, type: 'square', at: 0.94, duration: 0.04, gain: 0.1 },
 ];
 
 /** One entry of the reveal walks up into view (FR-60). */

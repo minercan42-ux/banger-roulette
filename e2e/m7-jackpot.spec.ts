@@ -68,8 +68,11 @@ for (const reducedMotion of [false, true] as const) {
       const linked = host.getByTestId('linked-animation');
       await expect(linked).toBeVisible({ timeout: 10_000 });
       await expect(linked.locator('.br-linked__banner')).toBeVisible();
-      await expect(linked.getByTestId('linked-names')).toContainText('Alice');
-      await expect(linked.getByTestId('linked-names')).toContainText('Bob');
+      await expect(linked.getByTestId('linked-owner-name')).toHaveText([
+        'Alice',
+        'Bob',
+      ]);
+      await expect(linked.getByTestId('linked-owner-points')).toHaveCount(2);
       await expect(show).toHaveCount(0);
       await expect(host.getByTestId('reveal-jackpot')).toHaveCount(0);
 
