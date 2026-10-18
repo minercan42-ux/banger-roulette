@@ -61,6 +61,19 @@ export interface YouTubeVideoFixture {
    * next one (a user gesture via `recover()`) plays. Default false.
    */
   autoplayBlocked?: boolean;
+  /**
+   * When true `onReady` is held after `readyDelayMs` until
+   * `releaseFixtureVideo` clears the flag, so the player never leaves its
+   * loading state. A caller that has to act "before the preview loads" holds
+   * the load instead of racing the app's one-second auto-preview debounce,
+   * which no wall-clock budget makes deterministic on a loaded runner.
+   * The flag is re-read while held, so the release takes effect on the player
+   * that was already constructed. Hold for a moment only: the app's own
+   * preview load gives up after `PLAYER_TIMEOUT_MS` (10 s in
+   * `src/player/preview.ts`), so release as soon as the premise is proven.
+   * Default false.
+   */
+  holdReady?: boolean;
 }
 
 export type YouTubeFixtureMap = Record<string, YouTubeVideoFixture>;
@@ -147,6 +160,8 @@ declare global {
 const IFRAME_API_FIXTURE = `
 (function () {
   var STATES = { UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 };
+  // Poll interval of a load held by the holdReady flag (see YouTubeVideoFixture).
+  var HOLD_POLL_MS = 25;
   function perfNow() {
     return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
   }
@@ -234,7 +249,19 @@ const IFRAME_API_FIXTURE = `
       self.emitState(STATES.CUED);
       if (self.cfg.error) self.scheduleError();
     };
-    this.later(ready, this.cfg.readyDelayMs);
+    // A held load (see holdReady in YouTubeVideoFixture) polls the fixture
+    // map, so a release through releaseFixtureVideo reaches this player even
+    // though it was constructed while the flag was still set.
+    var gate = function () {
+      if (self.destroyed) return;
+      var entry = fixMap()[self.videoId] || {};
+      if (entry.holdReady === true) {
+        self.later(gate, HOLD_POLL_MS);
+        return;
+      }
+      ready();
+    };
+    this.later(gate, this.cfg.readyDelayMs);
   }
   Player.prototype.later = function (handler, ms) {
     var self = this;
@@ -564,4 +591,19 @@ export async function setFixtureVideo(
     },
     [videoId, fixture] as const,
   );
+}
+
+/**
+ * Clears a `holdReady` flag set for this video, so the load the player is
+ * holding proceeds and `onReady` fires. Everything else of the video's fixture
+ * stays in place.
+ */
+export async function releaseFixtureVideo(
+  page: Page,
+  videoId: string,
+): Promise<void> {
+  await page.evaluate((id) => {
+    const map = (window.__bangerYtFixture = window.__bangerYtFixture ?? {});
+    map[id] = { ...(map[id] ?? {}), holdReady: false };
+  }, videoId);
 }
