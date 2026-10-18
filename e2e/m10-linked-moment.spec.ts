@@ -155,6 +155,9 @@ interface ImpactSample {
   right: number;
   vh: number;
   vw: number;
+  /** Page scroll offset of the sample: two samples moved nothing. */
+  scrollX: number;
+  scrollY: number;
 }
 
 declare global {
@@ -201,6 +204,8 @@ function sampleImpact(page: Page): Promise<void> {
           right: rect.right,
           vh: innerHeight,
           vw: innerWidth,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
         });
       }
       requestAnimationFrame(tick);
@@ -209,6 +214,59 @@ function sampleImpact(page: Page): Promise<void> {
   });
 }
 
+/** Start of the shake, when the cards hit the entry's timeline. */
+const IMPACT_MS = 700;
+/** End of the shake. */
+const IMPACT_SHAKE_END_MS = 1100;
+/**
+ * How far the stage's own layout may settle between the two bracketing samples
+ * (px): while the plates pop in the entry above it finishes its count-up, so
+ * the stage's top moved 2 px between the samples of both `workflow_dispatch`
+ * runs of #155. A scroll is not covered by this bound: the proof rejects two
+ * samples whose scroll offsets differ at all.
+ */
+const IMPACT_SETTLE_PX = 4;
+
+/** The stage lies completely inside the viewport of its own sample. */
+function onScreen(sample: ImpactSample): boolean {
+  return (
+    sample.top >= 0 &&
+    sample.left >= 0 &&
+    sample.bottom <= sample.vh &&
+    sample.right <= sample.vw
+  );
+}
+
+/** Every painted frame, for a failure message that shows what was painted. */
+function framesText(samples: ImpactSample[]): string {
+  return samples
+    .slice(0, 80)
+    .map(
+      (sample) =>
+        `${Math.round(sample.time ?? -1)}/${sample.animations}@${Math.round(
+          sample.top,
+        )}`,
+    )
+    .join(' ');
+}
+
+/**
+ * FR-26: the reveal moment has to be seen. The stage has to sit inside the
+ * viewport when the cards hit at `IMPACT_MS`, and stay there for the rest of
+ * the entry's slot.
+ *
+ * Chromium and WebKit prove that with a painted frame inside the shake
+ * (700..1100 ms). The WebKit CI runner is frame-starved (2 or 3 painted frames
+ * over 1.5 s, dispatch run 39156970605), so when no frame landed inside the
+ * window the impact is proven by the frames on both sides of it instead:
+ * in view at or before 700 ms and in view at or after 1100 ms, at the same
+ * place. That is sound because the entry mounts and the only programmatic
+ * scroll of the reveal runs in the mount's layout effect, before the first
+ * sample, the test sends no input, and the two samples carry the same scroll
+ * offset and the same position: nothing moved the stage while the cards hit.
+ * Which proof was used is recorded as an annotation, so no relaxation is
+ * silent.
+ */
 async function expectImpactSeen(page: Page): Promise<void> {
   if (page.context().browser()?.browserType().name() === 'firefox') {
     // Browser limitation, see docs/OPEN_QUESTIONS.md "Cross-browser findings
@@ -226,38 +284,87 @@ async function expectImpactSeen(page: Page): Promise<void> {
   // If none comes, the assertion below fails with the frames it did get.
   await page
     .waitForFunction(
-      () => (window.__impact ?? []).some((sample) => (sample.time ?? 0) > 1100),
-      undefined,
+      (shakeEnd: number) =>
+        (window.__impact ?? []).some((sample) => (sample.time ?? 0) > shakeEnd),
+      IMPACT_SHAKE_END_MS,
       { timeout: 10_000 },
     )
     .catch(() => undefined);
   const all = await page.evaluate(() => window.__impact ?? []);
-  const samples = all.filter(
+  const frames = `all ${all.length} frames: ${framesText(all)}`;
+  const slot = all.filter(
     (sample): sample is ImpactSample & { time: number } =>
       sample.time !== null &&
-      sample.time >= 700 &&
+      sample.time >= IMPACT_MS &&
       sample.time <= REVEAL_PER_SONG_MS,
   );
-  // A painted frame inside the shake itself (700..1100 ms): the stage was on
-  // screen when the cards hit. One frame is enough, no minimum count; if the
-  // window was never painted the test fails. The later samples keep the stage
-  // there for the rest of the slot.
-  expect(
-    samples.filter((sample) => sample.time <= 1100).length,
-    `a frame inside the shake was sampled; all ${all.length} frames: ${all
-      .slice(0, 80)
-      .map(
-        (s) =>
-          `${Math.round(s.time ?? -1)}/${s.animations}@${Math.round(s.top)}`,
-      )
-      .join(' ')}`,
-  ).toBeGreaterThan(0);
-  for (const sample of samples) {
-    expect(sample.top).toBeGreaterThanOrEqual(0);
-    expect(sample.bottom).toBeLessThanOrEqual(sample.vh);
-    expect(sample.left).toBeGreaterThanOrEqual(0);
-    expect(sample.right).toBeLessThanOrEqual(sample.vw);
+  // Every sample of the slot keeps the stage on screen: the moment stays seen.
+  for (const sample of slot) {
+    expect(
+      onScreen(sample),
+      `the stage is on screen at ${Math.round(sample.time)} ms; ${frames}`,
+    ).toBe(true);
   }
+  const inside = slot.filter((sample) => sample.time <= IMPACT_SHAKE_END_MS);
+  if (inside.length > 0) {
+    test.info().annotations.push({
+      type: 'impact',
+      description: `a painted frame inside the shake (${Math.round(
+        inside[0].time,
+      )} ms): the stage was on screen at the impact`,
+    });
+    return;
+  }
+  // No frame inside the shake. The runner painted none there, so the proof
+  // comes from the frames on both sides of the window.
+  const before = all
+    .filter(
+      (sample): sample is ImpactSample & { time: number } =>
+        sample.time !== null && sample.time <= IMPACT_MS,
+    )
+    .at(-1);
+  const after = slot.at(0);
+  expect(
+    before !== undefined && after !== undefined,
+    `a painted frame on both sides of the shake (700..1100 ms); ${frames}`,
+  ).toBe(true);
+  if (before === undefined || after === undefined) {
+    return;
+  }
+  expect(
+    before.scrollX === after.scrollX && before.scrollY === after.scrollY,
+    `the page did not scroll while the cards hit (${Math.round(
+      before.scrollY,
+    )} -> ${Math.round(after.scrollY)} px); ${frames}`,
+  ).toBe(true);
+  for (const [side, sample] of [
+    ['before', before],
+    ['after', after],
+  ] as const) {
+    expect(
+      onScreen(sample),
+      `the stage is on screen ${side} the shake (top ${Math.round(
+        sample.top,
+      )}, bottom ${Math.round(sample.bottom)} of ${sample.vh}); ${frames}`,
+    ).toBe(true);
+  }
+  for (const [axis, first, second] of [
+    ['top', before.top, after.top],
+    ['left', before.left, after.left],
+  ] as const) {
+    expect(
+      Math.abs(first - second),
+      `the stage sits at the same ${axis} on both sides of the shake; ${frames}`,
+    ).toBeLessThanOrEqual(IMPACT_SETTLE_PX);
+  }
+  test.info().annotations.push({
+    type: 'impact',
+    description: `no frame inside the shake: the stage was on screen at ${Math.round(
+      before.time,
+    )} ms and at ${Math.round(
+      after.time,
+    )} ms, same scroll and position (proof by the frames around the window)`,
+  });
 }
 
 /** Alice and Bob (DUP) land between Cara's worst and Dario's best song. */
@@ -402,14 +509,16 @@ for (const reducedMotion of [false, true] as const) {
       await expect(linked.locator('.br-linked__card.is-flipped')).toHaveCount(
         0,
       );
-      // The teaser sits inside the video frame: no scrolling to find it.
-      await expectInViewport(
-        host,
-        linked.locator('.br-linked'),
-        'preroll teaser',
-      );
+      // The teaser sits inside the video frame and inside the viewport: no
+      // scrolling to find it. The host's pause holds the preroll's frame (the
+      // same state the placement test reads), so the box is read in one pass
+      // and cannot land on an unmounted teaser after the three preroll
+      // seconds (see prerollGeometry).
+      expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
+      await expect(host.getByTestId('pause-banner')).toBeVisible();
       const geometry = await prerollGeometry(host);
       expectInside(geometry.teaser, geometry.frame, 'preroll teaser');
+      expectInViewportBox(geometry.teaser, geometry.viewport, 'preroll teaser');
 
       const ends = await animationEnds(linked);
       if (reducedMotion) {
@@ -453,11 +562,10 @@ test('reveal shows all three owners of a linked song on a phone, in German', asy
       'preroll',
       { timeout: 5000 },
     );
-    await expectInViewport(
-      host,
-      host.getByTestId('linked-animation').locator('.br-linked'),
-      'preroll teaser',
-    );
+    // One pass, while the preroll runs: a poll would outlive the three preroll
+    // seconds on the frame-starved runner (see prerollGeometry).
+    const teaser = await prerollGeometry(host);
+    expectInViewportBox(teaser.teaser, teaser.viewport, 'preroll teaser');
     await sampleImpact(host);
     await ratePlayback(pages, medias, THREE_OWNERS);
 
@@ -543,8 +651,13 @@ test('a linked banger keeps one show: the banger show owns the viewport', async 
       300,
     );
 
-    // After the show the entry still names both owners with their points.
-    await expect(show).toBeHidden({ timeout: 8000 });
+    // The entry names both owners with their points while the show is up: the
+    // show and the entry end together, so this is the last moment the reveal
+    // list is guaranteed to carry the moment. On the frame-starved runner the
+    // reveal clock (the animation frame clock) stops with the frames, the
+    // show then runs on into the reveal's hold and goes away with the round,
+    // so "after the show" is not a window to read (dispatch run 39156970605,
+    // docs/OPEN_QUESTIONS.md "Cross-browser findings (#140)").
     const { text } = await ownerPoints(host, stages.slice(0, 2));
     await expect(linked.getByTestId('linked-owner-name')).toHaveText([
       'Alice',
@@ -557,6 +670,11 @@ test('a linked banger keeps one show: the banger show owns the viewport', async 
     await expect(linked.getByTestId('linked-points')).toHaveText(
       `${text} for Alice and Bob`,
     );
+
+    // The show goes away (its slot ends, or the round does) and no second show
+    // is left: the linked moment never stacked one on the show.
+    await expect(show).toBeHidden({ timeout: 8000 });
+    await expect(host.locator('[data-testid$="-show"]')).toHaveCount(0);
   } finally {
     await closeStages(stages);
   }
@@ -572,13 +690,22 @@ interface Rect {
 interface PrerollGeometry {
   frame: Rect;
   teaser: Rect;
+  /** The viewport the teaser has to sit in, at the same instant. */
+  viewport: Rect;
   /** The controls the teaser must never cover, by test id. */
   controls: Record<string, { box: Rect; inStickyBar: boolean }>;
   /** The sticky bars' z-index is above the teaser slot's. */
   barAboveTeaser: boolean;
 }
 
-/** One synchronous read of the preroll: the video frame, the teaser, the controls. */
+/**
+ * One synchronous read of the preroll: the viewport, the video frame, the
+ * teaser, the controls. The teaser lives for the three seconds of the preroll
+ * (and holds its frame while the host paused), so its box is read in one pass
+ * instead of being polled: on the frame-starved WebKit CI runner a poll can
+ * outlive the preroll and the unmounted teaser (dispatch run 39156970605, see
+ * docs/OPEN_QUESTIONS.md "Cross-browser findings (#140)").
+ */
 function prerollGeometry(page: Page): Promise<PrerollGeometry> {
   return page.evaluate(() => {
     const rect = (element: Element): Rect => {
@@ -618,10 +745,35 @@ function prerollGeometry(page: Page): Promise<PrerollGeometry> {
     return {
       frame: rect(frame),
       teaser: rect(teaser),
+      viewport: { x: 0, y: 0, w: innerWidth, h: innerHeight },
       controls,
       barAboveTeaser: bar !== null && zOf(bar) > zOf(slot),
     };
   });
+}
+
+/**
+ * The box lies completely inside the viewport of the same synchronous read
+ * (strict, no subpixel slack: this is the "no scrolling to find it" claim).
+ */
+function expectInViewportBox(box: Rect, viewport: Rect, what: string): void {
+  const size = `${viewport.w}x${viewport.h}`;
+  expect(
+    box.x,
+    `${what} left edge inside the ${size} viewport`,
+  ).toBeGreaterThanOrEqual(viewport.x);
+  expect(
+    box.y,
+    `${what} top edge inside the ${size} viewport`,
+  ).toBeGreaterThanOrEqual(viewport.y);
+  expect(
+    box.x + box.w,
+    `${what} right edge inside the ${size} viewport`,
+  ).toBeLessThanOrEqual(viewport.x + viewport.w);
+  expect(
+    box.y + box.h,
+    `${what} bottom edge inside the ${size} viewport`,
+  ).toBeLessThanOrEqual(viewport.y + viewport.h);
 }
 
 function expectInside(inner: Rect, outer: Rect, what: string): void {
