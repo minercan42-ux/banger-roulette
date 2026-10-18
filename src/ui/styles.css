@@ -2373,6 +2373,39 @@ body {
       font-size: 24px;
       line-height: 26px;
     }
+    /* Preroll teaser on a phone (#146): the video frame is only ~200 px tall
+       and the sticky action bar covers its lower edge at the initial scroll
+       position, so the teaser is a compact stack (banner, small cards, one
+       line) that ends above the bar. The secondary note stays for screen
+       readers only. */
+    .br-linkedset--overlay .br-linkedset__item {
+      padding: var(--space-1);
+    }
+    .br-linkedset--overlay .br-linked--preroll {
+      --ls: 0.38;
+      flex-shrink: 0;
+      gap: var(--space-1);
+      padding-block: var(--space-1);
+    }
+    .br-linkedset--overlay .br-linked--preroll .br-linked__banner {
+      font-size: 20px;
+      line-height: 22px;
+      padding-block: 2px;
+    }
+    .br-linkedset--overlay .br-linkedset__body {
+      margin-top: var(--space-1);
+      font-size: 13px;
+      line-height: 16px;
+      text-wrap: balance;
+    }
+    .br-linkedset--overlay .br-linkedset__note {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
   }
 }
 
@@ -3333,6 +3366,16 @@ body {
     justify-content: center;
     padding: var(--space-2);
     pointer-events: none;
+  }
+  /* Phone (#146): the sticky action bar covers the lower part of the frame at
+     the initial scroll position, and where the frame starts varies with the
+     header's height. The teaser hugs the frame's top edge so it ends above the
+     bar either way. */
+  @media (max-width: 480px) {
+    .br-stage-video__preroll {
+      align-items: flex-start;
+      padding: var(--space-1);
+    }
   }
 
   /* A smaller card in a single tidy row under the stage. */
