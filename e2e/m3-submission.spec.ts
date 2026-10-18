@@ -447,11 +447,16 @@ test('an 80-character custom genre is shown whole on the plate and in two whole 
     expect(kept.insideClip).toBe(true);
     expect(kept.insidePlate).toBe(true);
     expect(kept.text).toBe(held.text);
-    const widths = await host.page.evaluate(() => ({
-      inner: window.innerWidth,
-      scroll: document.documentElement.scrollWidth,
-    }));
-    expect(widths.scroll).toBeLessThanOrEqual(widths.inner);
+    // Settled layout, not the first frame of SUBMISSION: one WebKit job
+    // measured the page 2 px wider than the viewport (362 of 360) right after
+    // the panel had been entered.
+    await expect
+      .poll(() =>
+        host.page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(0);
   } finally {
     await closeStages(stages);
   }

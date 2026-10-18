@@ -130,9 +130,14 @@ async function expectStableForms(
       // answer is slow enough for the swap to land while the identity check
       // still runs: the worst order a slow connection can produce.
       await context.route('**/fonts/*.woff2', async (route) => {
+        // The page is still navigating when the first font request arrives, and
+        // an evaluate that races the navigation fails with "Execution context
+        // was destroyed": count that poll as "no sample yet" and ask again.
         await expect
           .poll(() =>
-            pageRef.current?.evaluate(() => window.__homeSamples?.length ?? 0),
+            pageRef.current
+              ?.evaluate(() => window.__homeSamples?.length ?? 0)
+              .catch(() => 0),
           )
           .toBeGreaterThan(0);
         await route.continue();
