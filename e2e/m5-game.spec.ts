@@ -86,6 +86,21 @@ async function rateByUi(page: Page, value: number): Promise<void> {
 }
 
 /**
+ * Rates a chip of the playing song's bar with the keyboard (AK-2, #153).
+ * Firefox needs up to a second between the mouse down and up of a pointer
+ * click on a loaded runner, and the PLAYBACK panel reflows in that window
+ * while its notices come and go (the 54 px pause notice of `PhaseNotices`,
+ * the 34 px preroll notice), so the click can land beside the 44 px chip and
+ * never rate. Focus and Enter need no coordinates: the same remedy
+ * `pressFertig` uses (#140/#151), and how `e2e/a11y.spec.ts` drives the chips.
+ */
+async function rateByChipKey(page: Page, value: number): Promise<void> {
+  const chip = page.getByTestId(`rating-chip-${value}`);
+  await chip.press('Enter');
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+}
+
+/**
  * Moves PLAYBACK to the song with `videoId` with the host `ADVANCE` (the clips
  * themselves are not under test) and waits until every page renders it. Songs
  * that are skipped on the way are rated with `rating`, so they still score.
@@ -528,15 +543,15 @@ test('AK-2: a duplicated song cannot be rated by its owners, who both score it',
               .status,
           ).toBe('rejected');
         }
-        await rateByUi(cara.page, 8);
+        await rateByChipKey(cara.page, 8);
         await expect.poll(() => ratingOf(host.page, cId!, DUP)).toBe(8);
         dupPlayed = true;
       } else {
         // Alice and Bob rate Cara's song 6 through the bar, Cara owns it.
         await expect(cara.page.getByTestId('rating-own')).toBeVisible();
         await expect(host.page.getByTestId('rating-bar')).toBeVisible();
-        await rateByUi(host.page, 6);
-        await rateByUi(bob.page, 6);
+        await rateByChipKey(host.page, 6);
+        await rateByChipKey(bob.page, 6);
         if (dupPlayed) {
           // The shared song is summarised for everybody who saw it.
           await expect(cara.page.getByTestId('rating-summary')).toContainText(
