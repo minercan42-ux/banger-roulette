@@ -300,14 +300,16 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
   - Verschiedene Uploads desselben Songs werden nur verknüpft, wenn alles passt: Länge, Versionsmarker, exakter Songname, exakt gleiche Künstlermenge, beide Kanäle gehören dem Künstler.
   - Fan-, Lyrics- und Karaoke-Kanäle werden nie verknüpft.
   - Ein Song, der wie der Künstler heißt, wird nur bei exakt "Künstler" oder "Künstler - Künstler" verknüpft.
+  - (PM, 2026-10-18, #133): Uploads von Lyrics-Kanälen (Kanalname enthält nur lyric/lyrics, 7clouds, Lyrical Lemon) dürfen verlinkt werden, wenn der Titel Künstler und Track liefert und alle anderen Prüfungen passen (Künstler, Track, Dauer, Versionsmarker); Cover-, Karaoke-, Fan-, Tribute-, Nightcore-, Slowed-, Sped- und 8D-Kanäle bleiben gesperrt. Punktierte Abkürzungen gelten nur gleich, wenn die andere Schreibweise komplett großgeschrieben ist (U.S.A. = USA, R.E.M. = REM, aber P.O.D. ist nicht Pod). Gleiche Video-IDs landen immer in einer Gruppe.
 - **Warum:**
   - Der Owner hat ausdrücklich verlangt, dass verschiedene Songs nie als derselbe gelten.
   - Ein falsch verknüpfter Song zerstört eine Runde. Eine übersehene Dublette führt nur dazu, dass zwei Uploads getrennt bewertet werden.
   - Jede Review-Runde fand neue Grenzfälle, deshalb gilt jetzt eine allgemeine Regel statt Einzelfixes.
+  - (PM, 2026-10-18, #133): Playtest 2026-10-17, "Party In The USA (Lyrics)" wurde nicht mit dem offiziellen Video verlinkt; Lyrics-Videos tragen fast immer die Originalaufnahme.
 - **Verworfen:**
   - Unscharfer Titelvergleich mit Schwellwert: "Shape of You" wäre "Shape of Water" geworden.
   - Künstler-Jaccard ab 0.5: "Pink" wäre "Pink Floyd" geworden.
-- **Belege:** #106, PR #114, #115, PR #116, `docs/OPEN_QUESTIONS.md`
+- **Belege:** #106, PR #114, #115, PR #116, [PR #138](https://github.com/minercan42-ux/banger-roulette/pull/138), `docs/OPEN_QUESTIONS.md`
 
 ### D-040 Nur noch "Fertig", Vorschau startet automatisch
 
@@ -369,6 +371,15 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
   - Die erste Show nennt nur ihren eigenen Song, nichts von späteren Einträgen.
 - **Warum:** Im Playtest lief die Show bei mehreren Bangern (genau 10.0, D-025) zwei- oder mehrmals hintereinander. Das nutzte die seltene Show ab und hielt die Runde auf.
 - **Belege:** #134
+
+### D-045 Abgebrochenes Fertig nach kurzer Unterbrechung
+
+- **Datum:** 2026-10-18
+- **Wer:** PM (Owner kann widersprechen)
+- **Entscheidung:** Bricht ein laufendes "Fertig" ab, weil die Schreibberechtigung kurz weg war (Pause, Verbindungsabbruch), zeigt das Panel "Die Verbindung war kurz weg. Bitte noch einmal auf „Fertig“ drücken." und behält den Entwurf; kein automatischer neuer Versuch; die erste Abbruchursache eines Klicks zählt, ein Abbruch durch Widerruf der YouTube-Zustimmung oder eine Link-Änderung bleibt still.
+- **Warum:** Ein still verworfenes Fertig ließ Spieler glauben, sie seien fertig (gleicher Ablauf wie das P0 aus #108).
+- **Verworfen:** Automatisch erneut senden: könnte nach der Pause einen veralteten Entwurf einreichen.
+- **Belege:** #141, [PR #143](https://github.com/minercan42-ux/banger-roulette/pull/143)
 
 ## Beschlossen, Umsetzung offen
 
