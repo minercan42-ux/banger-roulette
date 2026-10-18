@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
 import type { Media } from '../src/shared/primitives';
+import { REEL_SPIN_MS } from '../src/ui/reel';
 import {
   FIXTURE_CHANNEL,
   fixtureThumbnail,
@@ -16,7 +17,9 @@ import {
   ensureConsent,
   enterSubmission,
   expectPreviewNotLoaded,
+  holdAutoPreview,
   newStage,
+  pressFertig,
   setSettings,
   snapshot,
   startPlayingPreview,
@@ -49,7 +52,12 @@ const STALE_B = 'RgKAFK5djSk';
 declare global {
   interface Window {
     __m3Token?: string;
-    __reelMarks?: { plateIn?: number; spinOut?: number };
+    __reelMarks?: {
+      plateIn?: number;
+      spinEnd?: number;
+      spinOut?: number;
+      crossingLag?: number;
+    };
   }
 }
 
@@ -139,9 +147,33 @@ test('four players see one deterministic wheel and the same localized genre', as
       await unlockSound(stage.page);
     }
     const initialPool = (await stateOf(host.page))?.remainingGenreIds ?? [];
-    await host.page.evaluate(() => {
-      const marks: { plateIn?: number; spinOut?: number } = {};
+    await host.page.evaluate((spinMs) => {
+      const marks: {
+        plateIn?: number;
+        spinEnd?: number;
+        spinOut?: number;
+        crossingLag?: number;
+      } = {};
       window.__reelMarks = marks;
+      // The measured screen shares the runner with three more contexts, so both
+      // the frame clock and React's commits lag behind the phase clock. The
+      // product flips its "stopped" flag on the first frame whose clock reading
+      // is past the spin path; `spinEnd` is that frame and `crossingLag` how
+      // far it was past the true end, which is the only part of the hold the
+      // runner is allowed to take away (`SPIN_MS` 5500 - `REEL_SPIN_MS` 3200 =
+      // 2300 ms of hold, 2 s of it required).
+      const tick = () => {
+        if (marks.spinEnd === undefined) {
+          const phase = window.__banger!.snapshot().state?.phase;
+          const now = window.__banger!.session.now();
+          if (phase?.type === 'GENRE_SPIN' && now - phase.startedAt >= spinMs) {
+            marks.spinEnd = performance.now();
+            marks.crossingLag = now - (phase.startedAt + spinMs);
+          }
+        }
+        window.requestAnimationFrame(tick);
+      };
+      window.requestAnimationFrame(tick);
       const scan = () => {
         const at = performance.now();
         if (
@@ -162,7 +194,7 @@ test('four players see one deterministic wheel and the same localized genre', as
         childList: true,
         subtree: true,
       });
-    });
+    }, REEL_SPIN_MS);
     await host.page.getByTestId('start-game').click();
     await waitForPhase(host.page, 'GENRE_SPIN');
     await Promise.all(
@@ -220,13 +252,23 @@ test('four players see one deterministic wheel and the same localized genre', as
 
     // The result stays visible for at least 2 s after the reel stops (the
     // plate pops in at the stop) before the phase ends, and the chosen genre
-    // stays on the table as a plate at the top of SUBMISSION.
+    // stays on the table as a plate at the top of SUBMISSION. The hold runs
+    // from `spinEnd`, the frame on which the app's own clock first shows the
+    // end of the spin path, to the phase change that unmounts the reel. The
+    // app can only notice the stop on a frame, so `crossingLag` (how far past
+    // the end that frame was) is added back: it is the part of the hold a
+    // loaded runner may take away, and the assertion still catches a shorter
+    // phase or a longer spin path.
     const marks = await host.page.evaluate(() => window.__reelMarks);
     expect(marks?.plateIn).toBeDefined();
+    expect(marks?.spinEnd).toBeDefined();
     expect(marks?.spinOut).toBeDefined();
-    expect(
-      (marks?.spinOut ?? 0) - (marks?.plateIn ?? 0),
-    ).toBeGreaterThanOrEqual(2000);
+    const hold =
+      (marks?.spinOut ?? 0) - (marks?.spinEnd ?? 0) + (marks?.crossingLag ?? 0);
+    if (hold < 2000) {
+      console.log(`reel hold: ${JSON.stringify(marks)}`);
+    }
+    expect(hold).toBeGreaterThanOrEqual(2000);
     for (const stage of stages) {
       const plate = stage.page
         .getByTestId('submission-panel')
@@ -260,12 +302,22 @@ test('four players see one deterministic wheel and the same localized genre', as
  * none clips).
  */
 async function plateFits(page: Page, scope: string) {
-  return page.evaluate(async (testId) => {
+  return page.evaluate((testId) => {
     const plate = document
       .querySelector(`[data-testid="${testId}"]`)!
       .querySelector<HTMLElement>('[data-testid="genre-plate"]')!;
     const name = plate.querySelector<HTMLElement>('.br-genre__name')!;
-    await Promise.all(plate.getAnimations().map((a) => a.finished));
+    // Settle the plate's one-off animations (pop-in) at their end state in
+    // place instead of waiting for them: on a slow frame clock (headless
+    // Firefox renders the felt backdrop at 1 to 3 fps on a CI-sized runner) the
+    // wait outlasts the 2.3 s hold, the phase change unmounts the plate and
+    // `finished` rejects with an AbortError. Infinite animations (the bump) are
+    // handled below.
+    for (const animation of plate.getAnimations()) {
+      if (animation.effect?.getComputedTiming().endTime !== Infinity) {
+        animation.finish();
+      }
+    }
     // Wrapping at rest: no clipped line in the name or on the plate.
     const nameFits = name.scrollHeight <= name.clientHeight + 1;
     const plateFits = plate.scrollHeight <= plate.clientHeight + 1;
@@ -396,11 +448,16 @@ test('an 80-character custom genre is shown whole on the plate and in two whole 
     expect(kept.insideClip).toBe(true);
     expect(kept.insidePlate).toBe(true);
     expect(kept.text).toBe(held.text);
-    const widths = await host.page.evaluate(() => ({
-      inner: window.innerWidth,
-      scroll: document.documentElement.scrollWidth,
-    }));
-    expect(widths.scroll).toBeLessThanOrEqual(widths.inner);
+    // Settled layout, not the first frame of SUBMISSION: one WebKit job
+    // measured the page 2 px wider than the viewport (362 of 360) right after
+    // the panel had been entered.
+    await expect
+      .poll(() =>
+        host.page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(0);
   } finally {
     await closeStages(stages);
   }
@@ -929,8 +986,12 @@ test('Fertig right after the paste submits the link before the preview loads', a
     const aliceId = (await snapshot(alice.page)).clientId;
     await ensureConsent(alice.page);
 
+    // A real pointer click: the debounce that inserts the preview is held, so
+    // the click provably comes first (the moving target is #151's).
+    const releasePreview = await holdAutoPreview(alice.page);
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
     await alice.page.getByTestId('finish-submission').click();
+    await releasePreview();
     // Premise, held by the fixture instead of the wall clock: the fixture
     // withholds `onReady` until the release below, so the click provably
     // precedes the preview load however slow the runner is.
@@ -1139,7 +1200,7 @@ test('a blocked autoplay offers the play button and Fertig plays inside its clic
     // load makes that premise deterministic (see the paste test above).
     await ensureConsent(bruno.page);
     await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_B));
-    await bruno.page.getByTestId('finish-submission').click();
+    await pressFertig(bruno.page);
     await expectPreviewNotLoaded(bruno.page, VALID_B);
     await releaseFixtureVideo(bruno.page, VALID_B);
     await expect(bruno.page.getByTestId('submission-notice')).toBeVisible({
@@ -1269,7 +1330,7 @@ test('a rejected submit during Fertig is not retried and does not finish', async
       );
 
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
-    await alice.page.getByTestId('finish-submission').click();
+    await pressFertig(alice.page);
     // Held premise (see the paste test above): the click, and with it the
     // only SUBMIT_SONG of this attempt, precedes the preview load. Without
     // the hold a slow runner lets the auto-preview play and autosave first,
@@ -1331,7 +1392,7 @@ test('a Fertig dropped by a pause tells the player to press it again and keeps t
       );
 
     await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_A));
-    await bruno.page.getByTestId('finish-submission').click();
+    await pressFertig(bruno.page);
     // The held load keeps the Fertig waiting for the preview to validate.
     await expectPreviewNotLoaded(bruno.page, VALID_A);
     await expect(bruno.page.getByTestId('finish-submission')).toHaveAttribute(

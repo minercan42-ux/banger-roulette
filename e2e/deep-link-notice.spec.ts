@@ -12,6 +12,17 @@ interface Sample {
   fieldTop: number;
   joining: boolean;
   notice: boolean;
+  /**
+   * True once the pixel face is loaded or, while it is still loading, once both
+   * metric fallbacks are resolved. Until then the last-resort monospace face is
+   * in use: Gecko and WebKit activate a `local()` @font-face one frame after the
+   * first layout, so those frames paint the hero a line wider at 360 px, while
+   * Chromium resolves such a face synchronously. See docs/OPEN_QUESTIONS.md
+   * (#140).
+   */
+  settled: boolean;
+  /** The pixel face itself is loaded (the swap away from the fallbacks happened). */
+  pixelLoaded: boolean;
 }
 
 declare global {
@@ -31,15 +42,33 @@ async function recordFieldTop(page: Page): Promise<void> {
   await page.addInitScript((selector) => {
     const samples: Sample[] = [];
     window.__homeSamples = samples;
+    // The two faces the pixel typography falls back to (see the stylesheet):
+    // while they are not resolved the last-resort monospace face is used.
+    const metricFallbacks = ['Jersey 10 Fallback', 'Jersey 10 Fallback Caps'];
     const sample = (): void => {
       const field = document.querySelector(selector);
       if (field === null) return;
+      const faceStates: Record<string, string> = {};
+      document.fonts.forEach((face) => {
+        faceStates[face.family.replaceAll('"', '')] = face.status;
+      });
+      const pixelLoaded = faceStates['Jersey 10'] === 'loaded';
       samples.push({
         fieldTop: field.getBoundingClientRect().top,
+        pixelLoaded,
         joining:
           document.querySelector('[data-testid="route-joining"]') !== null,
         notice:
           document.querySelector('[data-testid="identity-missing"]') !== null,
+        settled:
+          // The pixel face is in use as soon as it is loaded; before that the
+          // metric fallbacks must be resolved, otherwise the last-resort
+          // monospace face is in use and the hero wraps differently.
+          pixelLoaded ||
+          metricFallbacks.every((family) => {
+            const status = faceStates[family];
+            return status === 'loaded' || status === 'error';
+          }),
       });
     };
     const frame = (): void => {
@@ -75,7 +104,8 @@ const VIEWPORTS = [
 
 /**
  * Opens `/r/<code>` as a new visitor and checks the forms never move from the
- * first sampled layout until the notice is visible.
+ * first layout with the settled typography (= the two metric fallbacks of the
+ * pixel fonts are resolved, see `Sample.settled`) until the notice is visible.
  *
  * `realFonts` keeps the production typography: the pixel fonts are held back
  * until the form was painted and the clock response is slow, so first paint
@@ -100,15 +130,32 @@ async function expectStableForms(
   });
   try {
     if (options.realFonts) {
-      // The faces arrive only once the form has been painted, and the clock
-      // answer is slow enough for the swap to land while the identity check
-      // still runs: the worst order a slow connection can produce.
+      // The pixel faces arrive only once a frame with the metric fallbacks
+      // resolved and the pixel face still missing was recorded, so the swap is
+      // certainly ahead and inside the measured window, and the clock answer is
+      // slow enough for the swap to land while the identity check still runs:
+      // the worst order a slow connection can produce.
       await context.route('**/fonts/*.woff2', async (route) => {
+        // The page is still navigating when the first font request arrives, and
+        // an evaluate that races the navigation fails with "Execution context
+        // was destroyed": count that poll as "no sample yet" and ask again.
         await expect
-          .poll(() =>
-            pageRef.current?.evaluate(() => window.__homeSamples?.length ?? 0),
+          .poll(
+            () =>
+              pageRef.current
+                ?.evaluate(
+                  () =>
+                    window.__homeSamples?.filter(
+                      (entry) => entry.settled && !entry.pixelLoaded,
+                    ).length ?? 0,
+                )
+                .catch(() => 0),
+            { timeout: 3_000 },
           )
-          .toBeGreaterThan(0);
+          .toBeGreaterThan(0)
+          // Gecko loads the pixel face before it ever resolves the fallbacks
+          // (#144): there is no pre-swap frame to wait for, release the font.
+          .catch(() => undefined);
         await route.continue();
       });
       await context.route('**/api/time', async (route) => {
@@ -134,13 +181,44 @@ async function expectStableForms(
     }
 
     const samples = await page.evaluate(() => window.__homeSamples ?? []);
-    const before = samples.filter((entry) => entry.joining && !entry.notice);
-    const after = samples.filter((entry) => entry.notice);
+    // Measured from the settled typography on (`Sample.settled`): the frames
+    // before it are a first-paint reflow of the browser's last-resort face, not
+    // the notice insertion or the pixel-font swap this spec is about. Both stay
+    // fully inside the measured window: the notice appears while the identity
+    // check resolves and the pixel-font swap is held back until after the first
+    // sampled frame, so the 1 px rule below applies to both.
+    const settled = samples.filter((entry) => entry.settled);
+    const before = settled.filter((entry) => entry.joining && !entry.notice);
+    const after = settled.filter((entry) => entry.notice);
+    expect(samples.filter((entry) => !entry.settled && entry.notice)).toEqual(
+      [],
+    );
+    expect(settled.length).toBeGreaterThan(0);
     expect(before.length).toBeGreaterThan(0);
     expect(after.length).toBeGreaterThan(0);
     const reference = before[0].fieldTop;
-    for (const entry of samples) {
-      expect(Math.abs(entry.fieldTop - reference)).toBeLessThanOrEqual(1);
+    const moved = settled.filter(
+      (entry) => Math.abs(entry.fieldTop - reference) > 1,
+    );
+    if (moved.length > 0) {
+      console.log(`deep link samples: ${JSON.stringify(samples)}`);
+    }
+    expect(moved).toEqual([]);
+    if (options.realFonts) {
+      // Both sides of the pixel-font swap are in the window that was held to
+      // 1 px: frames on the fallbacks before it, frames on the pixel face after.
+      expect(settled.some((entry) => entry.pixelLoaded)).toBe(true);
+      if (browser.browserType().name() === 'firefox') {
+        // Browser limitation (#144, docs/OPEN_QUESTIONS.md): Gecko keeps the
+        // last-resort face until the pixel face arrives, so there is no
+        // fallback frame before the swap to measure.
+        test.info().annotations.push({
+          type: 'limitation',
+          description: 'no settled frame before the pixel-font swap (#144)',
+        });
+      } else {
+        expect(settled.some((entry) => !entry.pixelLoaded)).toBe(true);
+      }
     }
 
     const noticeBox = await notice.boundingBox();
@@ -192,14 +270,29 @@ test('plain Home reserves no notice slot', async ({ browser }) => {
     await expect(
       page.getByTestId('home-forms').locator('.br-notice'),
     ).toHaveCount(0);
+    // The pixel faces load right after the first layout; measure through the
+    // swap, not just up to the first visible form.
+    await page.waitForFunction(() =>
+      [...document.fonts].some(
+        (face) =>
+          face.family.replaceAll('"', '') === 'Jersey 10' &&
+          (face.status === 'loaded' || face.status === 'error'),
+      ),
+    );
+    await page.waitForTimeout(300);
 
     const samples = await page.evaluate(() => window.__homeSamples ?? []);
-    expect(samples.length).toBeGreaterThan(0);
-    for (const entry of samples) {
-      expect(
-        Math.abs(entry.fieldTop - samples[0].fieldTop),
-      ).toBeLessThanOrEqual(1);
+    // Same window as `expectStableForms`: from the settled typography on.
+    const settled = samples.filter((entry) => entry.settled);
+    expect(settled.length).toBeGreaterThan(0);
+    const reference = settled[0].fieldTop;
+    const moved = settled.filter(
+      (entry) => Math.abs(entry.fieldTop - reference) > 1,
+    );
+    if (moved.length > 0) {
+      console.log(`plain home samples: ${JSON.stringify(samples)}`);
     }
+    expect(moved).toEqual([]);
   } finally {
     await context.close();
   }

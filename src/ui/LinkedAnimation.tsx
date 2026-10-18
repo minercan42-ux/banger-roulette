@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SongView } from '../engine/selectors';
 import { useEmbedConsent } from './embed-consent';
@@ -180,10 +180,11 @@ const SPARKS = Array.from({ length: SPARK_COUNT }, (_, index) => {
  * scrolls itself to the middle of the viewport at most once per mount, and only
  * for an idle viewer: nothing outside the moment has focus, no wheel, touch,
  * key or pointer input in the last two seconds, and no other show holds the
- * viewport (all rechecked in the frame callback). The preroll teaser never
- * scrolls the page: the caller mounts it inside the video frame (the video is
- * not playing yet), where it is centred on the player and can never cover the
- * rating or skip controls; it never coexists with the reveal shows.
+ * viewport (all checked once, synchronously, when the entry mounts, before its
+ * first paint). The preroll teaser never scrolls the page: the caller mounts it
+ * inside the video frame (the video is not playing yet), where it is centred on
+ * the player and can never cover the rating or skip controls; it never
+ * coexists with the reveal shows.
  */
 export function LinkedAnimation({
   songs,
@@ -239,10 +240,13 @@ export function LinkedAnimation({
   // Bring a running reveal moment into view (see above). Once per mount: the
   // first attempt consumes the ref whether or not it scrolls, so a pause and
   // resume (or a changed prop) never re-arms it. A late join after the moment
-  // already ended finds it settled and leaves the page where it is.
+  // already ended finds it settled and leaves the page where it is. A layout
+  // effect, not a frame callback: the scroll happens in the commit that mounts
+  // the entry, before the first paint, so a slow frame clock (a loaded WebKit
+  // runner) cannot land it after the 700 ms impact.
   const following = variant === 'reveal' && hasLinked && !held && !paused;
   const followed = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = rootRef.current;
     if (!following || followed.current || !root) {
       return;
@@ -254,34 +258,26 @@ export function LinkedAnimation({
     ) {
       return;
     }
-    // The page only moves for a viewer who is idle: the checks run again in
-    // the frame callback, where the situation may already have changed.
-    const idle = () =>
-      !recentlyInteracted(lastUserInputAt, performance.now()) &&
-      !holdsInteractiveFocus(root);
-    if (!idle()) {
+    // The page only moves for a viewer who is idle.
+    if (
+      recentlyInteracted(lastUserInputAt, performance.now()) ||
+      holdsInteractiveFocus(root)
+    ) {
       return;
     }
-    // No cleanup on purpose: the ref is consumed, so a re-run (StrictMode, a
-    // pause) must not lose the one attempt; an unmounted root is skipped.
-    requestAnimationFrame(() => {
-      if (!root.isConnected || !idle()) {
-        return;
-      }
-      // Instant on purpose: the impact lands 700 ms in, a smooth scroll could
-      // still be on its way then.
-      root.scrollIntoView({
-        block: 'center',
-        inline: 'nearest',
-        behavior: 'instant',
-      });
-      // On a phone the sticky top bar and action bar cover the viewport's
-      // edges: centre the moment between them, not in the full viewport.
-      const shift = stickyBarShift(root.getBoundingClientRect());
-      if (shift !== 0) {
-        window.scrollBy({ top: shift, behavior: 'instant' });
-      }
+    // Instant on purpose: the impact lands 700 ms in, a smooth scroll could
+    // still be on its way then.
+    root.scrollIntoView({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'instant',
     });
+    // On a phone the sticky top bar and action bar cover the viewport's
+    // edges: centre the moment between them, not in the full viewport.
+    const shift = stickyBarShift(root.getBoundingClientRect());
+    if (shift !== 0) {
+      window.scrollBy({ top: shift, behavior: 'instant' });
+    }
   }, [following]);
 
   if (!hasLinked) {
