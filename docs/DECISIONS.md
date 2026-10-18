@@ -387,7 +387,7 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Wer:** Owner (Moment soll spannend sein, alle Owner bekommen die Punkte, Look abgenommen), PM (Ablauf und Vorrang)
 - **Entscheidung:**
   - Beim Reveal fliegen die Karten aller Owner zusammen, es gibt einen Aufprall, die Karten drehen sich um, dann Kette und Banner, jeder Owner erscheint mit seinen Punkten, und die Zeile "+X für A und B" (Owner-Anteil laut Engine, auch bei "halbiert") schließt den Moment ab; alles läuft innerhalb des Reveal-Slots.
-  - Im Vorlauf zeigt ein kurzer Teaser ohne Namen (AK-3) dasselbe im Videorahmen und nie über Bewertung, Skip oder Pause.
+  - Im Vorlauf zeigt ein kurzer Teaser bei aktiver Anonymität ohne Namen (AK-3) dasselbe im Videorahmen und nie über Bewertung, Skip oder Pause.
   - Der Moment ist Teil des Eintrags, nie ein zweites Vollbild-Overlay: Trägt der Eintrag die Banger-Show, ruht der Moment im fertigen Zustand und sein Sound entfällt; beim Jackpot läuft die Animation, aber der Sound gehört dem Jackpot.
   - Der laufende Moment scrollt einmal in den sichtbaren Bereich, aber nur ohne fokussiertes Bedienelement und ohne Eingabe in den letzten 2 s.
   - Reduzierte Bewegung zeigt den ruhigen Endzustand.
