@@ -317,10 +317,15 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                 {entry.winner && <JackpotBadge />}
               </div>
               {entry.linked && (
+                // The linked moment plays inside the entry's own slot, never
+                // as a second full-screen layer: while the banger show owns
+                // the viewport it rests at its settled frame (`held`).
                 <div className="mt-3">
                   <LinkedAnimation
                     songs={[asSongView(entry)]}
-                    showEmptyMarker={false}
+                    variant="reveal"
+                    pointsTenths={entry.roundPoints}
+                    held={entry.bangerShow}
                     elapsedMs={reference - entry.revealAt}
                     paused={reveal.pausedAt !== null}
                   />
