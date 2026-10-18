@@ -33,7 +33,7 @@ This is how work on Banger Roulette is organized. It binds every agent in this r
 ## Rules the PM enforces
 
 - **Concurrency.** At most three subagents run at the same time (implementers and reviewers together). Heavy local checks are serialized host-wide with `flock /tmp/br-check.lock`.
-- **Stuck check per agent.** Every subagent gets its own timer. After each full hour of its runtime the PM checks only that agent: new commits or pushes, CI progress, and its transcript. If it is stuck, the PM replaces it with a stronger model on the same worktree.
+- **Stuck check per agent.** Every subagent gets its own timer. After each full hour of its runtime the PM checks only that agent: new commits or pushes, CI progress, and its transcript. If it is stuck, the PM replaces it with a stronger model on the same worktree. The owner's omp hook `~/.omp/agent/hooks/post/br-stuck-check.ts` enforces the check: it wakes the PM after each full hour of an agent's runtime.
 - **Model ladder.** For non-visual work: DeepSeek, then Sonnet, then GPT. For visual work: Sonnet, then GPT. Visual work and visual judgement never run on DeepSeek.
 - **Local gate.** `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm size:check && pnpm i18n:check`, plus only the Playwright specs the change adds or modifies. The full e2e suite runs in CI; CI green is mandatory.
 - **Review policy.** A review blocks only for real bugs, security or privacy issues, AK-2/AK-3 anonymity leaks, or unmet acceptance criteria. There are no demands for tests of tests. Minor findings are non-blocking; the PM collects them into a follow-up or cleanup issue.
@@ -67,5 +67,6 @@ This is how work on Banger Roulette is organized. It binds every agent in this r
   | `br-reviewer-gpt`    | GPT      | Default reviewer                                 |
   | `br-reviewer-claude` | Sonnet   | Fallback reviewer                                |
 
+- **Stuck-check hook** (owner's omp user config, `~/.omp/agent/hooks/post/br-stuck-check.ts`): for sessions whose working directory is inside the banger-roulette project it tracks every subagent the session spawns (`task`) or revives (`write agent://<id>`), notices when one finishes and, after each full hour of an agent's runtime, sends an `aside` message that wakes the PM (also out of a running `wait`) with the check list: commits and pushes in the worktree, CI and dispatch runs of the branch, and the transcript tail. It also shows `agents: <name> <age>` in the status line. It is scoped to this project and takes effect from the next omp session start.
 - **Playtest bots:** `../playtest/bots.mjs` (README alongside). Join an owner room: `node bots.mjs --room CODE --bots 2`. Create a room: `node bots.mjs --bots 3 --min-players 3 [--fast]`. The bots run headless and muted against production. When a UI or rules change breaks them, the issue that causes the break also updates the bots.
 - **Board:** GitHub project 1 of `minercan42-ux`. Its Status field moves to In Progress at claim and to Done at merge.
