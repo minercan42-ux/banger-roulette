@@ -86,6 +86,11 @@ interface PanelRefs {
   finishRejection: string | null;
   /** Bumped when consent or write access is withdrawn; ends a running Fertig. */
   epoch: number;
+  /**
+   * Why the current Fertig click was cancelled; the first cause wins, so a
+   * later write loss never reclassifies a consent-cancelled click.
+   */
+  cancelCause: 'consent' | 'writeLost' | null;
 }
 
 /** The latest rendered inputs, readable from timers and async callbacks. */
@@ -214,6 +219,7 @@ export function SubmissionPanel({
     finishing: false,
     finishRejection: null,
     epoch: 0,
+    cancelCause: null,
   });
   // The latest draft for timers and async callbacks, which must never read a
   // stale render closure.
@@ -262,7 +268,9 @@ export function SubmissionPanel({
   // Revoking the consent (drawer) stops the preview player at once.
   useEffect(() => {
     if (!consent) {
-      stateRef.current.epoch += 1;
+      const refs = stateRef.current;
+      refs.cancelCause ??= 'consent';
+      refs.epoch += 1;
       teardown();
     }
   }, [consent, teardown]);
@@ -288,6 +296,7 @@ export function SubmissionPanel({
             snapshot.connectionId,
           ).canSubmit
         ) {
+          stateRef.current.cancelCause ??= 'writeLost';
           stateRef.current.epoch += 1;
           teardown();
           setStatus({ type: 'idle' });
@@ -677,7 +686,8 @@ export function SubmissionPanel({
     );
   }
 
-  async function submitAndFinish() {
+  /** Resolves true once the host accepted FINISH_SUBMISSION. */
+  async function submitAndFinish(): Promise<boolean> {
     const refs = stateRef.current;
     const epoch = refs.epoch;
     const first = draftRef.current;
@@ -686,41 +696,43 @@ export function SubmissionPanel({
       first.linkText.trim() !== ''
     ) {
       setNoticeKey('submission.linkInvalid');
-      return;
+      return false;
     }
     if (parseYouTubeLink(first.linkText) !== null) {
       await refs.saving;
       if (refs.finishRejection !== null) {
         setNoticeKey(`errors.${refs.finishRejection}`);
-        return;
+        return false;
       }
       // Everything below reads the draft as it is now, not as it was at the click.
       const draft = draftRef.current;
       const link = parseYouTubeLink(draft.linkText);
       if (!finishLive(epoch)) {
-        return;
+        return false;
       }
       if (link === null) {
         setNoticeKey('submission.linkInvalid');
-        return;
+        return false;
       }
       if (!savedMatches(link.videoId, draft.startSeconds)) {
         if (!draft.consent) {
           setNoticeKey('submission.consentRequired');
-          return;
+          return false;
         }
         if (!(await validateAndSave(link.videoId, draft.startSeconds))) {
-          return;
+          return false;
         }
         if (!finishLive(epoch)) {
-          return;
+          return false;
         }
       }
     }
     const result = await session.dispatch({ type: 'FINISH_SUBMISSION' });
     if (result.status === 'rejected') {
       setNoticeKey(`errors.${result.reason}`);
+      return false;
     }
+    return true;
   }
 
   /**
@@ -742,11 +754,19 @@ export function SubmissionPanel({
     }
     clearTimers(refs);
     refs.finishRejection = null;
+    refs.cancelCause = null;
     setBusy(true);
     setFinishing(true);
     setNoticeKey(null);
     try {
-      await submitAndFinish();
+      const finished = await submitAndFinish();
+      // A Fertig that stopped without a notice of its own, because write
+      // access closed (pause, short disconnect), must not look like it
+      // worked. Consent revocation and link edits keep ending silently: their
+      // own hints explain them. No automatic retry; the draft stays.
+      if (!finished && refs.cancelCause === 'writeLost') {
+        setNoticeKey((current) => current ?? 'submission.finishInterrupted');
+      }
     } finally {
       refs.finishing = false;
       setBusy(false);
