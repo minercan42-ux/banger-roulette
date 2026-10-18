@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { sfxEventsFor, type SfxSnapshot } from './SfxDirector';
+import { hasLinkedCue, sfxEventsFor, type SfxSnapshot } from './SfxDirector';
 
 /** A quiet baseline; every case changes exactly the slice it is about. */
 function snapshot(overrides: Partial<SfxSnapshot> = {}): SfxSnapshot {
@@ -211,5 +211,31 @@ describe('sfxEventsFor', () => {
       sfxEventsFor(prev, snapshot({ phase: 'REVEAL', revealedEntries: 1 })),
     ).toEqual([]);
     expect(sfxEventsFor(prev, prev)).toEqual([]);
+  });
+});
+
+describe('hasLinkedCue', () => {
+  const plain = {
+    linked: true,
+    banger: false,
+    winner: false,
+    bangerShow: false,
+  };
+
+  test('a linked entry plays its cue', () => {
+    expect(hasLinkedCue(plain)).toBe(true);
+    expect(hasLinkedCue({ ...plain, linked: false })).toBe(false);
+  });
+
+  test('the banger show and the jackpot own the sound of their entry', () => {
+    expect(hasLinkedCue({ ...plain, banger: true, bangerShow: true })).toBe(
+      false,
+    );
+    expect(hasLinkedCue({ ...plain, winner: true })).toBe(false);
+  });
+
+  test('a later banger without a show, even the winner, has no other show and keeps the cue', () => {
+    expect(hasLinkedCue({ ...plain, banger: true })).toBe(true);
+    expect(hasLinkedCue({ ...plain, banger: true, winner: true })).toBe(true);
   });
 });

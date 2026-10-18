@@ -1140,60 +1140,6 @@
       var(--delay, 0ms) both;
   }
 
-  .br-linked {
-    display: flex;
-    justify-content: center;
-    position: relative;
-    height: 280px;
-  }
-  .br-linked__card {
-    position: absolute;
-    top: 30px;
-  }
-  .br-linked__card--a {
-    animation: br-link-a 1400ms var(--ease-out) both;
-  }
-  .br-linked__card--b {
-    animation: br-link-b 1400ms var(--ease-out) both;
-  }
-  .br-linked__chain {
-    position: absolute;
-    height: 8px;
-    width: 120px;
-    left: 50%;
-    top: 116px;
-    translate: -50% -50%;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--color-gold) 0 14px,
-      transparent 14px 20px
-    );
-    animation: br-chain 1400ms var(--ease-out) both;
-  }
-  .br-linked__banner {
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    translate: -50% 0;
-    white-space: nowrap;
-    font: 400 30px/32px var(--font-pixel);
-    color: var(--color-card-ink);
-    background: var(--color-gold);
-    border-radius: var(--radius-md);
-    box-shadow: var(--press-gold);
-    padding: 6px var(--space-4);
-    animation: br-pop-in var(--dur-pop) var(--ease-spring) 1200ms both;
-  }
-  .br-linked__names {
-    position: absolute;
-    top: 0;
-    z-index: 7;
-    left: 50%;
-    translate: -50% 0;
-    white-space: nowrap;
-    animation: br-fade-up var(--dur-base) var(--ease-out) 1500ms both;
-  }
-
   /* ---------- Shared keyframes ---------- */
   @keyframes br-pop-in {
     0% {
@@ -1338,55 +1284,6 @@
       transform: scale(1) rotate(-2deg);
     }
   }
-  @keyframes br-link-a {
-    0% {
-      transform: translateX(-170px) rotate(-12deg);
-    }
-    55% {
-      transform: translateX(-90px) rotate(-8deg);
-    }
-    80% {
-      transform: translateX(-22px) rotate(-3deg);
-    }
-    100% {
-      transform: translateX(-36px) rotate(-7deg);
-    }
-  }
-  @keyframes br-link-b {
-    0% {
-      transform: translateX(170px) rotate(12deg);
-    }
-    55% {
-      transform: translateX(90px) rotate(8deg);
-    }
-    80% {
-      transform: translateX(22px) rotate(3deg);
-    }
-    100% {
-      transform: translateX(36px) rotate(7deg);
-    }
-  }
-  @keyframes br-chain {
-    0% {
-      width: 0;
-      opacity: 0;
-    }
-    40% {
-      width: 0;
-      opacity: 1;
-    }
-    65% {
-      width: 120px;
-    }
-    85% {
-      width: 20px;
-      opacity: 1;
-    }
-    100% {
-      width: 20px;
-      opacity: 0;
-    }
-  }
 
   /* ---------- Reduced motion: everything static, state changes as fades ---------- */
   @media (prefers-reduced-motion: reduce) {
@@ -1408,21 +1305,8 @@
     .br-badge.is-new,
     .br-card__owner,
     .br-chip.is-drop,
-    .br-jackpot__word,
-    .br-linked__banner,
-    .br-linked__names {
+    .br-jackpot__word {
       animation: br-fade-up var(--dur-base) linear both !important;
-    }
-    .br-linked__card--a {
-      animation: none;
-      transform: translateX(-36px) rotate(-7deg);
-    }
-    .br-linked__card--b {
-      animation: none;
-      transform: translateX(36px) rotate(7deg);
-    }
-    .br-linked__chain {
-      display: none;
     }
     .br-btn,
     .br-card,
@@ -2027,7 +1911,15 @@ body {
     padding: var(--space-1) var(--space-3);
   }
 
-  /* Linked moment inside a panel or card. */
+  /* ---------- Spiritually Linked moment (FR-26, #135) ----------
+     One stage per linked entry. Reveal timeline in ms (LINKED_REVEAL_MS =
+     2200, inside the 2500 ms reveal slot): the cards fly in 0-1000 and
+     collide at 700 (flash, two rings, sparks, jolt, flip, chain), the banner
+     stamps at 900, the owner plates pop from 1150 on, the points line comes
+     at 1500. The preroll variant keeps the opening without the flip and has
+     its plates earlier (LINKED_PREROLL_MS = 2000, inside the 3000 ms preroll).
+     Calm variant (.br-linked--calm): reduced motion or a show on top; the
+     state only fades in. */
   .br-linkedset {
     display: flex;
     flex-direction: column;
@@ -2036,38 +1928,185 @@ body {
   .br-linkedset__item {
     min-width: 0;
   }
-  .br-linkedset .br-linked {
+  .br-linked {
+    --ls: 1;
+    --gap: var(--space-4);
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-4);
     width: 100%;
-    overflow-x: clip;
+    padding: var(--space-6) var(--space-4) var(--space-4);
+    overflow: clip;
+    border-radius: var(--radius-md);
+    background:
+      radial-gradient(
+        ellipse at 50% 62%,
+        rgba(245, 182, 48, 0.2) 0,
+        transparent 62%
+      ),
+      var(--color-panel);
+    box-shadow: var(--drop-edge);
   }
-  .br-linkedset .br-linked .br-card {
+  .br-linked--preroll {
+    --ls: 0.75;
+    padding-block: var(--space-4);
+  }
+  .br-linked__banner {
+    position: relative;
+    z-index: 3;
+    max-width: 100%;
+    text-align: center;
+    text-wrap: balance;
+    font: 400 32px/34px var(--font-pixel);
+    color: var(--color-card-ink);
+    background: var(--color-gold);
+    border-radius: var(--radius-md);
+    box-shadow: var(--press-gold);
+    padding: 6px var(--space-4);
+    rotate: -2deg;
+  }
+  .br-linked__seats {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: var(--space-4) var(--gap);
+    max-width: 100%;
+  }
+  .br-linked__seat {
+    --seat: calc(124px * var(--ls));
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: var(--seat);
+  }
+  .br-linked__cardbox {
+    position: relative;
+    width: var(--seat);
+    height: calc(172px * var(--ls));
+  }
+  .br-linked .br-linked__card {
+    position: absolute;
+    inset: 0 auto auto 0;
+    scale: var(--ls);
+    transform-origin: 0 0;
     cursor: default;
     pointer-events: none;
   }
-  .br-linkedset .br-card__title {
+  .br-linked .br-card__title {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     overflow: hidden;
   }
-  .br-linkedset .br-card__sub {
+  .br-linked .br-card__sub {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .br-linkedset .br-card__thumb {
+  .br-linked .br-card__thumb {
     display: block;
     width: 100%;
   }
-  .br-linkedset .br-linked__names {
-    width: max-content;
-    max-width: 100%;
-    white-space: normal;
+  /* The clamp between two neighbouring cards. */
+  .br-linked__link {
+    position: absolute;
+    z-index: 4;
+    top: calc(86px * var(--ls));
+    left: calc(-1 * var(--gap) - 8px);
+    width: calc(var(--gap) + 16px);
+    height: 8px;
+    translate: 0 -50%;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--color-gold) 0 8px,
+      transparent 8px 12px
+    );
+    filter: drop-shadow(0 2px 0 var(--color-edge));
+  }
+  .br-linked__plate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    width: 100%;
+    min-width: 0;
     text-align: center;
+  }
+  .br-linked__name {
+    max-width: 100%;
+    font: 400 24px/24px var(--font-pixel);
+    color: var(--color-cream);
     overflow-wrap: anywhere;
-    background: var(--color-panel);
+  }
+  .br-linked__points {
+    font: 400 26px/26px var(--font-pixel);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-gold);
+    background: var(--color-well);
     border-radius: var(--radius-sm);
+    box-shadow: var(--drop-edge-sm);
     padding: 2px var(--space-2);
+  }
+  .br-linked__flash,
+  .br-linked__ring,
+  .br-linked__sparks {
+    position: absolute;
+    pointer-events: none;
+  }
+  .br-linked__flash {
+    inset: 0;
+    z-index: 1;
+    opacity: 0;
+    background: radial-gradient(
+      circle at 50% 60%,
+      var(--color-cream) 0,
+      rgba(245, 182, 48, 0.65) 34%,
+      transparent 70%
+    );
+  }
+  .br-linked__ring {
+    z-index: 1;
+    left: 50%;
+    top: 58%;
+    width: 120px;
+    height: 120px;
+    margin: -60px 0 0 -60px;
+    border: 6px solid var(--color-gold);
+    border-radius: var(--radius-round);
+    opacity: 0;
+  }
+  .br-linked__ring--late {
+    border-color: var(--color-red);
+  }
+  .br-linked__sparks {
+    z-index: 3;
+    left: 50%;
+    top: 58%;
+    width: 0;
+    height: 0;
+  }
+  .br-linked__spark {
+    position: absolute;
+    left: -5px;
+    top: -5px;
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    background: var(--color-gold);
+  }
+  .br-linked__spark--1 {
+    background: var(--color-cream);
+  }
+  .br-linked__spark--2 {
+    background: var(--color-red);
   }
   .br-linkedset__body {
     margin: var(--space-2) 0 0;
@@ -2075,31 +2114,225 @@ body {
     font: 400 16px/22px var(--font-text);
     color: var(--color-cream);
   }
+  .br-linkedset__body--points {
+    font: 400 28px/30px var(--font-pixel);
+    overflow-wrap: anywhere;
+  }
   .br-linkedset__note {
     margin: var(--space-1) 0 0;
     text-align: center;
     font: 400 14px/18px var(--font-text);
     color: var(--color-cream-muted);
   }
+
+  /* Full motion. */
+  .br-linked:not(.br-linked--calm) .br-linked__cardbox {
+    animation: br-linked-fly 1000ms linear both;
+  }
+  .br-linked--reveal:not(.br-linked--calm) .br-linked__card .br-card__inner {
+    animation: br-linked-flip 420ms var(--ease-spring) 700ms both;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__seats {
+    animation: br-linked-jolt 420ms steps(1, end) 700ms both;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__link {
+    animation: br-linked-link 300ms steps(4, end) 760ms both;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__banner {
+    animation: br-linked-stamp 420ms var(--ease-out) 900ms both;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__plate {
+    animation: br-pop-in var(--dur-pop) var(--ease-spring)
+      calc(1150ms + min(var(--i) * 120ms, 600ms)) both;
+  }
+  .br-linked--preroll:not(.br-linked--calm) .br-linked__plate {
+    animation-delay: calc(950ms + min(var(--i) * 120ms, 600ms));
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__flash {
+    animation: br-linked-flash 380ms steps(4, end) 700ms forwards;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__ring {
+    animation: br-linked-ring 620ms steps(6, end) 700ms forwards;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__ring--late {
+    animation-delay: 840ms;
+  }
+  .br-linked:not(.br-linked--calm) .br-linked__spark {
+    animation: br-linked-spark 520ms steps(5, end) 700ms forwards;
+  }
+  .br-linked--reveal:not(.br-linked--calm) ~ .br-linkedset__body {
+    animation: br-fade-up var(--dur-base) var(--ease-out) 1500ms both;
+  }
+  .br-linked--preroll:not(.br-linked--calm) ~ .br-linkedset__body,
+  .br-linked--preroll:not(.br-linked--calm) ~ .br-linkedset__note {
+    animation: br-fade-up var(--dur-base) var(--ease-out) 1200ms both;
+  }
+
+  /* Calm: the settled frame, state changes fade in. */
+  .br-linked--calm .br-linked__link,
+  .br-linked--calm .br-linked__banner,
+  .br-linked--calm .br-linked__plate,
+  .br-linked--calm ~ .br-linkedset__body,
+  .br-linked--calm ~ .br-linkedset__note {
+    animation: br-fade-up var(--dur-base) linear both;
+  }
+  @keyframes br-linked-fly {
+    0% {
+      transform: translate(calc(var(--o) * 420px), -150px)
+        rotate(calc(var(--o) * 55deg)) scale(0.6);
+      opacity: 0;
+      animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.55);
+    }
+    12% {
+      opacity: 1;
+    }
+    70% {
+      transform: translate(calc(var(--o) * -22px), 8px)
+        rotate(calc(var(--o) * -4deg)) scale(1.08);
+      animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+    }
+    84% {
+      transform: translate(calc(var(--o) * 6px), -4px)
+        rotate(calc(var(--o) * 2deg)) scale(0.98);
+      animation-timing-function: cubic-bezier(0.2, 0, 0.2, 1);
+    }
+    100% {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes br-linked-flip {
+    from {
+      transform: rotateY(0deg);
+    }
+    to {
+      transform: rotateY(180deg);
+    }
+  }
+  @keyframes br-linked-jolt {
+    0% {
+      translate: 0 0;
+    }
+    14% {
+      translate: -6px 3px;
+    }
+    28% {
+      translate: 5px -4px;
+    }
+    43% {
+      translate: -4px 2px;
+    }
+    57% {
+      translate: 3px -2px;
+    }
+    71% {
+      translate: -2px 1px;
+    }
+    86% {
+      translate: 1px 0;
+    }
+    100% {
+      translate: 0 0;
+    }
+  }
+  @keyframes br-linked-link {
+    from {
+      scale: 0 1;
+      opacity: 0;
+    }
+    to {
+      scale: 1 1;
+      opacity: 1;
+    }
+  }
+  @keyframes br-linked-stamp {
+    0% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+    55% {
+      transform: scale(0.92);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes br-linked-flash {
+    0% {
+      opacity: 0;
+    }
+    25% {
+      opacity: 0.9;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes br-linked-ring {
+    0% {
+      transform: scale(0.3);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(5);
+      opacity: 0;
+    }
+  }
+  @keyframes br-linked-spark {
+    0% {
+      transform: translate(0, 0) scale(1.4);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--dx), var(--dy)) scale(0.4);
+      opacity: 0;
+    }
+  }
+
+  @media (min-width: 900px) {
+    /* The desktop stage is wide: the cards get the room. */
+    .br-linked {
+      --ls: 1.15;
+    }
+    .br-linked--preroll {
+      --ls: 0.9;
+    }
+  }
+  @media (max-width: 640px) {
+    .br-linked {
+      --ls: 0.8;
+      --gap: var(--space-3);
+      padding-inline: var(--space-3);
+    }
+    .br-linked--preroll {
+      --ls: 0.65;
+    }
+    .br-linked__banner {
+      font-size: 26px;
+      line-height: 28px;
+    }
+  }
   @media (max-width: 480px) {
-    /* Names wrap to three lines on a phone: make room above the cards. */
-    .br-linkedset .br-linked--named {
-      height: 330px;
+    .br-linked {
+      --ls: 0.55;
+      --gap: var(--space-2);
     }
-    .br-linkedset .br-linked--named .br-linked__card {
-      top: 80px;
+    .br-linked--preroll {
+      --ls: 0.5;
     }
-    .br-linkedset .br-linked--named .br-linked__chain {
-      top: 166px;
+    .br-linked__name {
+      font-size: 20px;
+      line-height: 20px;
     }
-    .br-linkedset .br-linked__banner {
-      width: max-content;
-      max-width: 100%;
-      white-space: normal;
-      text-align: center;
+    .br-linked__points {
+      font-size: 22px;
+      line-height: 22px;
+    }
+    .br-linkedset__body--points {
       font-size: 24px;
       line-height: 26px;
-      padding: 4px var(--space-3);
     }
   }
 }

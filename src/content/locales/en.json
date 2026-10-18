@@ -248,7 +248,7 @@
     "banner": "Spiritually Linked!",
     "body_one": "{{count}} player submitted the same song.",
     "body_other": "{{count}} players submitted the same song.",
-    "names": "Submitted by: {{names}}",
+    "points": "{{points}} for {{names}}",
     "anonymousNote": "Names follow at the reveal.",
     "none": "No song was submitted twice."
   },
