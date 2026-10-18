@@ -163,28 +163,22 @@ declare global {
  * the cards hit and stay there. Installed before the reveal starts, read
  * afterwards.
  *
- * The sampler runs on a 16 ms timer and derives the timeline position from the
- * animation's `startTime`, not from a `requestAnimationFrame` loop reading
- * `currentTime` inside the 700..1100 ms of the shake: on a loaded CI runner
- * the page paints so slowly that this 400 ms window held two or three frames
- * in Chromium and WebKit and none in Firefox (there the animation only starts,
- * and the page stops answering for seconds, after the shake has passed), so
- * the sample count measured the frame rate, not the stage.
+ * The sampler is a `requestAnimationFrame` loop that reads the running
+ * animation's `currentTime`, so every painted frame inside the shake is one
+ * sample, whatever the frame rate; the assertion asks for one such frame, not
+ * for a count (a count measured the frame rate). A frame whose animation has
+ * no `startTime` yet still has a `currentTime` and is sampled.
  */
 function sampleImpact(page: Page): Promise<void> {
   return page.evaluate((slotMs) => {
     const samples: ImpactSample[] = [];
     window.__impact = samples;
-    setInterval(() => {
+    const tick = () => {
       const root = document.querySelector('[data-testid="linked-animation"]');
       const stage = root?.querySelector('.br-linked');
       const card = root?.querySelector('.br-linked__cardbox');
-      const started = card?.getAnimations()[0]?.startTime;
-      if (!stage || typeof started !== 'number') {
-        return;
-      }
-      const time = performance.now() - started;
-      if (time >= 700 && time <= slotMs) {
+      const time = card?.getAnimations()[0]?.currentTime;
+      if (stage && typeof time === 'number' && time >= 700 && time <= slotMs) {
         const rect = stage.getBoundingClientRect();
         samples.push({
           time,
@@ -196,7 +190,9 @@ function sampleImpact(page: Page): Promise<void> {
           vw: innerWidth,
         });
       }
-    }, 16);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }, REVEAL_PER_SONG_MS);
 }
 
@@ -215,22 +211,14 @@ async function expectImpactSeen(page: Page): Promise<void> {
     return;
   }
   const samples = await page.evaluate(() => window.__impact ?? []);
-  // At least one sample inside the shake itself (700..1100 ms): the stage was
-  // on screen when the cards hit. No minimum count: that measured the frame
-  // rate. The later samples keep it there for the rest of the slot. When the
-  // runner ran no timer tick inside that 400 ms window at all (one WebKit job
-  // on a phone viewport), nobody could have seen the impact either: the check
-  // then rests on the samples after it and says so in an annotation.
-  if (samples.filter((sample) => sample.time <= 1100).length === 0) {
-    test.info().annotations.push({
-      type: 'limitation',
-      description: 'no sample inside the shake window: runner stalled',
-    });
-    expect(
-      samples.length,
-      'the stage was sampled after the impact',
-    ).toBeGreaterThan(0);
-  }
+  // A painted frame inside the shake itself (700..1100 ms): the stage was on
+  // screen when the cards hit. One frame is enough, no minimum count; if the
+  // window was never painted the test fails. The later samples keep the stage
+  // there for the rest of the slot.
+  expect(
+    samples.filter((sample) => sample.time <= 1100).length,
+    'a frame inside the shake was sampled',
+  ).toBeGreaterThan(0);
   for (const sample of samples) {
     expect(sample.top).toBeGreaterThanOrEqual(0);
     expect(sample.bottom).toBeLessThanOrEqual(sample.vh);
