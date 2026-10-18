@@ -579,21 +579,29 @@ function intersects(a: Rect, b: Rect): boolean {
 }
 
 /**
- * Teaser inside the frame, centred on it, clear of every control. A control in
- * a sticky bar (the phone's action bar) may sit over the frame's box when the
- * page is scrolled; there the bar has to paint above the teaser.
+ * Teaser inside the frame, horizontally centred on it, clear of every control;
+ * on desktop also vertically centred (a phone's sticky action bar covers the
+ * frame's lower part, see the phone test for the clearance from it). A control
+ * in a sticky bar (the phone's action bar) may sit over the frame's box when
+ * the page is scrolled; there the bar has to paint above the teaser.
  */
-function expectTeaserPlaced(geometry: PrerollGeometry, what: string): void {
+function expectTeaserPlaced(
+  geometry: PrerollGeometry,
+  what: string,
+  phone: boolean,
+): void {
   const { frame, teaser, controls, barAboveTeaser } = geometry;
   expectInside(teaser, frame, `${what}: teaser`);
   expect(
     Math.abs(teaser.x + teaser.w / 2 - (frame.x + frame.w / 2)),
     `${what}: horizontally centred on the video`,
   ).toBeLessThanOrEqual(1);
-  expect(
-    Math.abs(teaser.y + teaser.h / 2 - (frame.y + frame.h / 2)),
-    `${what}: vertically centred on the video`,
-  ).toBeLessThanOrEqual(1);
+  if (!phone) {
+    expect(
+      Math.abs(teaser.y + teaser.h / 2 - (frame.y + frame.h / 2)),
+      `${what}: vertically centred on the video`,
+    ).toBeLessThanOrEqual(1);
+  }
   expect(Object.keys(controls)).toContain('rating-section');
   for (const [id, control] of Object.entries(controls)) {
     if (control.inStickyBar) {
@@ -630,6 +638,7 @@ for (const [size, viewport] of [
         mediaOf(SOLO_A),
       ]);
       const host = pages[0]!;
+      const phone = size === 'phone';
       const rating = host.getByTestId('rating-section');
       await expect(host.getByTestId('linked-animation')).toHaveAttribute(
         'data-variant',
@@ -638,21 +647,126 @@ for (const [size, viewport] of [
       );
 
       // Running, then with the rating section scrolled into the middle.
-      expectTeaserPlaced(await prerollGeometry(host), 'running');
+      expectTeaserPlaced(await prerollGeometry(host), 'running', phone);
       await rating.evaluate((element) =>
         element.scrollIntoView({ block: 'center', behavior: 'instant' }),
       );
-      expectTeaserPlaced(await prerollGeometry(host), 'running, scrolled');
+      expectTeaserPlaced(
+        await prerollGeometry(host),
+        'running, scrolled',
+        phone,
+      );
 
       // Paused (the preroll holds its frame), unscrolled and scrolled again.
       expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
       await expect(host.getByTestId('pause-banner')).toBeVisible();
       await host.evaluate(() => window.scrollTo(0, 0));
-      expectTeaserPlaced(await prerollGeometry(host), 'paused');
+      expectTeaserPlaced(await prerollGeometry(host), 'paused', phone);
       await rating.evaluate((element) =>
         element.scrollIntoView({ block: 'center', behavior: 'instant' }),
       );
-      expectTeaserPlaced(await prerollGeometry(host), 'paused, scrolled');
+      expectTeaserPlaced(
+        await prerollGeometry(host),
+        'paused, scrolled',
+        phone,
+      );
+    } finally {
+      await closeStages(stages);
+    }
+  });
+}
+
+interface PhoneTeaser {
+  scrollY: number;
+  stage: Rect;
+  cards: Rect[];
+  text: Record<string, Rect>;
+  bar: Rect;
+}
+
+/** One synchronous read of the settled phone teaser and the action bar. */
+function phoneTeaser(page: Page): Promise<PhoneTeaser> {
+  return page.evaluate(() => {
+    const rect = (element: Element): Rect => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, w: box.width, h: box.height };
+    };
+    const root = document.querySelector('[data-testid="linked-animation"]');
+    const stage = root?.querySelector('.br-linkedset__item');
+    const bar = document.querySelector('.br-table__actions');
+    if (!root || !stage || !bar) {
+      throw new Error('the preroll teaser is not on screen');
+    }
+    const text: Record<string, Rect> = {};
+    for (const selector of ['.br-linked__banner', '.br-linkedset__body']) {
+      const element = root.querySelector(selector);
+      if (element) {
+        text[selector] = rect(element);
+      }
+    }
+    return {
+      scrollY: window.scrollY,
+      stage: rect(stage),
+      cards: [...root.querySelectorAll('.br-linked__card')].map(rect),
+      text,
+      bar: rect(bar),
+    };
+  });
+}
+
+for (const reducedMotion of [false, true] as const) {
+  test(`phone preroll teaser keeps its settled cards inside the stage and clear of the action bar (${reducedMotion ? 'reduced motion' : 'full motion'})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(90_000);
+    const stages = await openStages(browser, ['Alice', 'Bob', 'Cara'], {
+      viewport: PHONE,
+      locale: 'de-DE',
+      reducedMotion: reducedMotion ? 'reduce' : 'no-preference',
+    });
+    try {
+      const pages = stages.map((stage) => stage.page);
+      await assembleRoom(stages[0]!, stages.slice(1));
+      await playToPlayback(pages, [
+        mediaOf(DUP),
+        mediaOf(DUP),
+        mediaOf(SOLO_A),
+      ]);
+      const host = pages[0]!;
+      const linked = host.getByTestId('linked-animation');
+      await expect(linked).toHaveAttribute('data-variant', 'preroll', {
+        timeout: 5000,
+      });
+      // The preroll's own settled frame: the cards landed, the line is in.
+      await expect(linked.locator('.br-linked__banner')).toHaveCSS(
+        'opacity',
+        '1',
+      );
+      await expect(linked.locator('.br-linkedset__body')).toHaveCSS(
+        'opacity',
+        '1',
+      );
+      const teaser = await phoneTeaser(host);
+      expect(teaser.scrollY, 'initial scroll position').toBe(0);
+      expect(teaser.cards).toHaveLength(2);
+      for (const card of teaser.cards) {
+        expectInside(card, teaser.stage, 'settled card in the teaser stage');
+      }
+      // No teaser text reaches the sticky action bar.
+      expect(Object.keys(teaser.text)).toHaveLength(2);
+      for (const [selector, box] of Object.entries(teaser.text)) {
+        expect(
+          intersects(box, teaser.bar),
+          `${selector} stays clear of the action bar`,
+        ).toBe(false);
+        expect(
+          box.y + box.h,
+          `${selector} ends above the action bar`,
+        ).toBeLessThanOrEqual(teaser.bar.y);
+      }
+      // The secondary note stays in the accessibility tree, exactly once.
+      const tree = await linked.ariaSnapshot();
+      expect(tree.split('Namen folgen beim Reveal.').length - 1).toBe(1);
     } finally {
       await closeStages(stages);
     }
