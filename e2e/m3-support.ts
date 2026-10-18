@@ -59,10 +59,13 @@ export interface StageOptions {
  * event object whose `timeStamp` it may not read, so the store notification
  * after a command throws `Permission denied to access property "timeStamp"`.
  * That rejects the driving `evaluate` (the lobby migration spec, #140) and can
- * lose the re-render behind an input-driven command. The pinned value makes the
- * instrumentation take its `performance.now()` branch, exactly like the
- * production build, which ships no such code. Clicks and every other app path
- * are unaffected (verified in #140).
+ * lose the re-render behind an input-driven command. This is a harness
+ * workaround, not production equivalence: with the property pinned React takes
+ * its no-event path (a -1.1 timestamp in the dev timer, and the default update
+ * priority wherever production React also reads `window.event`, in
+ * `resolveUpdatePriority` and `shouldAttemptEagerTransition`), which is what any
+ * update outside a browser event gets. The app itself never reads it, and
+ * clicks and the other app paths behaved the same in the runs of #140.
  */
 export async function harnessContext(
   browser: Browser,
@@ -295,16 +298,65 @@ export async function expectPreviewNotLoaded(
 }
 
 /**
- * Presses "Fertig" with the keyboard (focus, then Enter) in a scenario that
- * pastes a link and acts within the one-second auto-preview debounce. A mouse
- * click is two events, down and up, and on a slow frame clock (headless Firefox
- * on a CI runner needs about 750 ms for them) the debounce can insert the
- * preview between them: the button moves, the up event lands elsewhere and no
- * click happens, so the Fertig the scenario waits for never starts. A key
- * press activates the focused button whatever moves around it.
+ * Presses "Fertig" with the keyboard (focus, then Enter) in the state-machine
+ * scenarios that paste a link and act inside the one-second auto-preview
+ * debounce. A mouse click is two events, and when the preview is inserted
+ * between them the button has moved and no click happens (headless Firefox on a
+ * CI runner needs about 750 ms for the two). That moving target is a product
+ * defect owned by #151; a key press activates the focused button wherever it
+ * moves, so these scenarios stay about the Fertig logic. A scenario that wants
+ * the real pointer holds the debounce with `holdAutoPreview` instead.
  */
 export async function pressFertig(page: Page): Promise<void> {
   await page.getByTestId('finish-submission').press('Enter');
+}
+
+/**
+ * Holds the one-second auto-preview debounce (the only 1000 ms `setTimeout` the
+ * submission panel arms after a paste) until the returned release is called, so
+ * a real pointer click on Fertig provably happens before the preview container
+ * is inserted, however slow the runner is. Call it before the paste. The
+ * release restores `setTimeout` and drops the held debounce: the Fertig click
+ * starts the preview itself.
+ */
+export async function holdAutoPreview(
+  page: Page,
+): Promise<() => Promise<void>> {
+  await page.evaluate(() => {
+    const target = window as unknown as {
+      __heldPreview?: Array<() => void>;
+      __realSetTimeout?: typeof window.setTimeout;
+    };
+    const original = window.setTimeout.bind(window);
+    const held: Array<() => void> = [];
+    target.__heldPreview = held;
+    target.__realSetTimeout = original;
+    window.setTimeout = ((
+      handler: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      if (delay === 1000 && typeof handler === 'function') {
+        held.push(() => handler(...args));
+        return -1;
+      }
+      return original(handler, delay, ...args);
+    }) as typeof window.setTimeout;
+  });
+  return () =>
+    page.evaluate(() => {
+      const target = window as unknown as {
+        __heldPreview?: Array<() => void>;
+        __realSetTimeout?: typeof window.setTimeout;
+      };
+      const original = target.__realSetTimeout;
+      if (original !== undefined) {
+        window.setTimeout = original;
+        // The held callbacks are dropped, not run: Fertig has started its own
+        // validation by now, and a late debounce would restart that preview.
+        target.__heldPreview = [];
+      }
+    });
 }
 
 export interface SubmitSongOptions {

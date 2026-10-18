@@ -17,6 +17,7 @@ import {
   ensureConsent,
   enterSubmission,
   expectPreviewNotLoaded,
+  holdAutoPreview,
   newStage,
   pressFertig,
   setSettings,
@@ -985,8 +986,12 @@ test('Fertig right after the paste submits the link before the preview loads', a
     const aliceId = (await snapshot(alice.page)).clientId;
     await ensureConsent(alice.page);
 
+    // A real pointer click: the debounce that inserts the preview is held, so
+    // the click provably comes first (the moving target is #151's).
+    const releasePreview = await holdAutoPreview(alice.page);
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
-    await pressFertig(alice.page);
+    await alice.page.getByTestId('finish-submission').click();
+    await releasePreview();
     // Premise, held by the fixture instead of the wall clock: the fixture
     // withholds `onReady` until the release below, so the click provably
     // precedes the preview load however slow the runner is.

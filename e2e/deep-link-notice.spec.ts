@@ -21,6 +21,8 @@ interface Sample {
    * (#140).
    */
   settled: boolean;
+  /** The pixel face itself is loaded (the swap away from the fallbacks happened). */
+  pixelLoaded: boolean;
 }
 
 declare global {
@@ -50,8 +52,10 @@ async function recordFieldTop(page: Page): Promise<void> {
       document.fonts.forEach((face) => {
         faceStates[face.family.replaceAll('"', '')] = face.status;
       });
+      const pixelLoaded = faceStates['Jersey 10'] === 'loaded';
       samples.push({
         fieldTop: field.getBoundingClientRect().top,
+        pixelLoaded,
         joining:
           document.querySelector('[data-testid="route-joining"]') !== null,
         notice:
@@ -60,7 +64,7 @@ async function recordFieldTop(page: Page): Promise<void> {
           // The pixel face is in use as soon as it is loaded; before that the
           // metric fallbacks must be resolved, otherwise the last-resort
           // monospace face is in use and the hero wraps differently.
-          faceStates['Jersey 10'] === 'loaded' ||
+          pixelLoaded ||
           metricFallbacks.every((family) => {
             const status = faceStates[family];
             return status === 'loaded' || status === 'error';
@@ -126,20 +130,32 @@ async function expectStableForms(
   });
   try {
     if (options.realFonts) {
-      // The faces arrive only once the form has been painted, and the clock
-      // answer is slow enough for the swap to land while the identity check
-      // still runs: the worst order a slow connection can produce.
+      // The pixel faces arrive only once a frame with the metric fallbacks
+      // resolved and the pixel face still missing was recorded, so the swap is
+      // certainly ahead and inside the measured window, and the clock answer is
+      // slow enough for the swap to land while the identity check still runs:
+      // the worst order a slow connection can produce.
       await context.route('**/fonts/*.woff2', async (route) => {
         // The page is still navigating when the first font request arrives, and
         // an evaluate that races the navigation fails with "Execution context
         // was destroyed": count that poll as "no sample yet" and ask again.
         await expect
-          .poll(() =>
-            pageRef.current
-              ?.evaluate(() => window.__homeSamples?.length ?? 0)
-              .catch(() => 0),
+          .poll(
+            () =>
+              pageRef.current
+                ?.evaluate(
+                  () =>
+                    window.__homeSamples?.filter(
+                      (entry) => entry.settled && !entry.pixelLoaded,
+                    ).length ?? 0,
+                )
+                .catch(() => 0),
+            { timeout: 3_000 },
           )
-          .toBeGreaterThan(0);
+          .toBeGreaterThan(0)
+          // Gecko loads the pixel face before it ever resolves the fallbacks
+          // (#144): there is no pre-swap frame to wait for, release the font.
+          .catch(() => undefined);
         await route.continue();
       });
       await context.route('**/api/time', async (route) => {
@@ -188,6 +204,22 @@ async function expectStableForms(
       console.log(`deep link samples: ${JSON.stringify(samples)}`);
     }
     expect(moved).toEqual([]);
+    if (options.realFonts) {
+      // Both sides of the pixel-font swap are in the window that was held to
+      // 1 px: frames on the fallbacks before it, frames on the pixel face after.
+      expect(settled.some((entry) => entry.pixelLoaded)).toBe(true);
+      if (browser.browserType().name() === 'firefox') {
+        // Browser limitation (#144, docs/OPEN_QUESTIONS.md): Gecko keeps the
+        // last-resort face until the pixel face arrives, so there is no
+        // fallback frame before the swap to measure.
+        test.info().annotations.push({
+          type: 'limitation',
+          description: 'no settled frame before the pixel-font swap (#144)',
+        });
+      } else {
+        expect(settled.some((entry) => !entry.pixelLoaded)).toBe(true);
+      }
+    }
 
     const noticeBox = await notice.boundingBox();
     expect(noticeBox).not.toBeNull();

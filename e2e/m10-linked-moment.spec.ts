@@ -141,6 +141,8 @@ async function expectClearOfBars(page: Page, target: Locator): Promise<void> {
 }
 
 interface ImpactSample {
+  /** Timeline position of the animation, in ms, when the sample was taken. */
+  time: number;
   top: number;
   bottom: number;
   left: number;
@@ -185,6 +187,7 @@ function sampleImpact(page: Page): Promise<void> {
       if (time >= 700 && time <= slotMs) {
         const rect = stage.getBoundingClientRect();
         samples.push({
+          time,
           top: rect.top,
           bottom: rect.bottom,
           left: rect.left,
@@ -212,7 +215,13 @@ async function expectImpactSeen(page: Page): Promise<void> {
     return;
   }
   const samples = await page.evaluate(() => window.__impact ?? []);
-  expect(samples.length, 'the impact was sampled').toBeGreaterThan(3);
+  // At least one sample inside the shake itself (700..1100 ms): the stage was
+  // on screen when the cards hit. No minimum count: that measured the frame
+  // rate. The later samples keep it there for the rest of the slot.
+  expect(
+    samples.filter((sample) => sample.time <= 1100).length,
+    'the impact was sampled',
+  ).toBeGreaterThan(0);
   for (const sample of samples) {
     expect(sample.top).toBeGreaterThanOrEqual(0);
     expect(sample.bottom).toBeLessThanOrEqual(sample.vh);
