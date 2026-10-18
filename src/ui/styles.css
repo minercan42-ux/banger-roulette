@@ -3646,3 +3646,48 @@ body {
     }
   }
 }
+
+/*
+ * Submission preview (issue #151): every box between the link field and the
+ * "Fertig" row is reserved at its final size, so the auto-preview that starts
+ * about a second after a paste never moves "Fertig" or "Einreichung entfernen"
+ * between mouse-down and mouse-up. The frame is 16:9 (YouTube embeds need at
+ * least 200 px in each direction), the thumbnail is its poster, and the status
+ * and the video facts keep room for their widest state (two lines on a phone).
+ */
+@layer components {
+  .br-preview-frame {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    aspect-ratio: 16 / 9;
+    min-height: 200px;
+    overflow: hidden;
+    background: var(--color-well);
+    box-shadow: 0 0 0 4px var(--color-edge);
+  }
+  .br-preview-frame__poster {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* The player appends its iframe (inline 100% x 270px, shared with the other
+     players) to the host; the frame sizes it instead. */
+  .br-preview-frame__host {
+    position: absolute;
+    inset: 0;
+  }
+  .br-preview-frame__host > iframe {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .br-preview-status {
+    min-height: 44px;
+  }
+  .br-preview-facts {
+    min-height: 44px;
+  }
+}

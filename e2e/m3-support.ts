@@ -300,12 +300,12 @@ export async function expectPreviewNotLoaded(
 /**
  * Presses "Fertig" with the keyboard (focus, then Enter) in the state-machine
  * scenarios that paste a link and act inside the one-second auto-preview
- * debounce. A mouse click is two events, and when the preview is inserted
- * between them the button has moved and no click happens (headless Firefox on a
- * CI runner needs about 750 ms for the two). That moving target is a product
- * defect owned by #151; a key press activates the focused button wherever it
- * moves, so these scenarios stay about the Fertig logic. A scenario that wants
- * the real pointer holds the debounce with `holdAutoPreview` instead.
+ * debounce. They are about the Fertig logic, not about pointer geometry, and a
+ * key press needs no pointer position; the pointer path across the preview
+ * insertion is covered by the #151 scenarios in m3-submission.spec.ts (the
+ * "Fertig" box is reserved, so it no longer moves when the preview appears).
+ * A scenario that wants the real pointer click before the preview is inserted
+ * holds the debounce with `holdAutoPreview` instead.
  */
 export async function pressFertig(page: Page): Promise<void> {
   await page.getByTestId('finish-submission').press('Enter');
@@ -316,12 +316,13 @@ export async function pressFertig(page: Page): Promise<void> {
  * submission panel arms after a paste) until the returned release is called, so
  * a real pointer click on Fertig provably happens before the preview container
  * is inserted, however slow the runner is. Call it before the paste. The
- * release restores `setTimeout` and drops the held debounce: the Fertig click
- * starts the preview itself.
+ * release restores `setTimeout` and by default drops the held debounce: the
+ * Fertig click starts the preview itself. `release({ run: true })` runs the
+ * held debounce instead, which inserts the preview on demand.
  */
 export async function holdAutoPreview(
   page: Page,
-): Promise<() => Promise<void>> {
+): Promise<(options?: { run?: boolean }) => Promise<void>> {
   await page.evaluate(() => {
     const target = window as unknown as {
       __heldPreview?: Array<() => void>;
@@ -343,8 +344,8 @@ export async function holdAutoPreview(
       return original(handler, delay, ...args);
     }) as typeof window.setTimeout;
   });
-  return () =>
-    page.evaluate(() => {
+  return (options = {}) =>
+    page.evaluate((run) => {
       const target = window as unknown as {
         __heldPreview?: Array<() => void>;
         __realSetTimeout?: typeof window.setTimeout;
@@ -352,11 +353,17 @@ export async function holdAutoPreview(
       const original = target.__realSetTimeout;
       if (original !== undefined) {
         window.setTimeout = original;
-        // The held callbacks are dropped, not run: Fertig has started its own
-        // validation by now, and a late debounce would restart that preview.
+        const held = target.__heldPreview ?? [];
+        // Dropped unless asked to run: Fertig has started its own validation by
+        // now, and a late debounce would restart that preview.
         target.__heldPreview = [];
+        if (run) {
+          for (const start of held) {
+            start();
+          }
+        }
       }
-    });
+    }, options.run === true);
 }
 
 export interface SubmitSongOptions {

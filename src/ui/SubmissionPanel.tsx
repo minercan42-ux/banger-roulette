@@ -850,58 +850,8 @@ export function SubmissionPanel({
         </ul>
       </Panel>
 
-      {(ownCard !== null || othersDone > 0) && (
-        <Hand label={t('card.handSubmission')} data-testid="submission-hand">
-          {ownCard !== null && (
-            <SongCard
-              data-testid="song-card"
-              data-face="up"
-              index={0}
-              number={1}
-              song={ownCard}
-              showThumbnail={consent}
-              tooltip={ownCard.title}
-              label={t('card.ownSong', { title: ownCard.title })}
-            />
-          )}
-          {Array.from({ length: othersDone }, (_, slot) => (
-            <SongCard
-              key={slot}
-              data-testid="song-card"
-              data-face="down"
-              index={slot + 1}
-              number={slot + 2}
-              label={t('card.faceDown')}
-            />
-          ))}
-        </Hand>
-      )}
-
-      {isParticipant && choices.submissionDone && (
-        <p
-          data-testid="submission-finished"
-          role="status"
-          className="br-notice"
-        >
-          {t('submission.finished')}
-        </p>
-      )}
-
       {isParticipant && !choices.submissionDone && (
         <div className="br-stack">
-          {savedMedia && (
-            <div data-testid="submission-saved" className="br-notice">
-              <p className="font-semibold">{t('submission.savedHeading')}</p>
-              <p data-testid="submission-saved-title">{savedMedia.title}</p>
-              <p className="br-read">
-                {savedMedia.channel} ·{' '}
-                {t('submission.savedStart', {
-                  start: formatDuration(savedMedia.startSeconds * 1000),
-                })}
-              </p>
-            </div>
-          )}
-
           <Field
             label={t('submission.linkLabel')}
             hint={t('submission.linkHint')}
@@ -939,7 +889,7 @@ export function SubmissionPanel({
             </p>
           )}
 
-          <div className="br-row">
+          <div className="br-row br-preview-status">
             {status.type === 'autoplayBlocked' && (
               <Button
                 tone="blue"
@@ -979,25 +929,27 @@ export function SubmissionPanel({
             <p className="br-notice">{t('submission.autoplayBlocked')}</p>
           )}
 
-          {consent && metadata !== null && (
-            <img
-              data-testid="preview-thumbnail"
-              src={metadata.thumbnail}
-              alt=""
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="h-24 w-40 rounded-md object-cover"
-            />
+          {consent && (
+            <div className="br-preview-frame">
+              {metadata !== null && (
+                <img
+                  data-testid="preview-thumbnail"
+                  src={metadata.thumbnail}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="br-preview-frame__poster"
+                />
+              )}
+              <div
+                ref={(node) => {
+                  stateRef.current.host = node;
+                }}
+                data-testid="preview-host"
+                className="br-preview-frame__host"
+              />
+            </div>
           )}
-
-          <div
-            ref={(node) => {
-              stateRef.current.host = node;
-            }}
-            data-testid="preview-host"
-            className="overflow-hidden rounded-md bg-black/60"
-            style={{ minHeight: '1px' }}
-          />
 
           <div className="flex flex-wrap items-end gap-2">
             <Field
@@ -1055,17 +1007,26 @@ export function SubmissionPanel({
             ))}
           </div>
 
-          {duration > 0 && (
-            <p className="br-read">
-              {t('submission.durationLabel', {
-                duration: Math.floor(duration),
-              })}
-              {' · '}
-              {t('submission.clipLabel', {
-                clip: settings.clipSeconds,
-              })}
-            </p>
-          )}
+          <div className="br-preview-facts">
+            {duration > 0 && (
+              <p className="br-read">
+                {t('submission.durationLabel', {
+                  duration: Math.floor(duration),
+                })}
+                {' · '}
+                {t('submission.clipLabel', {
+                  clip: settings.clipSeconds,
+                })}
+              </p>
+            )}
+            {linkText.trim() === '' &&
+              !choices.submitted &&
+              permissions.canFinishSubmission && (
+                <p data-testid="submission-finish-hint" className="br-read">
+                  {t('submission.finishSkipHint')}
+                </p>
+              )}
+          </div>
 
           {noticeKey &&
             !(
@@ -1079,14 +1040,6 @@ export function SubmissionPanel({
                 className="br-notice"
               >
                 {t(noticeKey)}
-              </p>
-            )}
-
-          {linkText.trim() === '' &&
-            !choices.submitted &&
-            permissions.canFinishSubmission && (
-              <p data-testid="submission-finish-hint" className="br-read">
-                {t('submission.finishSkipHint')}
               </p>
             )}
 
@@ -1114,10 +1067,59 @@ export function SubmissionPanel({
             </Button>
           </div>
 
+          {savedMedia && (
+            <div data-testid="submission-saved" className="br-notice">
+              <p className="font-semibold">{t('submission.savedHeading')}</p>
+              <p data-testid="submission-saved-title">{savedMedia.title}</p>
+              <p className="br-read">
+                {savedMedia.channel} ·{' '}
+                {t('submission.savedStart', {
+                  start: formatDuration(savedMedia.startSeconds * 1000),
+                })}
+              </p>
+            </div>
+          )}
+
           {!permissions.canWrite && (
             <p className="br-notice">{t('lobby.readOnly')}</p>
           )}
         </div>
+      )}
+      {(ownCard !== null || othersDone > 0) && (
+        <Hand label={t('card.handSubmission')} data-testid="submission-hand">
+          {ownCard !== null && (
+            <SongCard
+              data-testid="song-card"
+              data-face="up"
+              index={0}
+              number={1}
+              song={ownCard}
+              showThumbnail={consent}
+              tooltip={ownCard.title}
+              label={t('card.ownSong', { title: ownCard.title })}
+            />
+          )}
+          {Array.from({ length: othersDone }, (_, slot) => (
+            <SongCard
+              key={slot}
+              data-testid="song-card"
+              data-face="down"
+              index={slot + 1}
+              number={slot + 2}
+              label={t('card.faceDown')}
+            />
+          ))}
+        </Hand>
+      )}
+
+      {isParticipant && choices.submissionDone && (
+        <p
+          data-testid="submission-finished"
+          role="status"
+          className="br-notice"
+        >
+          {t('submission.finished')}
+        </p>
       )}
     </Panel>
   );

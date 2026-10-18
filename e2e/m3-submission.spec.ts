@@ -52,6 +52,7 @@ const STALE_B = 'RgKAFK5djSk';
 declare global {
   interface Window {
     __m3Token?: string;
+    __fertigTops?: number[];
     __reelMarks?: {
       plateIn?: number;
       spinEnd?: number;
@@ -987,7 +988,7 @@ test('Fertig right after the paste submits the link before the preview loads', a
     await ensureConsent(alice.page);
 
     // A real pointer click: the debounce that inserts the preview is held, so
-    // the click provably comes first (the moving target is #151's).
+    // the click provably comes first.
     const releasePreview = await holdAutoPreview(alice.page);
     await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
     await alice.page.getByTestId('finish-submission').click();
@@ -1030,6 +1031,144 @@ test('Fertig right after the paste submits the link before the preview loads', a
     // Another client can rate the song; its owner sees "your song".
     await expect(bruno.page.getByTestId('rating-bar')).toBeVisible();
     await expect(alice.page.getByTestId('rating-own')).toBeVisible();
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+/**
+ * The rectangle of a test id in document coordinates (CSS pixels), so a scroll
+ * between two reads (a focus or a fill scrolls the field into view) is not
+ * mistaken for a layout shift.
+ */
+async function documentBox(page: Page, testId: string) {
+  return page.getByTestId(testId).evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    return {
+      x: rect.x + window.scrollX,
+      y: rect.y + window.scrollY,
+      width: rect.width,
+      height: rect.height,
+    };
+  });
+}
+
+// #151: the auto-preview starts about a second after a paste and used to push
+// "Fertig" down by the player's height, so a click that started before the
+// insertion ended on the moved button and was lost.
+test('Fertig and remove stay put while the auto-preview appears', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const alice = stages[0];
+    await ensureConsent(alice.page);
+    const empty = await documentBox(alice.page, 'finish-submission');
+    const releasePreview = await holdAutoPreview(alice.page);
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    // Premise, held instead of timed: a valid link sits in the field and the
+    // preview player has not been inserted yet.
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'idle',
+    );
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    const before = await documentBox(alice.page, 'finish-submission');
+    // Pasting the link (the hint under the field goes away) does not move it.
+    expect(Math.abs(before.y - empty.y)).toBeLessThanOrEqual(1);
+    const removeBefore = await documentBox(alice.page, 'remove-submission');
+    // Sample every frame from the insertion to the playing preview, so a
+    // detour through loading (thumbnail, status, video facts) shows up too.
+    await alice.page.evaluate(() => {
+      const tops: number[] = [];
+      window.__fertigTops = tops;
+      const sample = () => {
+        const node = document.querySelector(
+          '[data-testid="finish-submission"]',
+        );
+        if (node !== null) {
+          tops.push(node.getBoundingClientRect().top + window.scrollY);
+        }
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await releasePreview({ run: true });
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(1);
+    await expect(alice.page.getByTestId('preview-status')).toHaveAttribute(
+      'data-state',
+      'playing',
+      { timeout: 15000 },
+    );
+    await expect(alice.page.getByTestId('start-seconds')).toBeEnabled();
+    const after = await documentBox(alice.page, 'finish-submission');
+    const removeAfter = await documentBox(alice.page, 'remove-submission');
+    expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.width - before.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(removeAfter.y - removeBefore.y)).toBeLessThanOrEqual(1);
+    const tops = await alice.page.evaluate(() => window.__fertigTops ?? []);
+    expect(tops.length).toBeGreaterThan(0);
+    for (const top of tops) {
+      expect(Math.abs(top - before.y)).toBeLessThanOrEqual(1);
+    }
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('a pointer click that starts before the preview appears and ends after it still finishes', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const [alice, bruno, cleo] = stages;
+    const aliceId = (await snapshot(alice.page)).clientId;
+    await ensureConsent(alice.page);
+    const releasePreview = await holdAutoPreview(alice.page);
+    await alice.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(0);
+    // A pointer needs the button inside the viewport.
+    await alice.page.getByTestId('finish-submission').scrollIntoViewIfNeeded();
+    const box = await alice.page.getByTestId('finish-submission').boundingBox();
+    if (box === null) {
+      throw new Error('finish-submission has no box');
+    }
+    await alice.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await alice.page.mouse.down();
+    // The preview is inserted between mouse-down and mouse-up.
+    await releasePreview({ run: true });
+    await expect(
+      alice.page.getByTestId('preview-host').locator('iframe'),
+    ).toHaveCount(1);
+    await alice.page.mouse.up();
+
+    await expect
+      .poll(
+        async () => {
+          const round = (await stateOf(alice.page))?.round;
+          return {
+            done: round?.submissionDoneIds.includes(aliceId) ?? false,
+            videoId: round?.submissions?.[aliceId]?.media.videoId ?? null,
+          };
+        },
+        { timeout: 15000 },
+      )
+      .toEqual({ done: true, videoId: VALID_A });
+    await expect(alice.page.getByTestId('submission-finished')).toBeVisible();
+    // Let the round end so the stages close cleanly.
+    await bruno.page.getByTestId('finish-submission').click();
+    await cleo.page.getByTestId('finish-submission').click();
+    await waitForPhase(alice.page, 'PLAYBACK', 30000);
   } finally {
     await closeStages(stages);
   }
