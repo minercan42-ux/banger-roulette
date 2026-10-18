@@ -222,6 +222,64 @@ const linked: Row[] = [
     upload('Anything', 'Whoever', 1, 'same-id-001'),
     upload('Completely other title (Live)', 'Someone else', 900, 'same-id-001'),
   ],
+  [
+    'dotted abbreviation in the track (U.S.A. vs USA)',
+    upload(
+      'Miley Cyrus - Party In The U.S.A. (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+    upload('Miley Cyrus - Party In The USA (Lyrics)', 'Miley Cyrus', 202),
+  ],
+  [
+    'playtest lyric upload on a lyric channel (7clouds)',
+    upload(
+      'Miley Cyrus - Party In The U.S.A. (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+    upload('Miley Cyrus - Party In The USA (Lyrics)', '7clouds', 202),
+  ],
+  [
+    'dotted abbreviation in the artist (R.E.M. vs REM)',
+    upload('R.E.M. - Losing My Religion (Official Video)', 'REMVEVO', 262),
+    upload('REM - Losing My Religion', 'REMVEVO', 262),
+  ],
+  [
+    'dotted abbreviation in an artist Topic channel',
+    upload('R.E.M. - Losing My Religion', 'R.E.M. - Topic', 262),
+    upload('R.E.M. - Losing My Religion (Official Video)', 'REMVEVO', 262),
+  ],
+  [
+    'dotted abbreviation beside a numeric version (U.S.A. 2.0 vs USA 2.0)',
+    upload('Artist - Anthem U.S.A. 2.0', 'Artist', 200),
+    upload('Artist - Anthem USA 2.0', 'Artist', 200),
+  ],
+  [
+    'lyric channel with a parsed artist and track (Lyrical Lemon)',
+    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 295),
+    upload('Adele - Hello', 'Adele - Topic', 295),
+  ],
+  [
+    'lyrics channel named after the artist (Adele Lyrics)',
+    upload('Adele - Hello (Lyrics)', 'Adele Lyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'CamelCase lyrics channel (AdeleLyrics)',
+    upload('Adele - Hello', 'AdeleLyrics', 295),
+    upload('Adele - Hello', 'Adele', 295),
+  ],
+  [
+    'dotted artist channel against the solid uppercase artist spelling',
+    upload('R.E.M. - Losing My Religion', 'R.E.M. - Topic', 262),
+    upload('REM - Losing My Religion', 'REM - Topic', 262),
+  ],
+  [
+    'dotted initialism of four letters (N.E.R.D vs NERD)',
+    upload('N.E.R.D - Rock Star', 'N.E.R.D', 200),
+    upload('NERD - Rock Star', 'NERD', 200),
+  ],
 ];
 
 const separate: Row[] = [
@@ -490,29 +548,14 @@ const separate: Row[] = [
     upload('Adele - Hello', 'Adele', 295),
   ],
   [
-    'lyric channel is not the artist',
-    upload('Adele - Hello (Lyrics)', 'Lyrical Lemon', 295),
-    upload('Adele - Hello', 'Adele - Topic', 295),
-  ],
-  [
     'fan channel named after the artist (Adele Fan)',
     upload('Adele - Hello', 'Adele Fan', 295),
     upload('Hello', 'Adele - Topic', 295),
   ],
   [
-    'lyrics channel named after the artist (Adele Lyrics)',
-    upload('Adele - Hello (Lyrics)', 'Adele Lyrics', 295),
-    upload('Adele - Hello', 'Adele', 295),
-  ],
-  [
     'denylisted channel with the artist as its only other token',
     upload('Adele - Hello', 'Adele Covers', 295),
     upload('Adele - Hello', 'Adele - Topic', 295),
-  ],
-  [
-    'CamelCase lyrics channel',
-    upload('Adele - Hello', 'AdeleLyrics', 295),
-    upload('Adele - Hello', 'Adele', 295),
   ],
   [
     'third-party channel without an artist in the title (Hello vs Hello (Audio))',
@@ -535,7 +578,7 @@ const separate: Row[] = [
     upload('The Weeknd - Blinding Lights', 'The Weeknd', 200),
   ],
   [
-    'two third-party channels never link each other',
+    'karaoke channel never links a lyric channel',
     upload('Adele - Hello', 'Sing King', 295),
     upload('Adele - Hello', '7clouds', 295),
   ],
@@ -618,6 +661,85 @@ const separate: Row[] = [
     'accepted false negative: a channel named only by a suffix word (Music - Topic)',
     upload('Music', 'Music - Topic', 200),
     upload('Music', 'Music - Topic', 200),
+  ],
+  [
+    'lyric channel upload labelled as a cover (7clouds)',
+    upload('Miley Cyrus - Party In The USA (Cover)', '7clouds', 202),
+    upload(
+      'Miley Cyrus - Party In The USA (Official Video)',
+      'MileyCyrusVEVO',
+      202,
+    ),
+  ],
+  [
+    'lyric channel upload that is slowed (7clouds)',
+    upload('Miley Cyrus - Party In The USA (Slowed)', '7clouds', 202),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'lyric upload outside the duration tolerance',
+    upload('Miley Cyrus - Party In The USA (Lyrics)', '7clouds', 240),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'lyric channel upload without an artist in the title',
+    upload('Party In The USA (Lyrics)', '7clouds', 202),
+    upload('Miley Cyrus - Party In The USA', 'Miley Cyrus', 202),
+  ],
+  [
+    'numeric dot does not glue a version (2.0 vs 20)',
+    upload('Artist - Anthem 2.0', 'Artist', 200),
+    upload('Artist - Anthem 20', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to an ordinary word (A.Muse vs Amuse)',
+    upload('Artist - A.Muse', 'Artist', 200),
+    upload('Artist - Amuse', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to an ordinary word (A.Beach vs ABeach)',
+    upload('Artist - A.Beach', 'Artist', 200),
+    upload('Artist - ABeach', 'Artist', 200),
+  ],
+  [
+    'initialism in the track never links its mixed-case spelling (P.O.D. vs Pod)',
+    upload('Artist - P.O.D.', 'Artist', 200),
+    upload('Artist - Pod', 'Artist', 200),
+  ],
+  [
+    'initialism in the artist never links its mixed-case spelling (P.O.D. vs Pod)',
+    upload('P.O.D. - Youth of the Nation', 'P.O.D.', 253),
+    upload('Pod - Youth of the Nation', 'Pod', 253),
+  ],
+  [
+    'initialism in the track never links its mixed-case spelling (U.S.A. vs Usa)',
+    upload('Miley Cyrus - Party In The U.S.A.', 'Miley Cyrus', 202),
+    upload('Miley Cyrus - Party In The Usa', 'Miley Cyrus', 202),
+  ],
+  [
+    'initialism never links a partially capitalised spelling (A.B.C. vs Abc)',
+    upload('Artist - A.B.C.', 'Artist', 200),
+    upload('Artist - Abc', 'Artist', 200),
+  ],
+  [
+    'dotted initialism glued to the artist part (A.Muse vs Amuse)',
+    upload('A.Muse - Song', 'A.Muse', 200),
+    upload('Amuse - Song', 'Amuse', 200),
+  ],
+  [
+    'uppercase words elsewhere in the title never authorise a track initialism',
+    upload('POD - My P.O.D.', 'POD', 200),
+    upload('POD - My Pod', 'POD', 200),
+  ],
+  [
+    'an uppercase credit never authorises a track initialism',
+    upload('Artist - My P.O.D. (feat. POD)', 'Artist', 200),
+    upload('Artist - My Pod', 'Artist', 200),
+  ],
+  [
+    'a repeated track word keeps its own spelling (POD P.O.D. vs POD Pod)',
+    upload('Artist - POD P.O.D.', 'Artist', 200),
+    upload('Artist - POD Pod', 'Artist', 200),
   ],
 ];
 
@@ -764,6 +886,44 @@ describe('groupSameSongs', () => {
     const c = upload('Artist - Song', 'Artist', 210);
     expect(isSameSong(a, c)).toBe(false);
     expect(groupSameSongs([a, b, c])).toEqual([[0, 1, 2]]);
+  });
+
+  it('keeps a dotted initialism and a plain spelling apart through a middle upload', () => {
+    const songs = [
+      upload('P.O.D. - Youth of the Nation', 'P.O.D.', 253),
+      upload('POD - Youth of the Nation', 'POD', 253),
+      upload('Pod - Youth of the Nation', 'Pod', 253),
+    ];
+    expect(isSameSong(songs[0], songs[2])).toBe(false);
+    expect(groupSameSongs(songs)).toEqual([[0, 1], [2]]);
+  });
+
+  describe('identical video ids stay together under a spelling clash', () => {
+    const spelled = [
+      { key: 'dotted', media: upload('P.O.D. - Hello', 'P.O.D.', 202, 'a') },
+      { key: 'caps', media: upload('POD - Hello', 'POD', 202, 'b') },
+      { key: 'mixed', media: upload('Pod - Hello', 'Pod', 202, 'b') },
+    ];
+    const orders = [
+      [0, 1, 2],
+      [0, 2, 1],
+      [1, 0, 2],
+      [1, 2, 0],
+      [2, 0, 1],
+      [2, 1, 0],
+    ];
+
+    it.each(orders)('input order %i, %i, %i', (...order) => {
+      const songs = order.map((index) => spelled[index].media);
+      const groups = groupSameSongs(songs);
+      const sameId = songs
+        .map((song, index) => (song.videoId === 'b' ? index : -1))
+        .filter((index) => index >= 0);
+      const dotted = songs.findIndex((song) => song.videoId === 'a');
+      expect(groups).toHaveLength(2);
+      expect(groups).toContainEqual(sameId);
+      expect(groups).toContainEqual([dotted]);
+    });
   });
 
   it('does not group distinct noise-only and artist-named tracks', () => {
