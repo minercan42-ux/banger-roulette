@@ -52,6 +52,17 @@ export interface StageOptions {
  * (see `e2e/silent-audio.ts`). A spec that creates its context directly has to
  * go through this factory, or the FR-07 consent click of that engine never
  * settles.
+ *
+ * Firefox also gets `window.event` pinned to `undefined`. The app never reads
+ * that legacy property; React's dev-mode update timer does
+ * (`resolveEventTimeStamp`) and Firefox can hand a protocol-driven script an
+ * event object whose `timeStamp` it may not read, so the store notification
+ * after a command throws `Permission denied to access property "timeStamp"`.
+ * That rejects the driving `evaluate` (the lobby migration spec, #140) and can
+ * lose the re-render behind an input-driven command. The pinned value makes the
+ * instrumentation take its `performance.now()` branch, exactly like the
+ * production build, which ships no such code. Clicks and every other app path
+ * are unaffected (verified in #140).
  */
 export async function harnessContext(
   browser: Browser,
@@ -62,6 +73,9 @@ export async function harnessContext(
     await context.addInitScript((mode) => {
       window.__silentAudioMode = mode;
     }, NO_AUDIO_DEVICE);
+    await context.addInitScript(() => {
+      window.event = undefined;
+    });
   }
   return context;
 }
@@ -278,6 +292,19 @@ export async function expectPreviewNotLoaded(
       (call) => call.type === 'ready' && call.videoId === videoId,
     ),
   ).toEqual([]);
+}
+
+/**
+ * Presses "Fertig" with the keyboard (focus, then Enter) in a scenario that
+ * pastes a link and acts within the one-second auto-preview debounce. A mouse
+ * click is two events, down and up, and on a slow frame clock (headless Firefox
+ * on a CI runner needs about 750 ms for them) the debounce can insert the
+ * preview between them: the button moves, the up event lands elsewhere and no
+ * click happens, so the Fertig the scenario waits for never starts. A key
+ * press activates the focused button whatever moves around it.
+ */
+export async function pressFertig(page: Page): Promise<void> {
+  await page.getByTestId('finish-submission').press('Enter');
 }
 
 export interface SubmitSongOptions {

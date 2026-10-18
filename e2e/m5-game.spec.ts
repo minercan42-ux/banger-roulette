@@ -220,9 +220,14 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
   test.setTimeout(180_000);
   const stages = await Promise.all([
     newStage(browser, { nickname: 'Alice' }),
-    newStage(browser, { nickname: 'Bob' }),
-    newStage(browser, { nickname: 'Cara' }),
-    newStage(browser, { nickname: 'Dana' }),
+    // Only the host's count-up is asserted, so the other three screens play in
+    // reduced motion. Four screens painting the 5 s banger show at once left
+    // the host's frame clock too slow on a shared CI runner (headless WebKit,
+    // two tests in parallel): the winner's count-up had not reached its total
+    // when the reveal ended. The reduced-motion show is a static card.
+    newStage(browser, { nickname: 'Bob', reducedMotion: 'reduce' }),
+    newStage(browser, { nickname: 'Cara', reducedMotion: 'reduce' }),
+    newStage(browser, { nickname: 'Dana', reducedMotion: 'reduce' }),
   ]);
   try {
     const [host, bob] = stages as [Stage, Stage, Stage, Stage];
@@ -312,6 +317,20 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
       [SONG_D]: 3,
     });
     await waitForFullReveal(host.page, 4);
+    // The counted-up combo settles on the engine's numbers: average + bonus = score.
+    for (const [videoId, average, bonus, total] of [
+      [SONG_D, '2.7', '0.0', '2.7'],
+      [SONG_B, '4.7', '0.0', '4.7'],
+      [SONG_A, '7.3', '0.0', '7.3'],
+      [SONG_C, '10.0', '2.0', '12.0'],
+    ] as const) {
+      const combo = entryOf(host.page, videoId).getByTestId('score-combo');
+      await expect(combo.getByTestId('score-combo-votes')).toHaveText(average, {
+        timeout: 5_000,
+      });
+      await expect(combo.getByTestId('score-combo-adjust')).toHaveText(bonus);
+      await expect(combo.getByTestId('score-combo-total')).toHaveText(total);
+    }
 
     const entries = await revealEntries(host.page);
     // Ascending score: D 2.7, B 4.7, A 7.3, C 10.0 + 2.0 bonus = 12.0.
@@ -338,20 +357,6 @@ test('full game: rating, scoring, reveal, leaderboard and rematch', async ({
     await expect(
       entryOf(host.page, SONG_A).getByTestId('reveal-entry-rating'),
     ).toContainText('7.3');
-    // The counted-up combo settles on the engine's numbers: average + bonus = score.
-    for (const [videoId, average, bonus, total] of [
-      [SONG_D, '2.7', '0.0', '2.7'],
-      [SONG_B, '4.7', '0.0', '4.7'],
-      [SONG_A, '7.3', '0.0', '7.3'],
-      [SONG_C, '10.0', '2.0', '12.0'],
-    ] as const) {
-      const combo = entryOf(host.page, videoId).getByTestId('score-combo');
-      await expect(combo.getByTestId('score-combo-votes')).toHaveText(average, {
-        timeout: 5_000,
-      });
-      await expect(combo.getByTestId('score-combo-adjust')).toHaveText(bonus);
-      await expect(combo.getByTestId('score-combo-total')).toHaveText(total);
-    }
     await expect(host.page.getByTestId('reveal-jackpot')).toHaveCount(1);
     await expect(
       entryOf(host.page, SONG_C).getByTestId('reveal-jackpot'),
