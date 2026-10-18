@@ -579,11 +579,11 @@ function intersects(a: Rect, b: Rect): boolean {
 }
 
 /**
- * Teaser inside the frame, centred on it, clear of every control. On a phone
- * the teaser hugs the frame's top edge instead (#146): the sticky action bar
- * covers the frame's lower part. A control in a sticky bar (the phone's action
- * bar) may sit over the frame's box when the page is scrolled; there the bar
- * has to paint above the teaser.
+ * Teaser inside the frame, horizontally centred on it, clear of every control;
+ * on desktop also vertically centred (a phone's sticky action bar covers the
+ * frame's lower part, see the phone test for the clearance from it). A control
+ * in a sticky bar (the phone's action bar) may sit over the frame's box when
+ * the page is scrolled; there the bar has to paint above the teaser.
  */
 function expectTeaserPlaced(
   geometry: PrerollGeometry,
@@ -596,12 +596,7 @@ function expectTeaserPlaced(
     Math.abs(teaser.x + teaser.w / 2 - (frame.x + frame.w / 2)),
     `${what}: horizontally centred on the video`,
   ).toBeLessThanOrEqual(1);
-  if (phone) {
-    expect(
-      teaser.y - frame.y,
-      `${what}: at the top of the video`,
-    ).toBeLessThanOrEqual(8.5);
-  } else {
+  if (!phone) {
     expect(
       Math.abs(teaser.y + teaser.h / 2 - (frame.y + frame.h / 2)),
       `${what}: vertically centred on the video`,
@@ -769,9 +764,9 @@ for (const reducedMotion of [false, true] as const) {
           `${selector} ends above the action bar`,
         ).toBeLessThanOrEqual(teaser.bar.y);
       }
-      // The secondary note is read out, not drawn.
-      const note = await linked.getByTestId('linked-anonymous').boundingBox();
-      expect(note?.width).toBeLessThanOrEqual(1);
+      // The secondary note stays in the accessibility tree, exactly once.
+      const tree = await linked.ariaSnapshot();
+      expect(tree.split('Namen folgen beim Reveal.').length - 1).toBe(1);
     } finally {
       await closeStages(stages);
     }
