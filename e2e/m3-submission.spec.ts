@@ -1301,3 +1301,74 @@ test('a rejected submit during Fertig is not retried and does not finish', async
     await closeStages(stages);
   }
 });
+
+test('a Fertig dropped by a pause tells the player to press it again and keeps the draft', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser, {
+    [VALID_A]: { holdReady: true },
+  });
+  try {
+    const [host, bruno] = stages;
+    const brunoId = (await snapshot(bruno.page)).clientId;
+    await ensureConsent(bruno.page);
+    await bruno.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      probe.__actions = [];
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      session.dispatch = (action) => {
+        probe.__actions?.push(action.type);
+        return original(action);
+      };
+    });
+    const actions = () =>
+      bruno.page.evaluate(
+        () => (window as unknown as DispatchProbe).__actions ?? [],
+      );
+
+    await bruno.page.getByTestId('song-link').fill(watchUrl(VALID_A));
+    await bruno.page.getByTestId('finish-submission').click();
+    // The held load keeps the Fertig waiting for the preview to validate.
+    await expectPreviewNotLoaded(bruno.page, VALID_A);
+    await expect(bruno.page.getByTestId('finish-submission')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    await host.page.getByTestId('host-pause').click();
+    await expect(bruno.page.getByTestId('submission-notice')).toHaveText(
+      'The connection dropped briefly. Please press “Done” again.',
+    );
+    await expect(bruno.page.getByTestId('song-link')).toHaveValue(
+      watchUrl(VALID_A),
+    );
+    await expect(bruno.page.getByTestId('submission-finished')).toHaveCount(0);
+    expect((await stateOf(host.page))?.round?.submissionDoneIds).not.toContain(
+      brunoId,
+    );
+    // No automatic retry: the click sent nothing, and nothing follows it.
+    await bruno.page.waitForTimeout(500);
+    expect(await actions()).toEqual([]);
+
+    await host.page.getByTestId('host-resume').click();
+    await expect(bruno.page.getByTestId('finish-submission')).toBeEnabled();
+    await expect(bruno.page.getByTestId('song-link')).toHaveValue(
+      watchUrl(VALID_A),
+    );
+    await releaseFixtureVideo(bruno.page, VALID_A);
+    await bruno.page.getByTestId('finish-submission').click();
+    await expect(bruno.page.getByTestId('submission-finished')).toBeVisible({
+      timeout: 15000,
+    });
+    await waitForSubmissionMedia(host.page, brunoId, VALID_A);
+    await expect
+      .poll(async () =>
+        (await stateOf(host.page))?.round?.submissionDoneIds.includes(brunoId),
+      )
+      .toBe(true);
+  } finally {
+    await closeStages(stages);
+  }
+});
