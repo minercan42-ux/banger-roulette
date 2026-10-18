@@ -4,6 +4,7 @@ import type { Media } from '../src/shared/primitives';
 import {
   assembleRoom,
   closeStages,
+  dispatch,
   newStage,
   snapshot,
   stateOf,
@@ -338,12 +339,14 @@ for (const reducedMotion of [false, true] as const) {
       await expect(linked.locator('.br-linked__card.is-flipped')).toHaveCount(
         0,
       );
-      // The teaser floats over the viewport: no scrolling to find it.
+      // The teaser sits inside the video frame: no scrolling to find it.
       await expectInViewport(
         host,
         linked.locator('.br-linked'),
         'preroll teaser',
       );
+      const geometry = await prerollGeometry(host);
+      expectInside(geometry.teaser, geometry.frame, 'preroll teaser');
 
       const ends = await animationEnds(linked);
       if (reducedMotion) {
@@ -491,6 +494,274 @@ test('a linked banger keeps one show: the banger show owns the viewport', async 
     await expect(linked.getByTestId('linked-points')).toHaveText(
       `${text} for Alice and Bob`,
     );
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface PrerollGeometry {
+  frame: Rect;
+  teaser: Rect;
+  /** The controls the teaser must never cover, by test id. */
+  controls: Record<string, { box: Rect; inStickyBar: boolean }>;
+  /** The sticky bars' z-index is above the teaser slot's. */
+  barAboveTeaser: boolean;
+}
+
+/** One synchronous read of the preroll: the video frame, the teaser, the controls. */
+function prerollGeometry(page: Page): Promise<PrerollGeometry> {
+  return page.evaluate(() => {
+    const rect = (element: Element): Rect => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, w: box.width, h: box.height };
+    };
+    const find = (selector: string) => document.querySelector(selector);
+    const frame = find('[data-testid="playback-host"]');
+    const teaser = find('[data-testid="linked-animation"] .br-linkedset__item');
+    const slot = find('.br-stage-video__preroll');
+    if (frame === null || teaser === null || slot === null) {
+      throw new Error('the preroll teaser is not on screen');
+    }
+    const controls: PrerollGeometry['controls'] = {};
+    for (const id of [
+      'rating-section',
+      'rating-bar',
+      'playback-skip',
+      'host-pause',
+      'host-resume',
+    ]) {
+      const element = find(`[data-testid="${id}"]`);
+      if (element !== null) {
+        controls[id] = {
+          box: rect(element),
+          inStickyBar:
+            element.closest('.br-table__actions, .br-table__top') !== null &&
+            getComputedStyle(
+              element.closest('.br-table__actions, .br-table__top')!,
+            ).position === 'sticky',
+        };
+      }
+    }
+    const zOf = (element: Element) =>
+      Number(getComputedStyle(element).zIndex) || 0;
+    const bar = find('.br-table__actions');
+    return {
+      frame: rect(frame),
+      teaser: rect(teaser),
+      controls,
+      barAboveTeaser: bar !== null && zOf(bar) > zOf(slot),
+    };
+  });
+}
+
+function expectInside(inner: Rect, outer: Rect, what: string): void {
+  expect(inner.x, `${what} left edge`).toBeGreaterThanOrEqual(outer.x - 0.5);
+  expect(inner.y, `${what} top edge`).toBeGreaterThanOrEqual(outer.y - 0.5);
+  expect(inner.x + inner.w, `${what} right edge`).toBeLessThanOrEqual(
+    outer.x + outer.w + 0.5,
+  );
+  expect(inner.y + inner.h, `${what} bottom edge`).toBeLessThanOrEqual(
+    outer.y + outer.h + 0.5,
+  );
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+  );
+}
+
+/**
+ * Teaser inside the frame, centred on it, clear of every control. A control in
+ * a sticky bar (the phone's action bar) may sit over the frame's box when the
+ * page is scrolled; there the bar has to paint above the teaser.
+ */
+function expectTeaserPlaced(geometry: PrerollGeometry, what: string): void {
+  const { frame, teaser, controls, barAboveTeaser } = geometry;
+  expectInside(teaser, frame, `${what}: teaser`);
+  expect(
+    Math.abs(teaser.x + teaser.w / 2 - (frame.x + frame.w / 2)),
+    `${what}: horizontally centred on the video`,
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(teaser.y + teaser.h / 2 - (frame.y + frame.h / 2)),
+    `${what}: vertically centred on the video`,
+  ).toBeLessThanOrEqual(1);
+  expect(Object.keys(controls)).toContain('rating-section');
+  for (const [id, control] of Object.entries(controls)) {
+    if (control.inStickyBar) {
+      expect(
+        barAboveTeaser,
+        `${what}: the sticky bar with ${id} paints above the teaser`,
+      ).toBe(true);
+      continue;
+    }
+    expect(
+      intersects(teaser, control.box),
+      `${what}: the teaser does not cover ${id}`,
+    ).toBe(false);
+  }
+}
+
+for (const [size, viewport] of [
+  ['desktop', DESKTOP],
+  ['phone', PHONE],
+] as const) {
+  test(`preroll teaser sits in the video frame and never covers the controls (${size})`, async ({
+    browser,
+  }) => {
+    test.setTimeout(90_000);
+    const stages = await openStages(browser, ['Alice', 'Bob', 'Cara'], {
+      viewport,
+    });
+    try {
+      const pages = stages.map((stage) => stage.page);
+      await assembleRoom(stages[0]!, stages.slice(1));
+      await playToPlayback(pages, [
+        mediaOf(DUP),
+        mediaOf(DUP),
+        mediaOf(SOLO_A),
+      ]);
+      const host = pages[0]!;
+      const rating = host.getByTestId('rating-section');
+      await expect(host.getByTestId('linked-animation')).toHaveAttribute(
+        'data-variant',
+        'preroll',
+        { timeout: 5000 },
+      );
+
+      // Running, then with the rating section scrolled into the middle.
+      expectTeaserPlaced(await prerollGeometry(host), 'running');
+      await rating.evaluate((element) =>
+        element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+      );
+      expectTeaserPlaced(await prerollGeometry(host), 'running, scrolled');
+
+      // Paused (the preroll holds its frame), unscrolled and scrolled again.
+      expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
+      await expect(host.getByTestId('pause-banner')).toBeVisible();
+      await host.evaluate(() => window.scrollTo(0, 0));
+      expectTeaserPlaced(await prerollGeometry(host), 'paused');
+      await rating.evaluate((element) =>
+        element.scrollIntoView({ block: 'center', behavior: 'instant' }),
+      );
+      expectTeaserPlaced(await prerollGeometry(host), 'paused, scrolled');
+    } finally {
+      await closeStages(stages);
+    }
+  });
+}
+
+/** Mounts the first linked reveal entry with `prepare` run before it. */
+async function toLinkedReveal(
+  stages: Stage[],
+  prepare: (host: Page) => Promise<void>,
+): Promise<Page> {
+  const pages = stages.map((stage) => stage.page);
+  const medias = [mediaOf(DUP), mediaOf(DUP), mediaOf(SOLO_A), mediaOf(SOLO_B)];
+  await assembleRoom(stages[0]!, stages.slice(1));
+  await playToPlayback(pages, medias);
+  const host = pages[0]!;
+  await prepare(host);
+  await ratePlayback(pages, medias, TWO_OWNERS);
+  await expect(
+    host.getByTestId('linked-animation').getByTestId('linked-owner'),
+  ).toHaveCount(2, { timeout: 15_000 });
+  return host;
+}
+
+const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
+
+test('the reveal follow-scroll leaves a focused shell control in the viewport', async ({
+  browser,
+}) => {
+  test.setTimeout(150_000);
+  const stages = await openStages(browser, ['Alice', 'Bob', 'Cara', 'Dario'], {
+    viewport: DESKTOP,
+    reducedMotion: 'reduce',
+  });
+  try {
+    const host = await toLinkedReveal(stages, async (page) => {
+      await page.getByTestId('sfx-toggle').focus();
+    });
+    const toggle = host.getByTestId('sfx-toggle');
+    await expectSettled(host.getByTestId('linked-animation'));
+    // No input for far longer than the two quiet seconds, and still no jump.
+    await host.waitForTimeout(2500);
+    expect(await scrollY(host)).toBe(0);
+    await expect(toggle).toBeFocused();
+    await expectInViewport(host, toggle, 'focused sfx toggle');
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('the reveal follow-scroll waits out recent input', async ({ browser }) => {
+  test.setTimeout(150_000);
+  const stages = await openStages(browser, ['Alice', 'Bob', 'Cara', 'Dario'], {
+    viewport: DESKTOP,
+    reducedMotion: 'reduce',
+  });
+  try {
+    const host = await toLinkedReveal(stages, async (page) => {
+      // The player keeps nudging the page (wheel, key, pointer) throughout.
+      await page.evaluate(() => {
+        const types = ['wheel', 'keydown', 'pointerdown'];
+        setInterval(() => {
+          for (const type of types) {
+            window.dispatchEvent(new Event(type));
+          }
+        }, 200);
+      });
+    });
+    await expectSettled(host.getByTestId('linked-animation'));
+    expect(await scrollY(host)).toBe(0);
+  } finally {
+    await closeStages(stages);
+  }
+});
+
+test('an idle viewer gets the moment scrolled in once; pause and resume do not scroll again', async ({
+  browser,
+}) => {
+  test.setTimeout(150_000);
+  const stages = await openStages(browser, ['Alice', 'Bob', 'Cara', 'Dario'], {
+    viewport: DESKTOP,
+    reducedMotion: 'no-preference',
+  });
+  try {
+    const host = await toLinkedReveal(stages, async (page) => {
+      // Nothing is focused: the page belongs to the moment.
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    });
+    // The idle viewer got the moment into view (it started below the fold).
+    await expect.poll(() => scrollY(host)).toBeGreaterThan(0);
+    await expectInViewport(
+      host,
+      host.getByTestId('linked-animation').locator('.br-linked'),
+      'linked stage',
+    );
+
+    // Back to the top, then a host pause and resume inside the same entry: the
+    // consumed follow does not run again.
+    await host.evaluate(() => window.scrollTo(0, 0));
+    expect((await dispatch(host, { type: 'PAUSE' })).status).toBe('accepted');
+    await expect(host.getByTestId('pause-banner')).toBeVisible();
+    expect(
+      (await dispatch(host, { type: 'RESUME', forceBelowMinimum: false }))
+        .status,
+    ).toBe('accepted');
+    await expect(host.getByTestId('pause-banner')).toHaveCount(0);
+    await expectSettled(host.getByTestId('linked-animation'));
+    await host.waitForTimeout(500);
+    expect(await scrollY(host)).toBe(0);
   } finally {
     await closeStages(stages);
   }

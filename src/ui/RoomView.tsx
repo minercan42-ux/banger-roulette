@@ -80,6 +80,7 @@ export function RoomView({
   const { consented, state: consentState } = useEmbedConsent();
   const playbackView = selectPlayback(state, viewerId, snapshot.connectionId);
   const playbackHostRef = useRef<HTMLDivElement | null>(null);
+  const [prerollSlot, setPrerollSlot] = useState<HTMLDivElement | null>(null);
   const playback = usePlaybackController({
     session,
     active:
@@ -223,11 +224,16 @@ export function RoomView({
             }
           >
             {room.phase === 'PLAYBACK' && (
-              <div
-                data-testid="playback-shield"
-                aria-hidden="true"
-                className="br-stage-video__shield"
-              />
+              <>
+                <div
+                  data-testid="playback-shield"
+                  aria-hidden="true"
+                  className="br-stage-video__shield"
+                />
+                {/* The preroll teaser (#135) is portalled in here: it takes the
+                    video's frame while the video is not playing yet. */}
+                <div ref={setPrerollSlot} className="br-stage-video__preroll" />
+              </>
             )}
           </div>
         )}
@@ -255,6 +261,7 @@ export function RoomView({
             state={state}
             viewerId={viewerId}
             viewerConnectionId={snapshot.connectionId}
+            prerollSlot={prerollSlot}
           />
         )}
 

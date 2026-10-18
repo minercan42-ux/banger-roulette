@@ -1928,27 +1928,44 @@ body {
   .br-linkedset__item {
     min-width: 0;
   }
-  /* Preroll teaser: floats over the middle of the viewport, above the video
-     that leads the stage and below the sticky top bar. It lives for the three
-     seconds of the preroll and never coexists with a reveal show. */
+  /* Preroll teaser: lives in the video frame (`.br-stage-video__preroll`), the
+     video is not playing yet. It is centred on the frame and sized to it, so it
+     cannot reach the rating or skip controls at any scroll position or width.
+     It lasts the three seconds of the preroll and never coexists with a reveal
+     show. */
   .br-linkedset--overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 35;
+    width: 100%;
+    max-height: 100%;
     align-items: center;
     justify-content: center;
-    padding: var(--space-4);
-    pointer-events: none;
+    gap: 0;
   }
   .br-linkedset--overlay .br-linkedset__item {
+    display: flex;
+    flex-direction: column;
     width: min(100%, 560px);
-    padding: var(--space-3);
+    max-height: 100%;
+    padding: var(--space-2);
+    overflow: hidden;
     border-radius: var(--radius-md);
     background: var(--color-well);
     box-shadow: var(--drop-edge);
   }
-  .br-linkedset--overlay .br-linkedset__body:first-of-type {
-    margin-top: var(--space-3);
+  .br-linkedset--overlay .br-linked--preroll {
+    flex: 0 1 auto;
+    min-height: 0;
+    gap: var(--space-2);
+    padding-block: var(--space-2);
+  }
+  .br-linkedset--overlay .br-linkedset__body {
+    margin-top: var(--space-2);
+    font-size: 14px;
+    line-height: 18px;
+  }
+  .br-linkedset--overlay .br-linkedset__note {
+    margin-top: 0;
+    font-size: 12px;
+    line-height: 16px;
   }
   .br-linked {
     --ls: 1;
@@ -3304,6 +3321,18 @@ body {
     z-index: 1;
     background: transparent;
     touch-action: manipulation;
+  }
+  /* The preroll teaser's slot (#135): the same box as the video, above the
+     shield, transparent to pointers. */
+  .br-stage-video__preroll {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2);
+    pointer-events: none;
   }
 
   /* A smaller card in a single tidy row under the stage. */

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   selectPlayback,
@@ -27,6 +28,8 @@ interface PlaybackPhaseProps {
   state: GameState;
   viewerId: string;
   viewerConnectionId: string | null;
+  /** The node inside the video frame the preroll teaser is portalled into. */
+  prerollSlot: HTMLElement | null;
 }
 
 const PROGRESS_FRAME_MS = 200;
@@ -71,6 +74,7 @@ export function PlaybackPhase({
   state,
   viewerId,
   viewerConnectionId,
+  prerollSlot,
 }: PlaybackPhaseProps) {
   const { t } = useTranslation();
   const view = selectPlayback(state, viewerId, viewerConnectionId);
@@ -185,12 +189,23 @@ export function PlaybackPhase({
           <p data-testid="playback-preroll" className="br-read">
             {t('later.playbackPreroll')}
           </p>
-          <LinkedAnimation
-            songs={songs}
-            variant="preroll"
-            elapsedMs={prerollElapsedMs(view, now)}
-            paused={view.pausedAt !== null}
-          />
+          {songs.some((song) => song.linked) ? (
+            // The video is not playing in the preroll: the teaser takes its
+            // frame, centred on it, so it never covers the rating or skip
+            // controls. Until the frame's slot is attached nothing renders.
+            prerollSlot !== null &&
+            createPortal(
+              <LinkedAnimation
+                songs={songs}
+                variant="preroll"
+                elapsedMs={prerollElapsedMs(view, now)}
+                paused={view.pausedAt !== null}
+              />,
+              prerollSlot,
+            )
+          ) : (
+            <LinkedAnimation songs={songs} variant="preroll" />
+          )}
         </div>
       )}
 

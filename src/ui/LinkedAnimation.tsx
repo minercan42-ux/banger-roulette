@@ -111,6 +111,21 @@ export function recentlyInteracted(
   return now - lastInputAt < quietMs;
 }
 
+/**
+ * Whether a control outside the moment has keyboard focus: moving the page
+ * would carry it (and its focus ring) out of the viewport. Nothing focused
+ * (the body), or focus inside the moment itself, is fine.
+ */
+function holdsInteractiveFocus(root: HTMLElement): boolean {
+  const active = document.activeElement;
+  return (
+    active !== null &&
+    active !== document.body &&
+    active !== document.documentElement &&
+    !root.contains(active)
+  );
+}
+
 /** The shell's bars that stick to the viewport edges on a phone. */
 const TOP_BAR = '.br-table__top';
 const BOTTOM_BAR = '.br-table__actions';
@@ -162,11 +177,13 @@ const SPARKS = Array.from({ length: SPARK_COUNT }, (_, index) => {
  * rest face up in a row, the chain, banner, plates and points only fade in.
  *
  * Where it is seen: the reveal list grows downward, so a running reveal moment
- * scrolls itself to the middle of the viewport once (unless the player scrolled
- * or typed in the last two seconds, or another show holds the viewport). The
- * preroll teaser floats over the middle of the viewport instead, because the
- * video leads that stage and scrolling away from it would hide the video; it
- * never coexists with the reveal shows.
+ * scrolls itself to the middle of the viewport at most once per mount, and only
+ * for an idle viewer: nothing outside the moment has focus, no wheel, touch,
+ * key or pointer input in the last two seconds, and no other show holds the
+ * viewport (all rechecked in the frame callback). The preroll teaser never
+ * scrolls the page: the caller mounts it inside the video frame (the video is
+ * not playing yet), where it is centred on the player and can never cover the
+ * rating or skip controls; it never coexists with the reveal shows.
  */
 export function LinkedAnimation({
   songs,
@@ -219,21 +236,38 @@ export function LinkedAnimation({
     }
   }, [hasLinked, paused, calm]);
 
-  // Bring a running reveal moment into view (see above); a late join after the
-  // moment already ended finds it settled and leaves the page where it is.
+  // Bring a running reveal moment into view (see above). Once per mount: the
+  // first attempt consumes the ref whether or not it scrolls, so a pause and
+  // resume (or a changed prop) never re-arms it. A late join after the moment
+  // already ended finds it settled and leaves the page where it is.
   const following = variant === 'reveal' && hasLinked && !held && !paused;
+  const followed = useRef(false);
   useEffect(() => {
     const root = rootRef.current;
+    if (!following || followed.current || !root) {
+      return;
+    }
+    followed.current = true;
     if (
-      !following ||
-      !root ||
       typeof root.scrollIntoView !== 'function' ||
-      latestElapsed.current >= LINKED_REVEAL_MS ||
-      recentlyInteracted(lastUserInputAt, performance.now())
+      latestElapsed.current >= LINKED_REVEAL_MS
     ) {
       return;
     }
-    const frame = requestAnimationFrame(() => {
+    // The page only moves for a viewer who is idle: the checks run again in
+    // the frame callback, where the situation may already have changed.
+    const idle = () =>
+      !recentlyInteracted(lastUserInputAt, performance.now()) &&
+      !holdsInteractiveFocus(root);
+    if (!idle()) {
+      return;
+    }
+    // No cleanup on purpose: the ref is consumed, so a re-run (StrictMode, a
+    // pause) must not lose the one attempt; an unmounted root is skipped.
+    requestAnimationFrame(() => {
+      if (!root.isConnected || !idle()) {
+        return;
+      }
       // Instant on purpose: the impact lands 700 ms in, a smooth scroll could
       // still be on its way then.
       root.scrollIntoView({
@@ -248,8 +282,6 @@ export function LinkedAnimation({
         window.scrollBy({ top: shift, behavior: 'instant' });
       }
     });
-    return () => cancelAnimationFrame(frame);
-    // Once per mount: the moment is mounted when its entry appears.
   }, [following]);
 
   if (!hasLinked) {
