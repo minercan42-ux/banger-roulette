@@ -4,9 +4,14 @@ import type { GameSession } from '../../net/session';
 import { Progress, progressPercent } from './Progress';
 import {
   COMBO_DURATION_MS,
+  comboDurationMs,
+  comboFrame,
   comboKind,
   comboValues,
+  runComboTimeline,
   ScoreCombo,
+  type ComboScheduler,
+  type ComboValues,
 } from './ScoreCombo';
 import { remainingUntil, TimerStat, URGENT_MS } from './Stat';
 
@@ -66,6 +71,141 @@ describe('comboValues', () => {
 
   it('counts up well inside the 2500 ms a reveal entry gets', () => {
     expect(COMBO_DURATION_MS).toBeLessThan(2500);
+  });
+});
+
+describe('combo timeline (one shared clock)', () => {
+  const winner: ComboValues = { votes: 100, adjust: 20, total: 120 };
+
+  it('runs the stages back to back inside 1800 ms', () => {
+    expect(comboDurationMs(winner)).toBe(1800);
+    expect(comboDurationMs(winner)).toBe(COMBO_DURATION_MS);
+    expect(comboFrame(winner, 0)).toEqual({ votes: 0, adjust: 0, total: 0 });
+    expect(comboFrame(winner, 450)).toEqual({ votes: 50, adjust: 0, total: 0 });
+    expect(comboFrame(winner, 900)).toEqual({
+      votes: 100,
+      adjust: 0,
+      total: 0,
+    });
+    expect(comboFrame(winner, 1050)).toEqual({
+      votes: 100,
+      adjust: 10,
+      total: 0,
+    });
+    expect(comboFrame(winner, 1500)).toEqual({
+      votes: 100,
+      adjust: 20,
+      total: 60,
+    });
+    expect(comboFrame(winner, 1800)).toEqual(winner);
+    expect(comboFrame(winner, 60_000)).toEqual(winner);
+  });
+
+  it('skips a box that stays at zero', () => {
+    const plain: ComboValues = { votes: 27, adjust: 0, total: 27 };
+    expect(comboDurationMs(plain)).toBe(1500);
+    expect(comboFrame(plain, 900).total).toBe(0);
+    expect(comboFrame(plain, 1500)).toEqual(plain);
+  });
+
+  it('counts a penalty down to its negative amount', () => {
+    const failed: ComboValues = { votes: 30, adjust: -20, total: 10 };
+    expect(comboFrame(failed, 1050).adjust).toBe(-10);
+    expect(comboFrame(failed, 1800)).toEqual(failed);
+  });
+
+  /** A manual frame clock and timer queue on a shared fake time. */
+  function harness(start: number) {
+    let time = start;
+    let handle = 0;
+    const frames = new Map<number, () => void>();
+    const timers = new Map<number, { at: number; run: () => void }>();
+    const scheduler: ComboScheduler = {
+      requestFrame: (run) => {
+        frames.set(++handle, run);
+        return handle;
+      },
+      cancelFrame: (id) => void frames.delete(id),
+      setTimer: (run, ms) => {
+        timers.set(++handle, { at: time + ms, run });
+        return handle;
+      },
+      clearTimer: (id) => void timers.delete(id),
+    };
+    return {
+      scheduler,
+      now: () => time,
+      /** Deliver one animation frame at `at`. */
+      frame: (at: number) => {
+        time = at;
+        const due = [...frames.values()];
+        frames.clear();
+        due.forEach((run) => run());
+      },
+      /** Advance the clock; fires every timer that is due. */
+      advance: (to: number) => {
+        time = to;
+        for (const [id, timer] of [...timers]) {
+          if (timer.at <= time) {
+            timers.delete(id);
+            timer.run();
+          }
+        }
+      },
+      pending: () => frames.size + timers.size,
+    };
+  }
+
+  it('shows the settled total at its scheduled time with only a few frames', () => {
+    const clock = harness(10_000);
+    const seen: ComboValues[] = [];
+    runComboTimeline(
+      winner,
+      () => clock.now() - 10_000,
+      (f) => seen.push(f),
+      clock.scheduler,
+    );
+    // A starved frame clock: one frame at 100 ms, then nothing until 1700 ms.
+    clock.frame(10_100);
+    clock.advance(11_700);
+    expect(seen[seen.length - 1].total).toBeLessThan(winner.total);
+    // No frame ever arrives again; the settle timer alone completes the count.
+    clock.advance(11_800);
+    expect(seen[seen.length - 1]).toEqual(winner);
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('seeks to the shared offset when the frame arrives late', () => {
+    const clock = harness(0);
+    const seen: ComboValues[] = [];
+    runComboTimeline(
+      winner,
+      () => clock.now(),
+      (f) => seen.push(f),
+      clock.scheduler,
+    );
+    // One frame, 1500 ms in: the bonus and half the sum, not the chained start.
+    clock.frame(1_500);
+    expect(seen[seen.length - 1]).toEqual({
+      votes: 100,
+      adjust: 20,
+      total: 60,
+    });
+    clock.frame(1_900);
+    expect(seen[seen.length - 1]).toEqual(winner);
+    expect(clock.pending()).toBe(0);
+  });
+
+  it('stops without a trace when cancelled', () => {
+    const clock = harness(0);
+    const stop = runComboTimeline(
+      winner,
+      () => clock.now(),
+      () => undefined,
+      clock.scheduler,
+    );
+    stop();
+    expect(clock.pending()).toBe(0);
   });
 });
 
