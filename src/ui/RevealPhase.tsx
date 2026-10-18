@@ -25,10 +25,20 @@ import { useSessionNow } from './use-session-now';
 interface RevealScoreProps {
   entry: RevealEntryView;
   animate: boolean;
+  /** Shared-clock start of the entry's slot (its `revealAt`). */
+  revealAt: number;
+  session: GameSession;
+  pausedAt: number | null;
 }
 
 /** Borda votes, jackpot bonus (or genre-fail penalty) and the round score. */
-function RevealScore({ entry, animate }: RevealScoreProps) {
+function RevealScore({
+  entry,
+  animate,
+  revealAt,
+  session,
+  pausedAt,
+}: RevealScoreProps) {
   const { t } = useTranslation();
   const kind = comboKind(entry);
   return (
@@ -44,6 +54,9 @@ function RevealScore({ entry, animate }: RevealScoreProps) {
       }
       totalLabel={t('score.total')}
       animate={animate}
+      startedAt={revealAt}
+      now={() => session.now()}
+      pausedAt={pausedAt}
       className="mt-2"
     />
   );
@@ -302,6 +315,9 @@ export function RevealPhase({ session, state, viewerId }: RevealPhaseProps) {
                   <RevealScore
                     entry={entry}
                     animate={reference - entry.revealAt < COUNT_UP_WINDOW_MS}
+                    revealAt={entry.revealAt}
+                    session={session}
+                    pausedAt={reveal.pausedAt}
                   />
                   {entry.genreFailed && (
                     <p
