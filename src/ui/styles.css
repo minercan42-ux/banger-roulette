@@ -1928,6 +1928,28 @@ body {
   .br-linkedset__item {
     min-width: 0;
   }
+  /* Preroll teaser: floats over the middle of the viewport, above the video
+     that leads the stage and below the sticky top bar. It lives for the three
+     seconds of the preroll and never coexists with a reveal show. */
+  .br-linkedset--overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4);
+    pointer-events: none;
+  }
+  .br-linkedset--overlay .br-linkedset__item {
+    width: min(100%, 560px);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-well);
+    box-shadow: var(--drop-edge);
+  }
+  .br-linkedset--overlay .br-linkedset__body:first-of-type {
+    margin-top: var(--space-3);
+  }
   .br-linked {
     --ls: 1;
     --gap: var(--space-4);

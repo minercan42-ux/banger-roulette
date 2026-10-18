@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SongView } from '../engine/selectors';
 import { useEmbedConsent } from './embed-consent';
@@ -87,6 +87,50 @@ export function signedPoints(tenths: number): string {
   return `${tenths >= 0 ? '+' : ''}${formatTenths(tenths)}`;
 }
 
+/** The moment does not scroll the page this soon after the player's own input. */
+const USER_INPUT_QUIET_MS = 2000;
+let lastUserInputAt = Number.NEGATIVE_INFINITY;
+if (typeof window !== 'undefined') {
+  for (const type of ['wheel', 'touchmove', 'keydown', 'pointerdown']) {
+    window.addEventListener(
+      type,
+      () => {
+        lastUserInputAt = performance.now();
+      },
+      { passive: true },
+    );
+  }
+}
+
+/** Whether the player scrolled or typed within the quiet window before `now`. */
+export function recentlyInteracted(
+  lastInputAt: number,
+  now: number,
+  quietMs = USER_INPUT_QUIET_MS,
+): boolean {
+  return now - lastInputAt < quietMs;
+}
+
+/** The shell's bars that stick to the viewport edges on a phone. */
+const TOP_BAR = '.br-table__top';
+const BOTTOM_BAR = '.br-table__actions';
+
+function stickyHeight(selector: string): number {
+  const bar = document.querySelector(selector);
+  return bar !== null && getComputedStyle(bar).position === 'sticky'
+    ? bar.getBoundingClientRect().height
+    : 0;
+}
+
+/**
+ * How far to scroll so a box that is centred in the viewport sits in the
+ * middle of the part the sticky bars leave free.
+ */
+function stickyBarShift(box: DOMRect): number {
+  const free = (stickyHeight(TOP_BAR) - stickyHeight(BOTTOM_BAR)) / 2;
+  return free === 0 ? 0 : box.top + box.height / 2 - (innerHeight / 2 + free);
+}
+
 const SPARK_COUNT = 14;
 /**
  * The pixel burst at the impact: fixed vectors, so every client draws the same
@@ -116,6 +160,13 @@ const SPARKS = Array.from({ length: SPARK_COUNT }, (_, index) => {
  *
  * Calm variant (reduced motion, or another show holds the viewport): the cards
  * rest face up in a row, the chain, banner, plates and points only fade in.
+ *
+ * Where it is seen: the reveal list grows downward, so a running reveal moment
+ * scrolls itself to the middle of the viewport once (unless the player scrolled
+ * or typed in the last two seconds, or another show holds the viewport). The
+ * preroll teaser floats over the middle of the viewport instead, because the
+ * video leads that stage and scrolling away from it would hide the video; it
+ * never coexists with the reveal shows.
  */
 export function LinkedAnimation({
   songs,
@@ -168,6 +219,39 @@ export function LinkedAnimation({
     }
   }, [hasLinked, paused, calm]);
 
+  // Bring a running reveal moment into view (see above); a late join after the
+  // moment already ended finds it settled and leaves the page where it is.
+  const following = variant === 'reveal' && hasLinked && !held && !paused;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (
+      !following ||
+      !root ||
+      typeof root.scrollIntoView !== 'function' ||
+      latestElapsed.current >= LINKED_REVEAL_MS ||
+      recentlyInteracted(lastUserInputAt, performance.now())
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      // Instant on purpose: the impact lands 700 ms in, a smooth scroll could
+      // still be on its way then.
+      root.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior: 'instant',
+      });
+      // On a phone the sticky top bar and action bar cover the viewport's
+      // edges: centre the moment between them, not in the full viewport.
+      const shift = stickyBarShift(root.getBoundingClientRect());
+      if (shift !== 0) {
+        window.scrollBy({ top: shift, behavior: 'instant' });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+    // Once per mount: the moment is mounted when its entry appears.
+  }, [following]);
+
   if (!hasLinked) {
     return variant === 'preroll' ? (
       <p data-testid="linked-animation-none" className="br-read">
@@ -186,7 +270,7 @@ export function LinkedAnimation({
       data-linked-count={linked.length}
       aria-live="polite"
       aria-label={t('linked.heading')}
-      className="br-linkedset"
+      className={cx('br-linkedset', !revealed && 'br-linkedset--overlay')}
     >
       {linked.map((song) => {
         const named = isNamed(song);

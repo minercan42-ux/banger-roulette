@@ -13,6 +13,7 @@ import {
   LinkedAnimation,
   listNames,
   prerollElapsedMs,
+  recentlyInteracted,
   signedPoints,
   type LinkedVariant,
 } from './LinkedAnimation';
@@ -39,6 +40,14 @@ describe('Spiritually Linked moment timing', () => {
   it('fits the reveal slot of an entry and the playback preroll', () => {
     expect(LINKED_REVEAL_MS).toBeLessThanOrEqual(REVEAL_PER_SONG_MS);
     expect(LINKED_PREROLL_MS).toBeLessThanOrEqual(PRE_ROLL_MS);
+  });
+});
+
+describe('Spiritually Linked scroll-follow', () => {
+  it('leaves the page alone for two seconds after the player moved it', () => {
+    expect(recentlyInteracted(10_000, 11_000)).toBe(true);
+    expect(recentlyInteracted(10_000, 12_000)).toBe(false);
+    expect(recentlyInteracted(Number.NEGATIVE_INFINITY, 0)).toBe(false);
   });
 });
 
@@ -118,6 +127,7 @@ describe('Spiritually Linked reveal moment', () => {
     expect(count(html, '>+8.0</span>')).toBe(3);
     expect(html).toContain('+8.0 für Alice, Bob und Cara');
     expect(html).toContain('data-motion="full"');
+    expect(html).not.toContain('br-linkedset--overlay');
   });
 
   it('words the two-owner line in English too', () => {
@@ -156,6 +166,7 @@ describe('Spiritually Linked preroll (AK-3)', () => {
   it('shows one face-down card per owner and names no one', () => {
     const html = render('preroll', [anonymous]);
     expect(html).toContain('data-variant="preroll"');
+    expect(html).toContain('br-linkedset--overlay');
     expect(count(html, 'br-linked__seat"')).toBe(2);
     expect(html).not.toContain('data-testid="linked-owner"');
     expect(html).not.toContain('linked-owner-points');
