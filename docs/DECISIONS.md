@@ -300,7 +300,7 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
   - Verschiedene Uploads desselben Songs werden nur verknüpft, wenn alles passt: Länge, Versionsmarker, exakter Songname, exakt gleiche Künstlermenge, beide Kanäle gehören dem Künstler.
   - Fan-, Lyrics- und Karaoke-Kanäle werden nie verknüpft.
   - Ein Song, der wie der Künstler heißt, wird nur bei exakt "Künstler" oder "Künstler - Künstler" verknüpft.
-  - (PM, 2026-10-18, #133): Uploads von Lyrics-Kanälen (Kanalname enthält nur lyric/lyrics, 7clouds, Lyrical Lemon) dürfen verlinkt werden, wenn der Titel Künstler und Track liefert und alle anderen Prüfungen passen (Künstler, Track, Dauer, Versionsmarker); Cover-, Karaoke-, Fan-, Tribute-, Nightcore-, Slowed-, Sped- und 8D-Kanäle bleiben gesperrt. Punktierte Abkürzungen gelten nur gleich, wenn die andere Schreibweise komplett großgeschrieben ist (U.S.A. = USA, R.E.M. = REM, aber P.O.D. ist nicht Pod). Gleiche Video-IDs landen immer in einer Gruppe.
+  - (PM, 2026-10-18, #133): Uploads von Kanälen, deren Kanalprüfung ausschließlich wegen lyric/lyrics, 7clouds oder Lyrical Lemon scheitert (also auch "Adele Lyrics"), dürfen verlinkt werden, wenn der Titel Künstler und Track liefert und alle anderen Prüfungen passen (Künstler, Track, Dauer, Versionsmarker); Cover-, Karaoke-, Fan-, Tribute-, Nightcore-, Slowed-, Sped- und 8D-Kanäle bleiben gesperrt. Punktierte Abkürzungen gelten nur gleich, wenn die andere Schreibweise komplett großgeschrieben ist (U.S.A. = USA, R.E.M. = REM, aber P.O.D. ist nicht Pod). Gleiche Video-IDs landen immer in einer Gruppe.
 - **Warum:**
   - Der Owner hat ausdrücklich verlangt, dass verschiedene Songs nie als derselbe gelten.
   - Ein falsch verknüpfter Song zerstört eine Runde. Eine übersehene Dublette führt nur dazu, dass zwei Uploads getrennt bewertet werden.
@@ -380,6 +380,22 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Warum:** Ein still verworfenes Fertig ließ Spieler glauben, sie seien fertig (gleicher Ablauf wie das P0 aus #108).
 - **Verworfen:** Automatisch erneut senden: könnte nach der Pause einen veralteten Entwurf einreichen.
 - **Belege:** #141, [PR #143](https://github.com/minercan42-ux/banger-roulette/pull/143)
+
+### D-046 Spiritually Linked als eigener Moment
+
+- **Datum:** 2026-10-18
+- **Wer:** Owner (Moment soll spannend sein, alle Owner bekommen die Punkte, Look abgenommen), PM (Ablauf und Vorrang)
+- **Entscheidung:**
+  - Beim Reveal fliegen die Karten aller Owner zusammen, es gibt einen Aufprall, die Karten drehen sich um, dann Kette und Banner, jeder Owner erscheint mit seinen Punkten, und die Zeile "+X für A und B" (Owner-Anteil laut Engine, auch bei "halbiert") schließt den Moment ab; alles läuft innerhalb des Reveal-Slots.
+  - Im Vorlauf zeigt ein kurzer Teaser ohne Namen (AK-3) dasselbe im Videorahmen und nie über Bewertung, Skip oder Pause.
+  - Der Moment ist Teil des Eintrags, nie ein zweites Vollbild-Overlay: Trägt der Eintrag die Banger-Show, ruht der Moment im fertigen Zustand und sein Sound entfällt; beim Jackpot läuft die Animation, aber der Sound gehört dem Jackpot.
+  - Der laufende Moment scrollt einmal in den sichtbaren Bereich, aber nur ohne fokussiertes Bedienelement und ohne Eingabe in den letzten 2 s.
+  - Reduzierte Bewegung zeigt den ruhigen Endzustand.
+- **Warum:** Playtest 2026-10-17: die alte Animation war "giga langweilig" und zeigte nicht, dass alle Owner punkten. Reviews fanden, dass der Moment sonst außerhalb des Bildschirms ablief.
+- **Verworfen:**
+  - Vollbild-Overlay wie die Banger-Show: stört zwei Shows pro Runde.
+  - Teaser fest in der Bildschirmmitte: verdeckte Skip.
+- **Belege:** #135, [PR #142](https://github.com/minercan42-ux/banger-roulette/pull/142), #146 (360 px)
 
 ## Beschlossen, Umsetzung offen
 
