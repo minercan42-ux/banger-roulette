@@ -61,9 +61,17 @@ test('FR-43: 3 of 4 skip votes keep the song, the 4th starts the next song every
     await expect(skip(owner)).toBeEnabled();
     await expect(hint(owner)).toHaveCount(0);
 
+    // The rating chips and the skip button are activated with the keyboard:
+    // in Firefox on a loaded runner the mouse down and up of a pointer click
+    // are up to a second apart, and the PLAYBACK panel reflows while its
+    // notices come and go (the preroll notice and the pause banner, #153), so
+    // a click whose hit test passed can land beside the control. Focus and
+    // Enter need no coordinates (same remedy as `pressFertig`, #140/#151);
+    // `e2e/a11y.spec.ts` drives the chips the same way.
+
     // Rating unlocks the button and removes the hint.
     for (const rater of raters) {
-      await rater.getByTestId('rating-chip-5').click();
+      await rater.getByTestId('rating-chip-5').press('Enter');
       await expect(skip(rater)).toBeEnabled();
       await expect(hint(rater)).toHaveCount(0);
     }
@@ -71,7 +79,7 @@ test('FR-43: 3 of 4 skip votes keep the song, the 4th starts the next song every
     // Three of four votes: everybody shows 3/4, the song keeps playing.
     const voters = [owner, raters[0]!, raters[1]!];
     for (const voter of voters) {
-      await skip(voter).click();
+      await skip(voter).press('Enter');
       await expect(skip(voter)).toHaveAttribute('data-voted', 'true');
       await expect(skip(voter)).toHaveText('Keep listening');
     }
@@ -88,19 +96,19 @@ test('FR-43: 3 of 4 skip votes keep the song, the 4th starts the next song every
     }
 
     // A vote can be withdrawn and cast again.
-    await skip(raters[0]!).click();
+    await skip(raters[0]!).press('Enter');
     await expect(skip(raters[0]!)).toHaveAttribute('data-voted', 'false');
     await expect(skip(raters[0]!)).toHaveText('Skip');
     for (const page of pages) {
       await expect(count(page)).toHaveText('2/4 want to skip');
     }
-    await skip(raters[0]!).click();
+    await skip(raters[0]!).press('Enter');
     for (const page of pages) {
       await expect(count(page)).toHaveText('3/4 want to skip');
     }
 
     // The fourth vote reaches ceil(0.9 * 4) = 4: every page moves to song 2.
-    await skip(raters[2]!).click();
+    await skip(raters[2]!).press('Enter');
     await Promise.all(
       pages.map((page) =>
         expect(
