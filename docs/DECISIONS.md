@@ -44,6 +44,7 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Datum:** 2026-10-15
 - **Wer:** Owner
 - **Entscheidung:** Jeder Agent bekommt einen eigenen Stunden-Timer. Nach jeder vollen Stunde Laufzeit prüft der PM genau diesen Agent. Hängt er fest, übernimmt ein stärkeres Modell (DeepSeek, dann Sonnet, dann GPT).
+  - (Owner, 2026-10-18): nicht-visuelle Arbeit zuerst an DeepSeek, Claude nur als Fallback; visuelle Arbeit bleibt nach D-004 bei Claude.
 - **Warum:** Ein Agent hing drei Stunden an den Cross-Browser-Tests, ohne dass es auffiel. Der Timer gilt pro Agent und nicht als globale Stundenrunde, weil Agents zu unterschiedlichen Zeiten starten (Präzisierung des Owners).
 - **Belege:** `docs/WORKFLOW.md`
 
@@ -159,6 +160,15 @@ Warum Dinge so sind, wie sie sind. Hier steht der Grund hinter einer Entscheidun
 - **Entscheidung:** Der Desktop-Browser ist das Hauptziel. Bis 360 px Breite bleibt alles spielbar.
 - **Warum:** Gespielt wird meist am Rechner neben einem Call. Das Handy soll funktionieren, gibt aber nicht die Gestaltung vor.
 - **Belege:** PR #105, SPEC.md Abschnitt 2
+
+### D-017 Stuck-Check per Hook erzwungen
+
+- **Datum:** 2026-10-18
+- **Wer:** Owner
+- **Entscheidung:** Der stündliche Stuck-Check pro Agent wird per omp-Hook ausgelöst statt vom Gedächtnis des PM.
+- **Warum:** Ein Agent lief am 2026-10-18 drei Stunden, ohne dass der PM stündlich nachsah.
+- **Verworfen:** Nur eine Regel in AGENTS.md (rutscht wieder durch).
+- **Belege:** `~/.omp/agent/hooks/post/br-stuck-check.ts`, `docs/WORKFLOW.md`
 
 ## Spiel und Design
 
