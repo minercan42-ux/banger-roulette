@@ -1372,3 +1372,76 @@ test('a Fertig dropped by a pause tells the player to press it again and keeps t
     await closeStages(stages);
   }
 });
+
+test('a pause after the consent was revoked does not turn the cancelled Fertig into a connection notice', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  const stages = await openSubmissionRoom(browser);
+  try {
+    const [host, bruno] = stages;
+    const brunoId = (await snapshot(bruno.page)).clientId;
+    await ensureConsent(bruno.page);
+    // Hold the first SUBMIT_SONG (the autosave at start 0) and record every action.
+    await bruno.page.evaluate(() => {
+      const probe = window as unknown as DispatchProbe;
+      probe.__actions = [];
+      const session = window.__banger!.session;
+      const original = session.dispatch.bind(session);
+      const gate = new Promise<void>((resolve) => {
+        probe.__releaseSave = resolve;
+      });
+      let held = false;
+      session.dispatch = async (action) => {
+        probe.__actions?.push(action.type);
+        if (action.type === 'SUBMIT_SONG' && !held) {
+          held = true;
+          await gate;
+        }
+        return original(action);
+      };
+    });
+    const actions = () =>
+      bruno.page.evaluate(
+        () => (window as unknown as DispatchProbe).__actions ?? [],
+      );
+    await startPlayingPreview(bruno.page, watchUrl(VALID_A));
+    await bruno.page.getByTestId('start-plus-5').click();
+    await expect(bruno.page.getByTestId('start-seconds')).toHaveValue('5');
+    await bruno.page.getByTestId('finish-submission').click();
+    await expect(bruno.page.getByTestId('finish-submission')).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    // The consent revocation cancels the click first; the pause comes later.
+    await bruno.page.getByTestId('consent-revoke').click();
+    await expect(bruno.page.getByTestId('consent-status')).toHaveAttribute(
+      'data-consented',
+      'false',
+    );
+    await host.page.getByTestId('host-pause').click();
+    await expect(bruno.page.getByTestId('pause-banner')).toBeVisible();
+    await host.page.getByTestId('host-resume').click();
+    await expect(bruno.page.getByTestId('pause-banner')).toHaveCount(0);
+    await bruno.page.evaluate(() =>
+      (window as unknown as DispatchProbe).__releaseSave?.(),
+    );
+
+    await expect(bruno.page.getByTestId('finish-submission')).toBeEnabled();
+    await bruno.page.waitForTimeout(1000);
+    await expect(
+      bruno.page.getByTestId('submission-consent-required'),
+    ).toBeVisible();
+    await expect(bruno.page.getByTestId('submission-notice')).toHaveCount(0);
+    await expect(bruno.page.getByTestId('submission-finished')).toHaveCount(0);
+    expect(await actions()).not.toContain('FINISH_SUBMISSION');
+    expect(await actions()).toEqual(['SUBMIT_SONG']);
+    expect((await stateOf(host.page))?.round?.submissionDoneIds).not.toContain(
+      brunoId,
+    );
+    await expect(bruno.page.getByTestId('start-seconds')).toHaveValue('5');
+  } finally {
+    await closeStages(stages);
+  }
+});

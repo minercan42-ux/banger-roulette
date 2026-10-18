@@ -86,8 +86,11 @@ interface PanelRefs {
   finishRejection: string | null;
   /** Bumped when consent or write access is withdrawn; ends a running Fertig. */
   epoch: number;
-  /** Set when write access closed during the current Fertig click. */
-  writeLost: boolean;
+  /**
+   * Why the current Fertig click was cancelled; the first cause wins, so a
+   * later write loss never reclassifies a consent-cancelled click.
+   */
+  cancelCause: 'consent' | 'writeLost' | null;
 }
 
 /** The latest rendered inputs, readable from timers and async callbacks. */
@@ -216,7 +219,7 @@ export function SubmissionPanel({
     finishing: false,
     finishRejection: null,
     epoch: 0,
-    writeLost: false,
+    cancelCause: null,
   });
   // The latest draft for timers and async callbacks, which must never read a
   // stale render closure.
@@ -265,7 +268,9 @@ export function SubmissionPanel({
   // Revoking the consent (drawer) stops the preview player at once.
   useEffect(() => {
     if (!consent) {
-      stateRef.current.epoch += 1;
+      const refs = stateRef.current;
+      refs.cancelCause ??= 'consent';
+      refs.epoch += 1;
       teardown();
     }
   }, [consent, teardown]);
@@ -291,7 +296,7 @@ export function SubmissionPanel({
             snapshot.connectionId,
           ).canSubmit
         ) {
-          stateRef.current.writeLost = true;
+          stateRef.current.cancelCause ??= 'writeLost';
           stateRef.current.epoch += 1;
           teardown();
           setStatus({ type: 'idle' });
@@ -749,7 +754,7 @@ export function SubmissionPanel({
     }
     clearTimers(refs);
     refs.finishRejection = null;
-    refs.writeLost = false;
+    refs.cancelCause = null;
     setBusy(true);
     setFinishing(true);
     setNoticeKey(null);
@@ -759,7 +764,7 @@ export function SubmissionPanel({
       // access closed (pause, short disconnect), must not look like it
       // worked. Consent revocation and link edits keep ending silently: their
       // own hints explain them. No automatic retry; the draft stays.
-      if (!finished && refs.writeLost) {
+      if (!finished && refs.cancelCause === 'writeLost') {
         setNoticeKey((current) => current ?? 'submission.finishInterrupted');
       }
     } finally {
