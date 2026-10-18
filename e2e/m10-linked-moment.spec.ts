@@ -45,24 +45,13 @@ function mediaOf(videoId: string): Media {
   };
 }
 
-/**
- * Opens one stage per nickname; the first hosts. `viewerOptions` apply to
- * every stage but the first, for runs that measure the host's own frames.
- */
 async function openStages(
   browser: Parameters<typeof newStage>[0],
   nicknames: string[],
   options: Partial<Parameters<typeof newStage>[1]> = {},
-  viewerOptions: Partial<Parameters<typeof newStage>[1]> = {},
 ): Promise<Stage[]> {
   return Promise.all(
-    nicknames.map((nickname, index) =>
-      newStage(browser, {
-        nickname,
-        ...options,
-        ...(index === 0 ? {} : viewerOptions),
-      }),
-    ),
+    nicknames.map((nickname) => newStage(browser, { nickname, ...options })),
   );
 }
 
@@ -153,12 +142,12 @@ async function expectClearOfBars(page: Page, target: Locator): Promise<void> {
 
 interface ImpactSample {
   /**
-   * Timeline position of the animation, in ms, when the sample was taken;
-   * null while the stage has no animation or no numeric `currentTime` yet.
+   * Timeline position of the reveal moment in ms when the sample was taken:
+   * the furthest `currentTime` of its animations (a finished animation stays
+   * at its end, so the first one alone would stop at 1000 ms); null while
+   * none has a numeric one yet.
    */
   time: number | null;
-  /** `playState` of that animation, and how many the card box carries. */
-  state: string;
   animations: number;
   top: number;
   bottom: number;
@@ -175,34 +164,37 @@ declare global {
 }
 
 /**
- * Samples the stage from the start of the reveal until it is read: the stage
- * has to be on screen when the cards hit (700 ms into the timeline) and stay
- * there. Installed before the reveal starts, read afterwards.
+ * Samples the stage of the reveal moment (not the preroll teaser, which is a
+ * second `linked-animation` in the video frame during PLAYBACK and ran the same
+ * flight earlier): the stage has to be on screen when the cards hit (700 ms
+ * into the timeline) and stay there. Installed before the reveal starts, read
+ * once the shake is over.
  *
- * The sampler is a `requestAnimationFrame` loop that reads the running
- * animation's `currentTime`, so every painted frame is one sample, whatever the
- * frame rate; the assertion asks for one frame inside the shake, not for a
- * count (a count measured the frame rate). A frame whose animation has no
- * `startTime` yet still has a `currentTime` and is sampled. Every frame with a
- * stage is stored, also outside the impact window, so a failure shows what the
- * browser painted instead of "no sample".
+ * The sampler is a `requestAnimationFrame` loop, so every painted frame is one
+ * sample, whatever the frame rate; the assertion asks for one frame inside the
+ * shake, not for a count (a count measured the frame rate). A frame whose
+ * animations have no `startTime` yet still has a `currentTime` and is sampled.
+ * Every frame is stored, also outside the impact window, so a failure shows
+ * what the browser painted instead of "no sample".
  */
 function sampleImpact(page: Page): Promise<void> {
   return page.evaluate(() => {
     const samples: ImpactSample[] = [];
     window.__impact = samples;
     const tick = () => {
-      const root = document.querySelector('[data-testid="linked-animation"]');
+      const root = document.querySelector(
+        '[data-testid="linked-animation"][data-variant="reveal"]',
+      );
       const stage = root?.querySelector('.br-linked');
-      const card = root?.querySelector('.br-linked__cardbox');
-      if (stage && card) {
-        const animations = card.getAnimations();
-        const time = animations[0]?.currentTime;
+      if (root && stage) {
+        const times = root
+          .getAnimations({ subtree: true })
+          .map((animation) => animation.currentTime)
+          .filter((time): time is number => typeof time === 'number');
         const rect = stage.getBoundingClientRect();
         samples.push({
-          time: typeof time === 'number' ? time : null,
-          state: animations[0]?.playState ?? 'none',
-          animations: animations.length,
+          time: times.length > 0 ? Math.max(...times) : null,
+          animations: times.length,
           top: rect.top,
           bottom: rect.bottom,
           left: rect.left,
@@ -229,6 +221,16 @@ async function expectImpactSeen(page: Page): Promise<void> {
     });
     return;
   }
+  // The test gets here a few hundred ms into the entry's slot: wait until a
+  // frame past the shake was painted (the sampler keeps running), then read.
+  // If none comes, the assertion below fails with the frames it did get.
+  await page
+    .waitForFunction(
+      () => (window.__impact ?? []).some((sample) => (sample.time ?? 0) > 1100),
+      undefined,
+      { timeout: 10_000 },
+    )
+    .catch(() => undefined);
   const all = await page.evaluate(() => window.__impact ?? []);
   const samples = all.filter(
     (sample): sample is ImpactSample & { time: number } =>
@@ -243,8 +245,11 @@ async function expectImpactSeen(page: Page): Promise<void> {
   expect(
     samples.filter((sample) => sample.time <= 1100).length,
     `a frame inside the shake was sampled; all ${all.length} frames: ${all
-      .slice(0, 60)
-      .map((s) => `${s.time}/${s.state}/${s.animations}@${Math.round(s.top)}`)
+      .slice(0, 80)
+      .map(
+        (s) =>
+          `${Math.round(s.time ?? -1)}/${s.animations}@${Math.round(s.top)}`,
+      )
       .join(' ')}`,
   ).toBeGreaterThan(0);
   for (const sample of samples) {
@@ -270,10 +275,6 @@ for (const reducedMotion of [false, true] as const) {
     browser,
   }) => {
     test.setTimeout(150_000);
-    // The impact check measures the host's own frames. With full motion on all
-    // four screens a WebKit CI runner painted the host about twice a second
-    // (no frame inside the 400 ms shake, #140), so the viewers use reduced
-    // motion (a calm fade) and only the host runs the cards' flight.
     const stages = await openStages(
       browser,
       ['Alice', 'Bob', 'Cara', 'Dario'],
@@ -281,7 +282,6 @@ for (const reducedMotion of [false, true] as const) {
         viewport: DESKTOP,
         reducedMotion: reducedMotion ? 'reduce' : 'no-preference',
       },
-      { reducedMotion: 'reduce' },
     );
     try {
       const pages = stages.map((stage) => stage.page);
@@ -293,8 +293,7 @@ for (const reducedMotion of [false, true] as const) {
       ];
       await assembleRoom(stages[0]!, stages.slice(1));
       await playToPlayback(pages, medias);
-      await pages[0]!.bringToFront();
-      await sampleImpact(pages[0]!);
+      await Promise.all(pages.map(sampleImpact));
       await ratePlayback(pages, medias, TWO_OWNERS);
 
       // Every client shows the same facts.
